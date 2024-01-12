@@ -15,20 +15,18 @@ defaults:
 
 dependencies:
 - base >= 4.12 && < 5
+- bowtie >= 0.2 && < 0.3
+- containers >= 0.6 && < 0.7
+- heaps >= 0.4 && < 0.5
+- looksee >= 0.5 && < 0.6
+- mtl >= 2.3 && < 2.4
+- nonempty-containers >= 0.3 && < 0.4
+- prettyprinter >= 1.7 && < 1.8
+- text >= 2.0 && < 2.1
+- transformers >= 0.6 && < 0.7
 
 library:
   source-dirs: src
-
-executables:
-  minipat-exe:
-    main: Main.hs
-    source-dirs: exe
-    ghc-options:
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
-    dependencies:
-    - minipat
 
 tests:
   minipat-test:

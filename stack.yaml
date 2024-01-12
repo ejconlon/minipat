@@ -5,3 +5,7 @@ ghc-options:
 
 packages:
 - minipat
+
+extra-deps:
+- bowtie-0.2.0
+- looksee-0.5.2

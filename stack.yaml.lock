@@ -3,7 +3,21 @@
 # For more information, please see the documentation at:
 #   https://docs.haskellstack.org/en/stable/lock_files
 
-packages: []
+packages:
+- completed:
+    hackage: bowtie-0.2.0@sha256:1fea0ef4521f8c77544aa885f47d6999acf75db8f0b093fe639d24004a1fbe6f,1771
+    pantry-tree:
+      sha256: e72e660bb9ba5ec65ca5572f49fe4467a4a8fba7319e566131c373daaf9dc0af
+      size: 159
+  original:
+    hackage: bowtie-0.2.0
+- completed:
+    hackage: looksee-0.5.2@sha256:47046ae5f719348ed4d90d757fb89d231c20dac944c06848f430bd7dfaeeac85,3158
+    pantry-tree:
+      sha256: 95484bf869be4460ab8df3a49c2b76947bd07309cf4a8cf4c65d188a4f69a3d3
+      size: 279
+  original:
+    hackage: looksee-0.5.2
 snapshots:
 - completed:
     sha256: 90e6fcdcf6706918ef022ab01214828c550ee637a2d50f4fe96b15742b8bced1

@@ -24,7 +24,12 @@ source-repository head
 
 library
   exposed-modules:
+      Minipat.Ast
       Minipat.Main
+      Minipat.Parser
+      Minipat.Print
+      Minipat.Rand
+      Minipat.Types
   other-modules:
       Paths_minipat
   hs-source-dirs:
@@ -61,47 +66,15 @@ library
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints -fno-warn-unused-top-binds
   build-depends:
       base >=4.12 && <5
-  default-language: GHC2021
-
-executable minipat-exe
-  main-is: Main.hs
-  other-modules:
-      Paths_minipat
-  hs-source-dirs:
-      exe
-  default-extensions:
-      BangPatterns
-      ConstraintKinds
-      DataKinds
-      DeriveFunctor
-      DeriveFoldable
-      DeriveGeneric
-      DeriveTraversable
-      DerivingStrategies
-      DerivingVia
-      FlexibleContexts
-      FlexibleInstances
-      FunctionalDependencies
-      GADTs
-      GeneralizedNewtypeDeriving
-      ImportQualifiedPost
-      LambdaCase
-      KindSignatures
-      MultiParamTypeClasses
-      MultiWayIf
-      PatternSynonyms
-      Rank2Types
-      ScopedTypeVariables
-      StandaloneDeriving
-      StandaloneKindSignatures
-      TupleSections
-      TypeApplications
-      TypeOperators
-      TypeFamilies
-  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints -fno-warn-unused-top-binds -threaded -rtsopts -with-rtsopts=-N
-  build-depends:
-      base >=4.12 && <5
-    , minipat
+    , bowtie ==0.2.*
+    , containers ==0.6.*
+    , heaps ==0.4.*
+    , looksee ==0.5.*
+    , mtl ==2.3.*
+    , nonempty-containers ==0.3.*
+    , prettyprinter ==1.7.*
+    , text ==2.0.*
+    , transformers ==0.6.*
   default-language: GHC2021
 
 test-suite minipat-test
@@ -143,7 +116,16 @@ test-suite minipat-test
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints -fno-warn-unused-top-binds -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.12 && <5
+    , bowtie ==0.2.*
+    , containers ==0.6.*
+    , heaps ==0.4.*
+    , looksee ==0.5.*
     , minipat
+    , mtl ==2.3.*
+    , nonempty-containers ==0.3.*
+    , prettyprinter ==1.7.*
     , tasty
     , tasty-hunit
+    , text ==2.0.*
+    , transformers ==0.6.*
   default-language: GHC2021
