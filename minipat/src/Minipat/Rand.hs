@@ -3,7 +3,7 @@ module Minipat.Rand where
 import Data.Bits (Bits (..))
 import Data.Ratio ((%))
 import Data.Word (Word32)
-import Minipat.Types (Arc, arcMid)
+import Minipat.Types (Arc, arcStart, timeFloor)
 
 -- These random functions are more or less how Tidal does it:
 
@@ -31,7 +31,10 @@ timeSeed time =
 
 -- | Associates a "random" seed with a given "arc".
 arcSeed :: Arc -> Seed
-arcSeed = timeSeed . arcMid
+arcSeed = timeSeed . fromInteger . timeFloor . arcStart
+
+-- arcSeed = timeSeed . arcMid
+-- TODO should be floor of arc start or just mid?
 
 randFrac :: Seed -> Rational
 randFrac (Seed s) = mod (fromIntegral s) seedConst % seedConst

@@ -406,7 +406,9 @@ newtype Pat b a = Pat {unPat :: UnPat b a}
 
 type UnPat b = Jot (PatF (Pat b Factor)) b
 
-type PatK b a = PatF (Pat b Factor) a (UnPat b a)
+type PatX b = PatF (Pat b Factor)
+
+type PatK b a = PatX b a (UnPat b a)
 
 instance Traversable (Pat a) where traverse f = fmap Pat . traverse f . unPat
 
@@ -454,7 +456,9 @@ type NPat b = Pat (Expansion b)
 
 type UnNPat b = UnPat (Expansion b)
 
-type NPatK b a = PatK (Expansion b) a
+type NPatX b = PatF (NPat b Factor)
+
+type NPatK b a = NPatX b a (UnNPat b a)
 
 wrapPatM :: NPatK b a -> NormM b (NPat b a)
 wrapPatM ff = asks (\(b :<|| _) -> Pat (JotP (expNew b) ff))

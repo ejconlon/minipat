@@ -5,14 +5,13 @@ import Control.Monad (ap)
 import Data.Foldable (toList)
 import Data.Heap (Entry (..), Heap)
 import Data.Heap qualified as H
-import Data.Ratio ((%))
 
 type Time = Rational
 
-timeFloor :: Time -> Time
-timeFloor = (% 1) . floor
+timeFloor :: Time -> Integer
+timeFloor = floor
 
-timeCeil :: Time -> Time
+timeCeil :: Time -> Integer
 timeCeil = (+ 1) . timeFloor
 
 timeLerp :: Time -> Time -> Time
@@ -31,7 +30,7 @@ arcIntersect (Arc s1 e1) (Arc s2 e2) =
   in  Arc s3 (max s3 e3)
 
 arcWiden :: Arc -> Arc
-arcWiden (Arc s e) = Arc (timeFloor s) (timeCeil e)
+arcWiden (Arc s e) = Arc (fromInteger (timeFloor s)) (fromInteger (timeCeil e))
 
 arcMid :: Arc -> Time
 arcMid (Arc s e) = timeLerp s e
@@ -53,10 +52,10 @@ spanWholeMapMono f (Span ac wh) = Span ac (f wh)
 
 spanSplit :: Arc -> [Span]
 spanSplit (Arc s0 e) =
-  let ef = timeFloor e
+  let ef = fromInteger (timeFloor e)
       go s =
-        let sf = timeFloor s
-            sc = timeCeil s
+        let sf = fromInteger (timeFloor s)
+            sc = fromInteger (timeCeil s)
             wh = Just (Arc sf sc)
         in  if sf == ef || sc == e
               then [Span (Arc s e) wh]
