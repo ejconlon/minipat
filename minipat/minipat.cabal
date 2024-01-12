@@ -26,7 +26,6 @@ library
   exposed-modules:
       Minipat.Ast
       Minipat.Interp
-      Minipat.Main
       Minipat.Parser
       Minipat.Print
       Minipat.Rand
