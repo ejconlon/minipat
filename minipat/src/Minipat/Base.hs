@@ -1,4 +1,4 @@
-module Minipat.Types where
+module Minipat.Base where
 
 import Control.Applicative (Alternative (..))
 import Control.Monad (ap)

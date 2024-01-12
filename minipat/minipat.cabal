@@ -25,11 +25,11 @@ source-repository head
 library
   exposed-modules:
       Minipat.Ast
+      Minipat.Base
       Minipat.Interp
       Minipat.Parser
       Minipat.Print
       Minipat.Rand
-      Minipat.Types
   other-modules:
       Paths_minipat
   hs-source-dirs:

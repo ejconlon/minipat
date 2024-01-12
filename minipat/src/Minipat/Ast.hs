@@ -404,9 +404,9 @@ newtype Pat b a = Pat {unPat :: UnPat b a}
   deriving stock (Show)
   deriving newtype (Eq, Ord, Functor, Foldable, Pretty)
 
-type UnPat b = Jot (PatF (Pat b Factor)) b
-
 type PatX b = PatF (Pat b Factor)
+
+type UnPat b = Jot (PatX b) b
 
 type PatK b a = PatX b a (UnPat b a)
 
@@ -454,9 +454,9 @@ instance Bitraversable Pat where
 
 type NPat b = Pat (Expansion b)
 
-type UnNPat b = UnPat (Expansion b)
-
 type NPatX b = PatF (NPat b Factor)
+
+type UnNPat b = UnPat (Expansion b)
 
 type NPatK b a = NPatX b a (UnNPat b a)
 

@@ -3,7 +3,7 @@ module Minipat.Rand where
 import Data.Bits (Bits (..))
 import Data.Ratio ((%))
 import Data.Word (Word32)
-import Minipat.Types (Arc, arcStart, timeFloor)
+import Minipat.Base (Arc, arcStart, timeFloor)
 
 -- These random functions are more or less how Tidal does it:
 
