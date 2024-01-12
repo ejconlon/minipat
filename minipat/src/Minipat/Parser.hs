@@ -13,27 +13,7 @@ import Data.Sequence (Seq (..))
 import Data.Sequence.NonEmpty (NESeq (..), (|>))
 import Data.Sequence.NonEmpty qualified as NESeq
 import Data.Text qualified as T
-import Looksee
-  ( HasErrMessage (..)
-  , Parser
-  , Span (..)
-  , betweenP
-  , charP_
-  , decP
-  , headP
-  , lookP
-  , optP
-  , sepBy1P
-  , spaceP
-  , spanP
-  , stripEndP
-  , takeExactP
-  , takeWhile1P
-  , throwP
-  , udecP
-  , uintP
-  , unconsP
-  )
+import Looksee qualified as L
 import Minipat.Ast qualified as A
 import Minipat.Print (Brace (..), braceCloseChar, braceOpenChar)
 
@@ -50,7 +30,7 @@ data ParseErr
   | ParseErrRatioChar !Char
   deriving stock (Eq, Ord, Show)
 
-instance HasErrMessage ParseErr where
+instance L.HasErrMessage ParseErr where
   getErrMessage = \case
     ParseErrDotForbidden -> ["Dot is not allowed in this position"]
     ParseErrEmpty -> ["Sequence is empty"]
@@ -59,28 +39,28 @@ instance HasErrMessage ParseErr where
 
 instance Exception ParseErr
 
-type P = Parser ParseErr
+type P = L.Parser ParseErr
 
-newtype Loc = Loc {unLoc :: Span Int}
+newtype Loc = Loc {unLoc :: L.Span Int}
   deriving stock (Show)
   deriving newtype (Eq, Ord)
 
 instance Semigroup Loc where
-  Loc (Span a1 b1) <> Loc (Span a2 b2) = Loc (Span (min a1 a2) (max b1 b2))
+  Loc (L.Span a1 b1) <> Loc (L.Span a2 b2) = Loc (L.Span (min a1 a2) (max b1 b2))
 
 annoP :: P a -> P (Anno Loc a)
 annoP pa = do
-  Span x1 _ <- spanP
+  L.Span x1 _ <- L.spanP
   -- Lookahead to get result and end
-  (a, Span x2 _) <- lookP ((,) <$> pa <*> spanP)
+  (a, L.Span x2 _) <- L.lookP ((,) <$> pa <*> L.spanP)
   -- Now take consumed text
-  consumed <- takeExactP (x2 - x1)
+  consumed <- L.takeExactP (x2 - x1)
   -- and subtract leading/trailing spaces from span
   let startSpaces = T.takeWhile isSpace consumed
       endSpaces = T.takeWhileEnd isSpace consumed
       x1' = x1 + T.length startSpaces
       x2' = x2 - T.length endSpaces
-  pure (Anno (Loc (Span x1' x2')) a)
+  pure (Anno (Loc (L.Span x1' x2')) a)
 
 mayAnnoP :: P (Maybe a) -> P (Maybe (Anno Loc a))
 mayAnnoP pa = do
@@ -105,43 +85,43 @@ isEndChar :: Char -> Bool
 isEndChar c = c == ')' || c == ']' || c == '}' || c == '>' || c == '|' || c == '.' || c == ',' || isSpace c
 
 stripTokP :: Char -> P ()
-stripTokP = stripEndP . tokP
+stripTokP = L.stripEndP . tokP
 
 tokP :: Char -> P ()
-tokP = charP_
+tokP = L.charP_
 
 stripIdentP :: P A.Ident
-stripIdentP = stripEndP identP
+stripIdentP = L.stripEndP identP
 
 identP :: P A.Ident
-identP = fmap A.Ident (takeWhile1P isIdentChar)
+identP = fmap A.Ident (L.takeWhile1P isIdentChar)
 
 fracFactorP :: P A.Factor
 fracFactorP = do
   stripTokP '('
-  num <- stripEndP decP
+  num <- L.stripEndP L.decP
   stripTokP '/'
-  denom <- stripEndP udecP
+  denom <- L.stripEndP L.udecP
   tokP ')'
   pure (A.FactorRational A.RationalPresFrac (num / denom))
 
 numFactorP :: P A.Factor
 numFactorP = do
-  d <- decP
+  d <- L.decP
   pure $ case denominator d of
     1 -> A.FactorInteger (numerator d)
     _ -> A.FactorRational A.RationalPresDec d
 
 quickFactorP :: P A.Factor
 quickFactorP = do
-  c <- headP
+  c <- L.headP
   case A.quickRatioUnRep c of
-    Nothing -> throwP (ParseErrRatioChar c)
+    Nothing -> L.throwP (ParseErrRatioChar c)
     Just qr -> pure (A.FactorQuickRatio qr)
 
 factorP :: P A.Factor
 factorP = do
-  c <- lookP headP
+  c <- L.lookP L.headP
   if isAlpha c
     then quickFactorP
     else case c of
@@ -149,14 +129,14 @@ factorP = do
       _ -> numFactorP
 
 bracedP :: Brace -> P a -> P a
-bracedP b = betweenP (stripTokP (braceOpenChar b)) (tokP (braceCloseChar b))
+bracedP b = L.betweenP (stripTokP (braceOpenChar b)) (tokP (braceCloseChar b))
 
 selectP :: P A.Select
 selectP = do
   tokP ':'
-  isNum <- lookP (fmap isDigit headP)
+  isNum <- L.lookP (fmap isDigit L.headP)
   if isNum
-    then fmap A.SelectSample uintP
+    then fmap A.SelectSample L.uintP
     else fmap A.SelectTransform identP
 
 speedFastP :: P s -> P (A.Speed s)
@@ -183,23 +163,23 @@ elongateLongP = do
 replicateLongP :: P A.LongTime
 replicateLongP = do
   tokP '!'
-  A.LongTimeReplicate <$> optP uintP
+  A.LongTimeReplicate <$> L.optP L.uintP
 
 degradeP :: P A.Degrade
 degradeP = do
   tokP '?'
-  fmap A.Degrade (optP factorP)
+  fmap A.Degrade (L.optP factorP)
 
 euclidP :: P A.Euclid
 euclidP = do
   stripTokP '('
-  x <- stripEndP uintP
+  x <- L.stripEndP L.uintP
   stripTokP ','
-  y <- stripEndP uintP
-  mu <- optP (stripTokP ',')
+  y <- L.stripEndP L.uintP
+  mu <- L.optP (stripTokP ',')
   euc <- case mu of
     Nothing -> pure (A.Euclid x y Nothing)
-    Just _ -> fmap (A.Euclid x y . Just) (stripEndP uintP)
+    Just _ -> fmap (A.Euclid x y . Just) (L.stripEndP L.uintP)
   tokP ')'
   pure euc
 
@@ -223,7 +203,7 @@ withPatDecosP ps = go
  where
   go p@(A.Pat pp) = do
     mp' <- fmap (fmap A.Pat) . mayJotP $ do
-      mc <- lookP unconsP
+      mc <- L.lookP L.unconsP
       case mc of
         Just '@' -> fmap (Just . A.PatTime . A.TimeLong pp) elongateLongP
         Just '!' -> fmap (Just . A.PatTime . A.TimeLong pp) replicateLongP
@@ -241,13 +221,13 @@ spaceSeqPatP :: P (PPat a) -> P (NESeq (UnPPat a))
 spaceSeqPatP pr = go Empty
  where
   go !acc = do
-    mcd <- lookP (liftA2 (,) unconsP unconsP)
+    mcd <- L.lookP (liftA2 (,) L.unconsP L.unconsP)
     case mcd of
       (Just c, _) | not (isEndChar c) -> do
-        A.Pat r <- stripEndP pr
+        A.Pat r <- L.stripEndP pr
         go (acc :|> r)
       _ -> case NESeq.nonEmptySeq acc of
-        Nothing -> throwP ParseErrEmpty
+        Nothing -> L.throwP ParseErrEmpty
         Just neAcc -> pure neAcc
 
 spaceGroupPatP :: P (PPat a) -> P (Anno Loc (A.GroupPat (UnPPat a)))
@@ -288,7 +268,7 @@ groupPatP delim opts pr pg = goStart
  where
   goStart = do
     g <- pg
-    mc <- lookP unconsP
+    mc <- L.lookP L.unconsP
     if mc == delim
       then pure g
       else do
@@ -301,7 +281,7 @@ groupPatP delim opts pr pg = goStart
   goRest subTy subDelim !totalAcc = do
     A.Pat acc <- nestedSeqPatP pr
     let totalAcc' = totalAcc |> acc
-    mc <- lookP unconsP
+    mc <- L.lookP L.unconsP
     if mc == delim
       then pure (A.GroupPat 0 subTy totalAcc')
       else do
@@ -313,17 +293,17 @@ anglePatP = bracedP BraceAngle . fmap A.Pat . jotP . fmap (A.PatGroup . A.GroupP
 
 curlyPatP :: P (PPat a) -> P (PPat a)
 curlyPatP pr = fmap A.Pat $ jotP $ do
-  ps <- bracedP BraceCurly (fmap NESeq.unsafeFromSeq (sepBy1P (stripTokP ',') (fmap A.unPat (nestedSeqPatP pr))))
-  mx <- lookP unconsP
+  ps <- bracedP BraceCurly (fmap NESeq.unsafeFromSeq (L.sepBy1P (stripTokP ',') (fmap A.unPat (nestedSeqPatP pr))))
+  mx <- L.lookP L.unconsP
   mc <-
     if mx == Just '%'
-      then tokP '%' >> fmap Just uintP
+      then tokP '%' >> fmap Just L.uintP
       else pure Nothing
   pure (A.PatPoly (A.PolyPat ps mc))
 
 singlePatP :: P a -> P (PPat a) -> P (PPat a)
 singlePatP pa pr = do
-  mc <- lookP unconsP
+  mc <- L.lookP L.unconsP
   case mc of
     Just '[' -> squarePatP pr
     Just '<' -> anglePatP pr
@@ -352,7 +332,7 @@ outerPatP = fmap unNestSeqPatP . outerGroupPatP
 
 -- | Parses a top-level pattern given parsers for atoms and signals.
 patP :: P a -> P (PPat A.Factor) -> P (PPat a)
-patP pa pf = spaceP >> outerPatP (fix (rePatP pa pf))
+patP pa pf = L.spaceP >> outerPatP (fix (rePatP pa pf))
 
 -- | Parses a top-level pattern with variables.
 identPatP :: P (PPat A.Ident)

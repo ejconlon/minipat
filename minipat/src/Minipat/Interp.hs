@@ -1,33 +1,32 @@
 module Minipat.Interp
-  ( interp
+  ( InterpErr (..)
+  , interp
   )
 where
 
-import Bowtie (jotCataM)
 import Control.Applicative (Alternative (..))
 import Control.Exception (Exception)
-import Control.Monad.Except (Except, MonadError (..), runExcept)
-import Control.Monad.Reader (ReaderT)
 import Data.Foldable (foldMap')
 import Data.Foldable1 (fold1, foldl1')
 import Data.Sequence.NonEmpty qualified as NESeq
-import Data.Typeable (Typeable)
 import Minipat.Ast qualified as A
 import Minipat.Base qualified as B
+import Minipat.Norm qualified as N
+import Minipat.Proc qualified as P
 import Minipat.Rand qualified as R
 
-data Err b = ErrTime
+data InterpErr = InterpErrTime
   deriving stock (Eq, Ord, Show)
 
-instance (Show b, Typeable b) => Exception (Err b)
+instance Exception InterpErr
 
-type M b = ReaderT (A.Expansion b) (Except (Err b))
+type M b = P.ProcM InterpErr b (N.Expansion b)
 
-subInterp :: A.NPatX b a (B.Pat a) -> M b (B.Pat a)
+subInterp :: N.NPatX b a (B.Pat a) -> M b (B.Pat a)
 subInterp = \case
   A.PatPure a -> pure (pure a)
   A.PatSilence -> pure empty
-  A.PatTime _ -> throwError ErrTime
+  A.PatTime _ -> P.throwPM InterpErrTime
   A.PatGroup (A.GroupPat _ ty els) -> pure $
     case ty of
       A.GroupPatTypeSeq _ -> fold1 els
@@ -49,5 +48,5 @@ subInterp = \case
         in  B.Pat (foldMap' (f . B.spanActive) . B.spanSplit)
   _ -> undefined
 
-interp :: A.NPat b a -> Either (Err b) (B.Pat a)
-interp = runExcept . jotCataM subInterp . A.unPat
+interp :: N.NPat b a -> Either (P.ProcErr InterpErr b) (B.Pat a)
+interp = P.bottomUpPM N.expInfo subInterp

@@ -1,4 +1,10 @@
-module Minipat.Rand where
+module Minipat.Rand
+  ( Seed
+  , arcSeed
+  , randFrac
+  , randInt
+  )
+where
 
 import Data.Bits (Bits (..))
 import Data.Ratio ((%))
@@ -7,6 +13,7 @@ import Minipat.Base (Arc, arcStart, timeFloor)
 
 -- These random functions are more or less how Tidal does it:
 
+-- | A random seed
 newtype Seed = Seed {unSeed :: Word32}
   deriving stock (Show)
   deriving newtype (Eq, Ord)
@@ -30,14 +37,17 @@ timeSeed time =
   in  xorshift (Seed val)
 
 -- | Associates a "random" seed with a given "arc".
+-- TODO should be floor of arc start or just mid like:
+-- arcSeed = timeSeed . arcMid
+-- Choosing start makes more sense to me but it's not
+-- how Tidal does it IIRC
 arcSeed :: Arc -> Seed
 arcSeed = timeSeed . fromInteger . timeFloor . arcStart
 
--- arcSeed = timeSeed . arcMid
--- TODO should be floor of arc start or just mid?
-
+-- | Returns a random fractional value in [0, 1)
 randFrac :: Seed -> Rational
-randFrac (Seed s) = mod (fromIntegral s) seedConst % seedConst
+randFrac (Seed s) = mod (fromIntegral s) (seedConst - 1) % seedConst
 
+-- | Returns a random integral value in [0, n)
 randInt :: (Integral a) => a -> Seed -> a
 randInt a s = floor (fromIntegral a * randFrac s)

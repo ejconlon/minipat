@@ -1,5 +1,7 @@
 module Minipat.Base where
 
+-- TODO explicit exports
+
 import Control.Applicative (Alternative (..))
 import Control.Monad (ap)
 import Data.Foldable (toList)

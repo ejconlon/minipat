@@ -3,66 +3,20 @@
 
 module Minipat.Ast where
 
+-- TODO explicit exports
+
 import Bowtie (Jot (..), pattern JotP)
-import Control.Exception (Exception)
-import Control.Monad.Except (Except, runExcept, throwError)
-import Control.Monad.Reader (MonadReader (..), ReaderT (..), asks)
 import Data.Bifoldable (Bifoldable (..))
 import Data.Bifunctor (Bifunctor (..))
 import Data.Bitraversable (Bitraversable (..))
 import Data.Foldable (toList)
 import Data.Ratio (denominator, numerator, (%))
-import Data.Sequence (Seq (..))
 import Data.Sequence.NonEmpty (NESeq (..))
-import Data.Sequence.NonEmpty qualified as NESeq
 import Data.String (IsString (..))
 import Data.Text (Text)
-import Data.Typeable (Typeable)
 import Minipat.Print (Brace (..), Sep (..), braceCloseChar, braceOpenChar, sepChar)
 import Prettyprinter (Doc, Pretty (..))
 import Prettyprinter qualified as P
-
--- * Norm
-
--- | Error from expression normalization
-newtype NormErr b = NormErr (NESeq b)
-  deriving stock (Show)
-  deriving newtype (Eq, Ord)
-
-instance (Show b, Typeable b) => Exception (NormErr b)
-
--- | When normalizing, we maintain the path of spans to the term
--- through this monad.
-type NormM b = ReaderT (NESeq b) (Except (NormErr b))
-
-runNormM :: NormM b a -> b -> Either (NormErr b) a
-runNormM ma b = runExcept (runReaderT ma (NESeq.singleton b))
-
-data Measure = Measure
-  { measReps :: !Integer
-  -- ^ Repetitions
-  , measWidth :: !Rational
-  -- ^ Width factor
-  }
-  deriving (Eq, Ord, Show)
-
-measNew :: Measure
-measNew = Measure 1 1
-
-measTotal :: Measure -> Rational
-measTotal (Measure reps width) = (reps % 1) * width
-
--- | Decoration for normalized expressions that includes measure.
-data Expansion b = Expansion
-  { expMeasure :: !Measure
-  -- ^ Measure of repetitions and width
-  , expInfo :: !b
-  -- ^ Original info
-  }
-  deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
-
-expNew :: b -> Expansion b
-expNew = Expansion measNew
 
 -- * Ident
 
@@ -449,92 +403,3 @@ instance Bitraversable Pat where
           PatGroup gs -> fmap PatGroup (traverse go gs)
           PatMod (Mod r m) -> fmap PatMod $ Mod <$> go r <*> traverse (bitraverse f pure) m
           PatPoly (PolyPat rs mc) -> fmap (\rs' -> PatPoly (PolyPat rs' mc)) (traverse go rs)
-
--- ** Normalization
-
-type NPat b = Pat (Expansion b)
-
-type NPatX b = PatF (NPat b Factor)
-
-type UnNPat b = UnPat (Expansion b)
-
-type NPatK b a = NPatX b a (UnNPat b a)
-
-wrapPatM :: NPatK b a -> NormM b (NPat b a)
-wrapPatM ff = asks (\(b :<|| _) -> Pat (JotP (expNew b) ff))
-
-rewrapPatM :: (Semigroup b) => UnPat b a -> (UnNPat b a -> NormM b (NPatK b a)) -> NormM b (NPat b a)
-rewrapPatM r f = do
-  p <- normPatM (Pat r)
-  let Pat r'@(JotP ex _) = p
-  k <- f r'
-  asks (\(b :<|| _) -> Pat (JotP (ex {expInfo = b}) k))
-
-normModPatM :: (Semigroup b) => ModPat (Pat b a) -> NormM b (ModPat (NPat b a))
-normModPatM = \case
-  ModPatSelect s -> pure (ModPatSelect s)
-  ModPatSpeed s -> fmap ModPatSpeed (traverse normPatM s)
-  ModPatDegrade d -> pure (ModPatDegrade d)
-  ModPatEuclid e -> pure (ModPatEuclid e)
-
-foldNormPatKM :: (Semigroup b) => Int -> GroupPatType -> NESeq (UnPat b a) -> NormM b (NPat b a)
-foldNormPatKM lvl ty = goFirst
- where
-  goFirst (y :<|| ys) = do
-    Pat w <- normPatM (Pat y)
-    goRest (NESeq.singleton w) ys
-  goRest ws@(wsi :||> JotP (Expansion (Measure xi yi) vi) ffi) = \case
-    Empty -> wrapPatM (PatGroup (GroupPat lvl ty ws))
-    JotP b ff :<| ys -> do
-      ws' <- case ff of
-        PatTime (TimeShort s) -> do
-          let m = case s of
-                ShortTimeElongate -> Measure xi (yi + 1)
-                ShortTimeReplicate -> Measure (xi + 1) yi
-              v = vi <> b
-              w = JotP (Expansion m v) ffi
-          pure (wsi :||> w)
-        _ -> do
-          Pat w <- local (b NESeq.<|) (normPatKM ff)
-          pure (ws NESeq.|> w)
-      goRest ws' ys
-
-normPatKM :: (Semigroup b) => PatK b a -> NormM b (NPat b a)
-normPatKM = \case
-  PatPure a -> wrapPatM (PatPure a)
-  PatSilence -> wrapPatM PatSilence
-  PatTime t ->
-    case t of
-      -- Time shorthands at top level are nonsense - throw error
-      TimeShort _ -> ask >>= throwError . NormErr
-      -- Annotated time expressions turn into decorations
-      TimeLong r l -> do
-        p <- normPatM (Pat r)
-        let Pat (JotP (Expansion (Measure xi yi) vi) ff') = p
-        let m = case l of
-              LongTimeElongate f -> Measure xi (yi * factorValue f)
-              LongTimeReplicate mi -> Measure (maybe (xi + 1) (xi *) mi) yi
-        asks $ \(b :<|| _) ->
-          let v = vi <> b
-          in  Pat (JotP (Expansion m v) ff')
-  PatGroup (GroupPat lvl ty ss) ->
-    case ss of
-      -- Unwrap any singletons we find
-      q :<|| Empty -> normPatM (Pat q)
-      -- Otherwise normalize by folding
-      _ -> foldNormPatKM lvl ty ss
-  PatMod (Mod r m) ->
-    -- Just propagate time controls upward
-    rewrapPatM r $ \r' -> do
-      m' <- normModPatM m
-      pure (PatMod (Mod r' m'))
-  PatPoly (PolyPat rs mc) -> do
-    -- Just recurse and reset time controls here
-    rs' <- traverse (fmap unPat . normPatM . Pat) rs
-    wrapPatM (PatPoly (PolyPat rs' mc))
-
-normPatM :: (Semigroup b) => Pat b a -> NormM b (NPat b a)
-normPatM (Pat (JotP b ff)) = local (b NESeq.<|) (normPatKM ff)
-
-normPat :: (Semigroup b) => Pat b a -> Either (NormErr b) (NPat b a)
-normPat (Pat (JotP b ff)) = runNormM (normPatKM ff) b

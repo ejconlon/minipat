@@ -27,8 +27,10 @@ library
       Minipat.Ast
       Minipat.Base
       Minipat.Interp
+      Minipat.Norm
       Minipat.Parser
       Minipat.Print
+      Minipat.Proc
       Minipat.Rand
   other-modules:
       Paths_minipat
