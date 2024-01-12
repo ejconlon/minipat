@@ -38,14 +38,14 @@ subInterp = \case
                   i = R.randInt l s
                   el = NESeq.index els i
               in  B.unPat el arc'
-        in  B.Pat (foldMap' (f . B.spanActive) . B.spanSplit)
+        in  B.Pat (foldMap' (f . B.spanActive . snd) . B.spanSplit)
       A.GroupPatTypeAlt ->
         let l = NESeq.length els
-            f arc' =
-              let i = mod (fromInteger (B.timeFloor (B.arcStart arc'))) l
+            f z arc' =
+              let i = mod (fromInteger z) l
                   el = NESeq.index els i
               in  B.unPat el arc'
-        in  B.Pat (foldMap' (f . B.spanActive) . B.spanSplit)
+        in  B.Pat (foldMap' (\(z, sp) -> f z (B.spanActive sp)) . B.spanSplit)
   _ -> undefined
 
 interp :: N.NPat b a -> Either (P.ProcErr InterpErr b) (B.Pat a)

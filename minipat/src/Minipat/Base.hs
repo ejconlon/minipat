@@ -1,6 +1,35 @@
-module Minipat.Base where
-
--- TODO explicit exports
+module Minipat.Base
+  ( Time
+  , timeFloor
+  , timeCeil
+  , timeLerp
+  , Arc (..)
+  , arcUnion
+  , arcIntersect
+  , arcWiden
+  , arcMid
+  , Span (..)
+  , spanSplit
+  , Ev (..)
+  , evCont
+  , Tape
+  , Pat (..)
+  , patInnerBind
+  , patOuterBind
+  , patMixBind
+  , patRun
+  , patAdjust
+  , patFastBy
+  , patSlowBy
+  , patEarlyBy
+  , patLateBy
+  , patFast
+  , patSlow
+  , patEarly
+  , patLate
+  , patCont
+  )
+where
 
 import Control.Applicative (Alternative (..))
 import Control.Monad (ap)
@@ -52,16 +81,17 @@ spanTimeMapMono f (Span ac wh) = Span (arcTimeMapMono f ac) (fmap (arcTimeMapMon
 spanWholeMapMono :: (Maybe Arc -> Maybe Arc) -> Span -> Span
 spanWholeMapMono f (Span ac wh) = Span ac (f wh)
 
-spanSplit :: Arc -> [Span]
+spanSplit :: Arc -> [(Integer, Span)]
 spanSplit (Arc s0 e) =
   let ef = fromInteger (timeFloor e)
       go s =
-        let sf = fromInteger (timeFloor s)
+        let si = timeFloor s
+            sf = fromInteger si
             sc = fromInteger (timeCeil s)
             wh = Just (Arc sf sc)
         in  if sf == ef || sc == e
-              then [Span (Arc s e) wh]
-              else Span (Arc s sc) wh : go sc
+              then [(si, Span (Arc s e) wh)]
+              else (si, Span (Arc s sc) wh) : go sc
   in  go s0
 
 data Ev a = Ev
@@ -72,17 +102,6 @@ data Ev a = Ev
 
 evCont :: (Time -> a) -> Arc -> Ev a
 evCont f arc = Ev (Span arc Nothing) (f (arcMid arc))
-
--- evLte :: Ev a -> Ev a -> Bool
--- evLte (Ev p1 _) (Ev p2 _) = p1 <= p2
---
--- evMerge :: [Ev a] -> [Ev a] -> [Ev a]
--- evMerge [] rs = rs
--- evMerge ls [] = ls
--- evMerge ls@(l:ls') rs@(r:rs') =
---   if evLte l r
---     then l : evMerge ls' rs
---     else r : evMerge ls rs'
 
 newtype Tape a = Tape {unTape :: Heap (Entry Span a)}
   deriving stock (Show)
@@ -115,7 +134,7 @@ instance Functor Pat where
   fmap f (Pat k) = Pat (fmap f . k)
 
 instance Applicative Pat where
-  pure = patImpulse
+  pure a = Pat (Tape . H.fromList . fmap ((`Entry` a) . snd) . spanSplit)
   (<*>) = ap
 
 instance Monad Pat where
@@ -142,9 +161,6 @@ patEarlyBy, patLateBy :: Time -> Pat a -> Pat a
 patEarlyBy t = patTimeMapInv (+ t) (subtract t)
 patLateBy t = patTimeMapInv (subtract t) (+ t)
 
-patImpulse :: a -> Pat a
-patImpulse a = Pat (Tape . H.fromList . fmap (`Entry` a) . spanSplit)
-
 patBindWith :: (Maybe Arc -> Maybe Arc -> Maybe Arc) -> Pat a -> (a -> Pat b) -> Pat b
 patBindWith g pa f = Pat $ \arc ->
   let ta = unPat pa arc
@@ -161,6 +177,9 @@ patOuterBind = patBindWith const
 patMixBind :: Pat a -> (a -> Pat b) -> Pat b
 patMixBind = patBindWith (liftA2 arcIntersect)
 
+patRun :: Pat a -> Arc -> [Ev a]
+patRun pa arc = tapeToList (unPat pa arc)
+
 patAdjust :: (a -> Pat b -> Pat c) -> Pat a -> Pat b -> Pat c
 patAdjust f pa pb = patInnerBind pa (`f` pb)
 
@@ -175,11 +194,9 @@ patLate = patAdjust patLateBy
 patCont :: (Time -> a) -> Pat a
 patCont f = Pat (tapeSingle . evCont f)
 
-fnSine :: Rational -> Time -> Double
-fnSine freq t = sin (2 * pi * fromRational (freq * t))
-
-patSine :: Rational -> Pat Double
-patSine = patCont . fnSine
-
-patRun :: Pat a -> Arc -> [Ev a]
-patRun pa arc = tapeToList (unPat pa arc)
+-- TODO move to module with continuous primitives
+-- fnSine :: Rational -> Time -> Double
+-- fnSine freq t = sin (2 * pi * fromRational (freq * t))
+--
+-- patSine :: Rational -> Pat Double
+-- patSine = patCont . fnSine

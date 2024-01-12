@@ -1,4 +1,12 @@
-module Minipat.Print where
+module Minipat.Print
+  ( render
+  , Brace (..)
+  , braceOpenChar
+  , braceCloseChar
+  , Sep (..)
+  , sepChar
+  )
+where
 
 import Data.Text (Text)
 import Prettyprinter (Pretty (..))

@@ -1,7 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Minipat.Parser where
+module Minipat.Parser
+  ( Loc (..)
+  , ParseErr (..)
+  , PPat
+  , identPatP
+  )
+where
 
 import Bowtie (Anno (..), Jot, pattern JotP)
 import Control.Exception (Exception)

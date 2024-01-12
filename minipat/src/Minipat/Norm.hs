@@ -1,5 +1,7 @@
 module Minipat.Norm where
 
+-- TODO explicit exports
+
 import Bowtie (pattern JotP)
 import Control.Exception (Exception)
 import Control.Monad.Except (Except, runExcept, throwError)
