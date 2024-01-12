@@ -402,7 +402,7 @@ instance (Pretty s, Pretty a, Pretty r) => Pretty (PatF s a r) where
 
 newtype Pat b a = Pat {unPat :: UnPat b a}
   deriving stock (Show)
-  deriving newtype (Eq, Ord, Functor, Foldable)
+  deriving newtype (Eq, Ord, Functor, Foldable, Pretty)
 
 type UnPat b = Jot (PatF (Pat b Factor)) b
 
@@ -447,9 +447,6 @@ instance Bitraversable Pat where
           PatGroup gs -> fmap PatGroup (traverse go gs)
           PatMod (Mod r m) -> fmap PatMod $ Mod <$> go r <*> traverse (bitraverse f pure) m
           PatPoly (PolyPat rs mc) -> fmap (\rs' -> PatPoly (PolyPat rs' mc)) (traverse go rs)
-
-instance (Pretty a) => Pretty (Pat b a) where
-  pretty = pretty . unPat
 
 -- ** Normalization
 
