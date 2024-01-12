@@ -1,0 +1,44 @@
+name: minipat
+version: 0.1.0
+
+github: ejconlon/minipat
+license: BSD3
+author: Eric Conlon
+maintainer: ejconlon@gmail.com
+copyright: (c) 2024 Eric Conlon
+synopsis: A mini pattern language extracted from Tidal
+description: Please see the README on GitHub at <https://github.com/ejconlon/minipat#readme>
+tested-with: GHC == 9.6.3
+
+defaults:
+  local: ../defaults.yaml
+
+dependencies:
+- base >= 4.12 && < 5
+
+library:
+  source-dirs: src
+
+executables:
+  minipat-exe:
+    main: Main.hs
+    source-dirs: exe
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - minipat
+
+tests:
+  minipat-test:
+    main: Main.hs
+    source-dirs: test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - minipat
+    - tasty
+    - tasty-hunit

@@ -1,0 +1,42 @@
+language: GHC2021
+
+default-extensions:
+- BangPatterns
+- ConstraintKinds
+- DataKinds
+- DeriveFunctor
+- DeriveFoldable
+- DeriveGeneric
+- DeriveTraversable
+- DerivingStrategies
+- DerivingVia
+- FlexibleContexts
+- FlexibleInstances
+- FunctionalDependencies
+- GADTs
+- GeneralizedNewtypeDeriving
+- ImportQualifiedPost
+- LambdaCase
+- KindSignatures
+- MultiParamTypeClasses
+- MultiWayIf
+- PatternSynonyms
+- Rank2Types
+- ScopedTypeVariables
+- StandaloneDeriving
+- StandaloneKindSignatures
+- TupleSections
+- TypeApplications
+- TypeOperators
+- TypeFamilies
+
+ghc-options:
+- -Wall
+- -Wcompat
+- -Widentities
+- -Wincomplete-record-updates
+- -Wincomplete-uni-patterns
+- -Wpartial-fields
+- -Wredundant-constraints
+- -fno-warn-unused-top-binds
+
