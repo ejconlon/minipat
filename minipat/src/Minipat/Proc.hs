@@ -1,7 +1,8 @@
 module Minipat.Proc
   ( ProcErr (..)
   , ProcM
-  , partPM
+  , askPM
+  , pushPM
   , throwPM
   , bottomUpPM
   )
@@ -30,23 +31,32 @@ instance
   => Exception (ProcErr b e)
 
 data ProcEnv b c = ProcEnv
-  { procEnvPath :: !(NESeq b)
+  { procEnvFn :: !(c -> b)
+  , procEnvPath :: !(NESeq b)
   , procEnvKey :: !c
   }
-  deriving stock (Eq, Ord, Show)
+
+newProcEnv :: (c -> b) -> c -> ProcEnv b c
+newProcEnv g c = ProcEnv g (NESeq.singleton (g c)) c
+
+pushProcEnv :: c -> ProcEnv b c -> ProcEnv b c
+pushProcEnv c (ProcEnv g bs _) = ProcEnv g (bs NESeq.|> g c) c
 
 type ProcM e b c = ReaderT (ProcEnv b c) (Except (ProcErr e b))
 
 runPM :: ProcM e b c a -> ProcEnv b c -> Either (ProcErr e b) a
 runPM m bs = runExcept (runReaderT m bs)
 
-partPM :: ProcM e b c c
-partPM = asks procEnvKey
+askPM :: ProcM e b c c
+askPM = asks procEnvKey
+
+pushPM :: c -> ProcM e b c a -> ProcM e b c a
+pushPM = local . pushProcEnv
 
 throwPM :: e -> ProcM e b c a
 throwPM e = asks procEnvPath >>= \bs -> throwError (ProcErr bs e)
 
 bottomUpPM :: (c -> b) -> (A.PatX c a x -> ProcM e b c x) -> A.Pat c a -> Either (ProcErr e b) x
-bottomUpPM g f (A.Pat (JotP c0 p0)) = runPM (go p0) (ProcEnv (NESeq.singleton (g c0)) c0)
+bottomUpPM g f (A.Pat (JotP c0 p0)) = runPM (go p0) (newProcEnv g c0)
  where
-  go p = bitraverse pure (\(JotP c1 p1) -> local (\(ProcEnv bs _) -> ProcEnv (bs NESeq.|> g c1) c1) (go p1)) p >>= f
+  go p = bitraverse pure (\(JotP c1 p1) -> pushPM c1 (go p1)) p >>= f
