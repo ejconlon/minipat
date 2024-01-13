@@ -5,7 +5,6 @@ module Minipat.Proc
   , askPM
   , asksPM
   , pushPM
-  , localPM
   , throwPM
   , bottomUpPM
   )
@@ -60,8 +59,8 @@ asksPM f = ProcM (asks (f . procEnvKey))
 pushPM :: c -> ProcM e b c a -> ProcM e b c a
 pushPM c (ProcM m) = ProcM (local (pushProcEnv c) m)
 
-localPM :: (c -> c) -> ProcM e b c a -> ProcM e b c a
-localPM f m = askPM >>= \c -> pushPM (f c) m
+-- localPM :: (c -> c) -> ProcM e b c a -> ProcM e b c a
+-- localPM f m = askPM >>= \c -> pushPM (f c) m
 
 throwPM :: e -> ProcM e b c a
 throwPM e = ProcM (asks procEnvPath) >>= \bs -> ProcM (throwError (ProcErr bs e))
