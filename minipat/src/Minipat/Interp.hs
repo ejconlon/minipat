@@ -1,6 +1,6 @@
 module Minipat.Interp
   ( InterpErr (..)
-  , interp
+  , interpPat
   )
 where
 
@@ -22,8 +22,8 @@ instance Exception InterpErr
 
 type M b = P.ProcM InterpErr b (N.Expansion b)
 
-subInterp :: N.NPatX b a (B.Pat a) -> M b (B.Pat a)
-subInterp = \case
+subInterpPat :: N.NPatX b a (B.Pat a) -> M b (B.Pat a)
+subInterpPat = \case
   A.PatPure a -> pure (pure a)
   A.PatSilence -> pure empty
   A.PatTime _ -> P.throwPM InterpErrTime
@@ -48,5 +48,5 @@ subInterp = \case
         in  B.Pat (foldMap' (\(z, sp) -> f z (B.spanActive sp)) . B.spanSplit)
   _ -> undefined
 
-interp :: N.NPat b a -> Either (P.ProcErr InterpErr b) (B.Pat a)
-interp = P.bottomUpPM N.expInfo subInterp
+interpPat :: N.NPat b a -> Either (P.ProcErr InterpErr b) (B.Pat a)
+interpPat = P.bottomUpPM N.expInfo subInterpPat

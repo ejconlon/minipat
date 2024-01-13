@@ -101,7 +101,7 @@ data Ev a = Ev
   deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
 
 evCont :: (Time -> a) -> Arc -> Ev a
-evCont f arc = Ev (Span arc Nothing) (f (arcMid arc))
+evCont f arc = Ev (Span arc Nothing) (f (arcStart arc))
 
 newtype Tape a = Tape {unTape :: Heap (Entry Span a)}
   deriving stock (Show)
@@ -116,8 +116,8 @@ tapeTimeMapMono f = Tape . H.mapMonotonic (\(Entry s a) -> Entry (spanTimeMapMon
 tapeWholeMapMono :: (Maybe Arc -> Maybe Arc) -> Tape a -> Tape a
 tapeWholeMapMono f = Tape . H.mapMonotonic (\(Entry s a) -> Entry (spanWholeMapMono f s) a) . unTape
 
-tapeSingle :: Ev a -> Tape a
-tapeSingle (Ev s a) = Tape (H.singleton (Entry s a))
+tapeSingleton :: Ev a -> Tape a
+tapeSingleton (Ev s a) = Tape (H.singleton (Entry s a))
 
 tapeUncons :: Tape a -> Maybe (Ev a, Tape a)
 tapeUncons = fmap (\(Entry s a, h') -> (Ev s a, Tape h')) . H.uncons . unTape
@@ -127,6 +127,9 @@ tapeToList = fmap (\(Entry s a) -> Ev s a) . toList . unTape
 
 tapeConcatMap :: (Ev a -> Tape b) -> Tape a -> Tape b
 tapeConcatMap f = mconcat . fmap f . tapeToList
+
+tapeFromList :: [Ev a] -> Tape a
+tapeFromList = Tape . H.fromList . fmap (\(Ev s a) -> Entry s a)
 
 newtype Pat a = Pat {unPat :: Arc -> Tape a}
 
@@ -192,7 +195,7 @@ patEarly = patAdjust patEarlyBy
 patLate = patAdjust patLateBy
 
 patCont :: (Time -> a) -> Pat a
-patCont f = Pat (tapeSingle . evCont f)
+patCont f = Pat (tapeSingleton . evCont f)
 
 -- TODO move to module with continuous primitives
 -- fnSine :: Rational -> Time -> Double
