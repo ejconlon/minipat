@@ -216,11 +216,11 @@ withPatDecosP ps = go
       case mc of
         Just '@' -> fmap (Just . A.PatTime . A.TimeLong pp) elongateLongP
         Just '!' -> fmap (Just . A.PatTime . A.TimeLong pp) replicateLongP
-        Just ':' -> fmap (Just . A.PatMod . A.Mod pp . A.ModPatSelect) selectP
-        Just '*' -> fmap (Just . A.PatMod . A.Mod pp . A.ModPatSpeed) (speedFastP ps)
-        Just '/' -> fmap (Just . A.PatMod . A.Mod pp . A.ModPatSpeed) (speedSlowP ps)
-        Just '(' -> fmap (Just . A.PatMod . A.Mod pp . A.ModPatEuclid) euclidP
-        Just '?' -> fmap (Just . A.PatMod . A.Mod pp . A.ModPatDegrade) degradeP
+        Just ':' -> fmap (Just . A.PatMod . A.Mod pp . A.ModTypeSelect) selectP
+        Just '*' -> fmap (Just . A.PatMod . A.Mod pp . A.ModTypeSpeed) (speedFastP ps)
+        Just '/' -> fmap (Just . A.PatMod . A.Mod pp . A.ModTypeSpeed) (speedSlowP ps)
+        Just '(' -> fmap (Just . A.PatMod . A.Mod pp . A.ModTypeEuclid) euclidP
+        Just '?' -> fmap (Just . A.PatMod . A.Mod pp . A.ModTypeDegrade) degradeP
         _ -> pure Nothing
     case mp' of
       Just p' -> go p'
@@ -239,17 +239,17 @@ spaceSeqPatP pr = go Empty
         Nothing -> L.throwP ParseErrEmpty
         Just neAcc -> pure neAcc
 
-spaceGroupPatP :: P (PPat a) -> P (Anno Loc (A.GroupPat (UnPPat a)))
-spaceGroupPatP = annoP . fmap (A.GroupPat 0 (A.GroupPatTypeSeq A.SeqPresSpace)) . spaceSeqPatP
+spaceGroupP :: P (PPat a) -> P (Anno Loc (A.Group (UnPPat a)))
+spaceGroupP = annoP . fmap (A.Group 0 (A.GroupTypeSeq A.SeqPresSpace)) . spaceSeqPatP
 
-unNestSeqPatP :: Anno Loc (A.GroupPat (UnPPat a)) -> PPat a
-unNestSeqPatP (Anno x p@(A.GroupPat lvl _ acc)) =
+unNestSeqPatP :: Anno Loc (A.Group (UnPPat a)) -> PPat a
+unNestSeqPatP (Anno x p@(A.Group lvl _ acc)) =
   A.Pat $ case (acc, lvl) of
     (r :<|| Empty, 0) -> r
     _ -> JotP x (A.PatGroup p)
 
 nestedSeqPatP :: P (PPat a) -> P (PPat a)
-nestedSeqPatP = fmap unNestSeqPatP . spaceGroupPatP
+nestedSeqPatP = fmap unNestSeqPatP . spaceGroupP
 
 -- | Parses a square-braced pattern.
 squarePatP :: P (PPat a) -> P (PPat a)
@@ -259,20 +259,20 @@ squarePatP pr =
     ( A.Pat . annoJot . fmap (\g -> A.PatGroup (g {A.gpLevel = A.gpLevel g + 1}))
         <$> groupPatP
           (Just ']')
-          [ (',', A.GroupPatTypePar)
-          , ('|', A.GroupPatTypeRand)
-          , ('.', A.GroupPatTypeSeq A.SeqPresDot)
+          [ (',', A.GroupTypePar)
+          , ('|', A.GroupTypeRand)
+          , ('.', A.GroupTypeSeq A.SeqPresDot)
           ]
           pr
-          (spaceGroupPatP pr)
+          (spaceGroupP pr)
     )
 
 groupPatP
   :: Maybe Char
-  -> [(Char, A.GroupPatType)]
+  -> [(Char, A.GroupType)]
   -> P (PPat a)
-  -> P (Anno Loc (A.GroupPat (UnPPat a)))
-  -> P (Anno Loc (A.GroupPat (UnPPat a)))
+  -> P (Anno Loc (A.Group (UnPPat a)))
+  -> P (Anno Loc (A.Group (UnPPat a)))
 groupPatP delim opts pr pg = goStart
  where
   goStart = do
@@ -292,13 +292,13 @@ groupPatP delim opts pr pg = goStart
     let totalAcc' = totalAcc |> acc
     mc <- L.lookP L.unconsP
     if mc == delim
-      then pure (A.GroupPat 0 subTy totalAcc')
+      then pure (A.Group 0 subTy totalAcc')
       else do
         when (mc == Just subDelim) (stripTokP subDelim)
         goRest subTy subDelim totalAcc'
 
 anglePatP :: P (PPat a) -> P (PPat a)
-anglePatP = bracedP BraceAngle . fmap A.Pat . jotP . fmap (A.PatGroup . A.GroupPat 0 A.GroupPatTypeAlt) . spaceSeqPatP
+anglePatP = bracedP BraceAngle . fmap A.Pat . jotP . fmap (A.PatGroup . A.Group 0 A.GroupTypeAlt) . spaceSeqPatP
 
 curlyPatP :: P (PPat a) -> P (PPat a)
 curlyPatP pr = fmap A.Pat $ jotP $ do
@@ -327,17 +327,17 @@ rePatP :: P a -> P (PPat A.Factor) -> P (PPat a) -> P (PPat a)
 rePatP pa pf pr = singlePatP pa pr >>= withPatDecosP pf
 
 -- | Parses `x y . z w` sequence groups. Can consume the entire input.
-outerGroupPatP :: P (PPat a) -> P (Anno Loc (A.GroupPat (UnPPat a)))
-outerGroupPatP pr =
+outerGroupP :: P (PPat a) -> P (Anno Loc (A.Group (UnPPat a)))
+outerGroupP pr =
   groupPatP
     Nothing
-    [('.', A.GroupPatTypeSeq A.SeqPresDot)]
+    [('.', A.GroupTypeSeq A.SeqPresDot)]
     pr
-    (spaceGroupPatP pr)
+    (spaceGroupP pr)
 
 -- | Parses top-level `x y . z w` patterns. Can consume the entire input.
 outerPatP :: P (PPat a) -> P (PPat a)
-outerPatP = fmap unNestSeqPatP . outerGroupPatP
+outerPatP = fmap unNestSeqPatP . outerGroupP
 
 -- | Parses a top-level pattern given parsers for atoms and signals.
 patP :: P a -> P (PPat A.Factor) -> P (PPat a)

@@ -76,21 +76,21 @@ rewrapPatM r f = do
   ff <- f r'
   P.asksPM (\b -> A.Pat (JotP (ex {expInfo = b}) ff))
 
-normModPatM :: (Semigroup b) => A.ModPat (A.Pat b a) -> NormM b (A.ModPat (NPat b a))
-normModPatM = \case
-  A.ModPatSelect s -> pure (A.ModPatSelect s)
-  A.ModPatSpeed s -> fmap A.ModPatSpeed (traverse normPatM s)
-  A.ModPatDegrade d -> pure (A.ModPatDegrade d)
-  A.ModPatEuclid e -> pure (A.ModPatEuclid e)
+normModTypeM :: (Semigroup b) => A.ModType (A.Pat b a) -> NormM b (A.ModType (NPat b a))
+normModTypeM = \case
+  A.ModTypeSelect s -> pure (A.ModTypeSelect s)
+  A.ModTypeSpeed s -> fmap A.ModTypeSpeed (traverse normPatM s)
+  A.ModTypeDegrade d -> pure (A.ModTypeDegrade d)
+  A.ModTypeEuclid e -> pure (A.ModTypeEuclid e)
 
-foldNormPatKM :: (Semigroup b) => Int -> A.GroupPatType -> NESeq (A.UnPat b a) -> NormM b (NPat b a)
+foldNormPatKM :: (Semigroup b) => Int -> A.GroupType -> NESeq (A.UnPat b a) -> NormM b (NPat b a)
 foldNormPatKM lvl ty = goFirst
  where
   goFirst (y :<|| ys) = do
     A.Pat w <- normPatM (A.Pat y)
     goRest (NESeq.singleton w) ys
   goRest ws@(wsi :||> JotP (Expansion (Measure xi yi) vi) ffi) = \case
-    Empty -> wrapPatM (A.PatGroup (A.GroupPat lvl ty ws))
+    Empty -> wrapPatM (A.PatGroup (A.Group lvl ty ws))
     JotP b ff :<| ys -> do
       ws' <- case ff of
         A.PatTime (A.TimeShort s) -> do
@@ -123,7 +123,7 @@ normPatKM = \case
         b <- P.askPM
         let v = vi <> b
         pure (A.Pat (JotP (Expansion m v) ff'))
-  A.PatGroup (A.GroupPat lvl ty ss) ->
+  A.PatGroup (A.Group lvl ty ss) ->
     case ss of
       -- Unwrap any singletons we find
       q :<|| Empty -> normPatM (A.Pat q)
@@ -132,7 +132,7 @@ normPatKM = \case
   A.PatMod (A.Mod r m) ->
     -- Just propagate time controls upward
     rewrapPatM r $ \r' -> do
-      m' <- normModPatM m
+      m' <- normModTypeM m
       pure (A.PatMod (A.Mod r' m'))
   A.PatPoly (A.PolyPat rs mc) -> do
     -- Just recurse and reset time controls here

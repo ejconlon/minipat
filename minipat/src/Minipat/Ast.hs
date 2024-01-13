@@ -119,14 +119,14 @@ factorSucc = \case
 -- * Mod
 
 -- | An expression modified by some control.
-data Mod c r = Mod
+data Mod s r = Mod
   { modTarget :: !r
-  , modValue :: !c
+  , modType :: !(ModType s)
   }
   deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
 
 instance (Pretty c, Pretty r) => Pretty (Mod c r) where
-  pretty (Mod tar val) = P.hcat [pretty tar, pretty val]
+  pretty (Mod tar ty) = P.hcat [pretty tar, pretty ty]
 
 -- * Speed
 
@@ -218,36 +218,36 @@ prettyGroup mb ms lvl ds =
 
 -- ** Groups
 
-data GroupPatType
-  = GroupPatTypeSeq !SeqPres
-  | GroupPatTypePar
-  | GroupPatTypeRand
-  | GroupPatTypeAlt
+data GroupType
+  = GroupTypeSeq !SeqPres
+  | GroupTypePar
+  | GroupTypeRand
+  | GroupTypeAlt
   deriving stock (Eq, Ord, Show)
 
-groupPatTypeBrace :: GroupPatType -> Maybe Brace
+groupPatTypeBrace :: GroupType -> Maybe Brace
 groupPatTypeBrace = \case
-  GroupPatTypeSeq _ -> Nothing
-  GroupPatTypePar -> Nothing
-  GroupPatTypeRand -> Nothing
-  GroupPatTypeAlt -> Just BraceAngle
+  GroupTypeSeq _ -> Nothing
+  GroupTypePar -> Nothing
+  GroupTypeRand -> Nothing
+  GroupTypeAlt -> Just BraceAngle
 
-groupPatTypeSep :: GroupPatType -> Maybe Sep
+groupPatTypeSep :: GroupType -> Maybe Sep
 groupPatTypeSep = \case
-  GroupPatTypeSeq sp -> seqPresSep sp
-  GroupPatTypePar -> Just SepComma
-  GroupPatTypeRand -> Just SepPipe
-  GroupPatTypeAlt -> Nothing
+  GroupTypeSeq sp -> seqPresSep sp
+  GroupTypePar -> Just SepComma
+  GroupTypeRand -> Just SepPipe
+  GroupTypeAlt -> Nothing
 
-data GroupPat r = GroupPat
+data Group r = Group
   { gpLevel :: !Int
-  , gpType :: !GroupPatType
+  , gpType :: !GroupType
   , gpElems :: !(NESeq r)
   }
   deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
 
-instance (Pretty r) => Pretty (GroupPat r) where
-  pretty (GroupPat lvl ty ps) =
+instance (Pretty r) => Pretty (Group r) where
+  pretty (Group lvl ty ps) =
     let mb = groupPatTypeBrace ty
         ms = groupPatTypeSep ty
         ds = fmap pretty (toList ps)
@@ -270,19 +270,19 @@ newtype Degrade = Degrade {unDegrade :: Maybe Factor}
 instance Pretty Degrade where
   pretty (Degrade mfp) = P.hcat ["?", maybe mempty pretty mfp]
 
-data ModPat s
-  = ModPatSelect !Select
-  | ModPatDegrade !Degrade
-  | ModPatEuclid !Euclid
-  | ModPatSpeed !(Speed s)
+data ModType s
+  = ModTypeSelect !Select
+  | ModTypeDegrade !Degrade
+  | ModTypeEuclid !Euclid
+  | ModTypeSpeed !(Speed s)
   deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
 
-instance (Pretty s) => Pretty (ModPat s) where
+instance (Pretty s) => Pretty (ModType s) where
   pretty = \case
-    ModPatDegrade d -> pretty d
-    ModPatEuclid e -> pretty e
-    ModPatSelect s -> pretty s
-    ModPatSpeed s -> pretty s
+    ModTypeDegrade d -> pretty d
+    ModTypeEuclid e -> pretty e
+    ModTypeSelect s -> pretty s
+    ModTypeSpeed s -> pretty s
 
 -- ** Polymeters
 
@@ -306,8 +306,8 @@ data PatF s a r
   = PatPure !a
   | PatSilence
   | PatTime !(Time r)
-  | PatGroup !(GroupPat r)
-  | PatMod !(Mod (ModPat s) r)
+  | PatGroup !(Group r)
+  | PatMod !(Mod s r)
   | PatPoly !(PolyPat r)
   deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
 

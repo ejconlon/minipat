@@ -27,11 +27,11 @@ subInterp = \case
   A.PatPure a -> pure (pure a)
   A.PatSilence -> pure empty
   A.PatTime _ -> P.throwPM InterpErrTime
-  A.PatGroup (A.GroupPat _ ty els) -> pure $
+  A.PatGroup (A.Group _ ty els) -> pure $
     case ty of
-      A.GroupPatTypeSeq _ -> fold1 els
-      A.GroupPatTypePar -> foldl1' (<|>) els
-      A.GroupPatTypeRand ->
+      A.GroupTypeSeq _ -> fold1 els
+      A.GroupTypePar -> foldl1' (<|>) els
+      A.GroupTypeRand ->
         let l = NESeq.length els
             f arc' =
               let s = R.arcSeed arc'
@@ -39,7 +39,7 @@ subInterp = \case
                   el = NESeq.index els i
               in  B.unPat el arc'
         in  B.Pat (foldMap' (f . B.spanActive . snd) . B.spanSplit)
-      A.GroupPatTypeAlt ->
+      A.GroupTypeAlt ->
         let l = NESeq.length els
             f z arc' =
               let i = mod (fromInteger z) l

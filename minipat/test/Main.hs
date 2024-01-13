@@ -108,34 +108,34 @@ patParseCases =
   , mkUnitRT
       "pat seq brace"
       (expectText "[x y]" (expectParseOk tpatP))
-      (mkTPat (PatGroup (GroupPat 1 (GroupPatTypeSeq SeqPresSpace) xyPatIdents)))
+      (mkTPat (PatGroup (Group 1 (GroupTypeSeq SeqPresSpace) xyPatIdents)))
   , mkUnitRT
       "pat seq space"
       (expectText "x y" (expectParseOk tpatP))
-      (mkTPat (PatGroup (GroupPat 0 (GroupPatTypeSeq SeqPresSpace) xyPatIdents)))
+      (mkTPat (PatGroup (Group 0 (GroupTypeSeq SeqPresSpace) xyPatIdents)))
   , mkUnitRT
       "pat seq dot"
       (expectText "x . y" (expectParseOk tpatP))
-      (mkTPat (PatGroup (GroupPat 0 (GroupPatTypeSeq SeqPresDot) xyPatIdents)))
+      (mkTPat (PatGroup (Group 0 (GroupTypeSeq SeqPresDot) xyPatIdents)))
   , mkUnitRT
       "pat seq dot space"
       (expectText "x y . z w" (expectParseOk tpatP))
-      ( let p vs = mkUnTPat (PatGroup (GroupPat 0 (GroupPatTypeSeq SeqPresSpace) vs))
+      ( let p vs = mkUnTPat (PatGroup (Group 0 (GroupTypeSeq SeqPresSpace) vs))
         in  mkTPat
-              (PatGroup (GroupPat 0 (GroupPatTypeSeq SeqPresDot) (NESeq.unsafeFromSeq (Seq.fromList [p xyPatIdents, p zwPatIdents]))))
+              (PatGroup (Group 0 (GroupTypeSeq SeqPresDot) (NESeq.unsafeFromSeq (Seq.fromList [p xyPatIdents, p zwPatIdents]))))
       )
   , mkUnitRT
       "pat par"
       (expectText "[x , y]" (expectParseOk tpatP))
-      (mkTPat (PatGroup (GroupPat 1 GroupPatTypePar xyPatIdents)))
+      (mkTPat (PatGroup (Group 1 GroupTypePar xyPatIdents)))
   , mkUnitRT
       "pat alt"
       (expectText "<x y>" (expectParseOk tpatP))
-      (mkTPat (PatGroup (GroupPat 0 GroupPatTypeAlt xyPatIdents)))
+      (mkTPat (PatGroup (Group 0 GroupTypeAlt xyPatIdents)))
   , mkUnitRT
       "pat rand"
       (expectText "[x | y]" (expectParseOk tpatP))
-      (mkTPat (PatGroup (GroupPat 1 GroupPatTypeRand xyPatIdents)))
+      (mkTPat (PatGroup (Group 1 GroupTypeRand xyPatIdents)))
   , mkUnitRT
       "pat poly"
       (expectText "{x , y}" (expectParseOk tpatP))
@@ -147,19 +147,19 @@ patParseCases =
   , mkUnitRT
       "pat speed fast"
       (expectText "x*9" (expectParseOk tpatP))
-      (mkTPat (PatMod (Mod xPatIdent (ModPatSpeed (Speed SpeedDirFast (mkTPat (PatPure (FactorInteger 9))))))))
+      (mkTPat (PatMod (Mod xPatIdent (ModTypeSpeed (Speed SpeedDirFast (mkTPat (PatPure (FactorInteger 9))))))))
   , mkUnitRT
       "pat speed fast decimal"
       (expectText "x*9.2" (expectParseOk tpatP))
       ( mkTPat
-          ( PatMod (Mod xPatIdent (ModPatSpeed (Speed SpeedDirFast (mkTPat (PatPure (FactorRational RationalPresDec (92 % 10)))))))
+          ( PatMod (Mod xPatIdent (ModTypeSpeed (Speed SpeedDirFast (mkTPat (PatPure (FactorRational RationalPresDec (92 % 10)))))))
           )
       )
   , mkUnitRT
       "pat speed slow"
       (expectText "x/(1/3)" (expectParseOk tpatP))
       ( mkTPat
-          (PatMod (Mod xPatIdent (ModPatSpeed (Speed SpeedDirSlow (mkTPat (PatPure (FactorRational RationalPresFrac (1 % 3))))))))
+          (PatMod (Mod xPatIdent (ModTypeSpeed (Speed SpeedDirSlow (mkTPat (PatPure (FactorRational RationalPresFrac (1 % 3))))))))
       )
   , mkUnitRT
       "pat long elongate"
@@ -176,47 +176,47 @@ patParseCases =
   , mkUnitRT
       "pat adj optional implicit"
       (expectText "x?" (expectParseOk tpatP))
-      (mkTPat (PatMod (Mod xPatIdent (ModPatDegrade (Degrade Nothing)))))
+      (mkTPat (PatMod (Mod xPatIdent (ModTypeDegrade (Degrade Nothing)))))
   , mkUnitRT
       "pat adj optional explicit"
       (expectText "x?0.5" (expectParseOk tpatP))
-      (mkTPat (PatMod (Mod xPatIdent (ModPatDegrade (Degrade (Just (FactorRational RationalPresDec (1 % 2))))))))
+      (mkTPat (PatMod (Mod xPatIdent (ModTypeDegrade (Degrade (Just (FactorRational RationalPresDec (1 % 2))))))))
   , mkUnitRT
       "pat adj euclid 2"
       (expectText "x(1,2)" (expectParseOk tpatP))
-      (mkTPat (PatMod (Mod xPatIdent (ModPatEuclid (Euclid 1 2 Nothing)))))
+      (mkTPat (PatMod (Mod xPatIdent (ModTypeEuclid (Euclid 1 2 Nothing)))))
   , mkUnitRT
       "pat adj euclid 3"
       (expectText "x(1,2,3)" (expectParseOk tpatP))
-      (mkTPat (PatMod (Mod xPatIdent (ModPatEuclid (Euclid 1 2 (Just 3))))))
+      (mkTPat (PatMod (Mod xPatIdent (ModTypeEuclid (Euclid 1 2 (Just 3))))))
   , mkUnitRT
       "pat adj select sample"
       (expectText "x:4" (expectParseOk tpatP))
-      (mkTPat (PatMod (Mod xPatIdent (ModPatSelect (SelectSample 4)))))
+      (mkTPat (PatMod (Mod xPatIdent (ModTypeSelect (SelectSample 4)))))
   , mkUnitRT
       "pat adj select transform"
       (expectText "x:hello" (expectParseOk tpatP))
-      (mkTPat (PatMod (Mod xPatIdent (ModPatSelect (SelectTransform "hello")))))
+      (mkTPat (PatMod (Mod xPatIdent (ModTypeSelect (SelectTransform "hello")))))
   , mkUnitRT
       "pat multi mod"
       (expectText "x:foo(1,2)" (expectParseOk tpatP))
-      ( let p = mkUnTPat (PatMod (Mod xPatIdent (ModPatSelect (SelectTransform "foo"))))
-        in  mkTPat (PatMod (Mod p (ModPatEuclid (Euclid 1 2 Nothing))))
+      ( let p = mkUnTPat (PatMod (Mod xPatIdent (ModTypeSelect (SelectTransform "foo"))))
+        in  mkTPat (PatMod (Mod p (ModTypeEuclid (Euclid 1 2 Nothing))))
       )
   , mkUnitRT
       "pat par multi"
       (expectText "[x y , z w]" (expectParseOk tpatP))
-      ( let p vs = mkUnTPat (PatGroup (GroupPat 0 (GroupPatTypeSeq SeqPresSpace) vs))
-        in  mkTPat (PatGroup (GroupPat 1 GroupPatTypePar (NESeq.unsafeFromSeq (Seq.fromList [p xyPatIdents, p zwPatIdents]))))
+      ( let p vs = mkUnTPat (PatGroup (Group 0 (GroupTypeSeq SeqPresSpace) vs))
+        in  mkTPat (PatGroup (Group 1 GroupTypePar (NESeq.unsafeFromSeq (Seq.fromList [p xyPatIdents, p zwPatIdents]))))
       )
   , mkUnitRT
       "pat long replicate implicit seq"
       (expectText "x! y" (expectParseOk tpatP))
       ( mkTPat
           ( PatGroup
-              ( GroupPat
+              ( Group
                   0
-                  (GroupPatTypeSeq SeqPresSpace)
+                  (GroupTypeSeq SeqPresSpace)
                   ( toNESeq
                       [ mkUnTPat (PatTime (TimeLong xPatIdent (LongTimeReplicate Nothing)))
                       , yPatIdent
@@ -230,9 +230,9 @@ patParseCases =
       (expectText "x !" (expectParseOk tpatP))
       ( mkTPat
           ( PatGroup
-              ( GroupPat
+              ( Group
                   0
-                  (GroupPatTypeSeq SeqPresSpace)
+                  (GroupTypeSeq SeqPresSpace)
                   ( toNESeq
                       [ xPatIdent
                       , mkUnTPat (PatTime (TimeShort ShortTimeReplicate))
