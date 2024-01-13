@@ -76,7 +76,6 @@ library
     , nonempty-containers ==0.3.*
     , prettyprinter ==1.7.*
     , text ==2.0.*
-    , transformers ==0.6.*
   default-language: GHC2021
 
 test-suite minipat-test
@@ -120,14 +119,14 @@ test-suite minipat-test
       base >=4.12 && <5
     , bowtie ==0.2.*
     , containers ==0.6.*
+    , daytripper ==0.3.*
     , heaps ==0.4.*
     , looksee ==0.5.*
     , minipat
     , mtl ==2.3.*
     , nonempty-containers ==0.3.*
     , prettyprinter ==1.7.*
-    , tasty
-    , tasty-hunit
+    , tasty ==1.4.*
+    , tasty-hunit ==0.10.*
     , text ==2.0.*
-    , transformers ==0.6.*
   default-language: GHC2021

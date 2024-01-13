@@ -1,21 +1,828 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Main
   ( main
   )
 where
 
-import Test.Tasty (TestTree, defaultMain, testGroup)
+import Bowtie (Anno (..), pattern JotP)
+import Control.Exception (throwIO)
+import Control.Monad (void)
+import Data.Bifunctor (first)
+import Data.Either (isLeft, isRight)
+import Data.Maybe (fromMaybe)
+import Data.Ratio ((%))
+import Data.Sequence qualified as Seq
+import Data.Sequence.NonEmpty (NESeq)
+import Data.Sequence.NonEmpty qualified as NESeq
+import Data.Text (Text)
+import Looksee (Err, parse)
+import Minipat.Ast
+import Minipat.Base (Arc (..))
+import Minipat.Parser (P, ParseErr, factorP, identP, identPatP)
+import Minipat.Print (render)
+import Prettyprinter qualified as P
+import System.IO (BufferMode (..), hSetBuffering, stdout)
+import Test.Daytripper
+  ( Expect
+  , MonadExpect (..)
+  , RT
+  , daytripperMain
+  , expectDuring
+  , mkExpect
+  , mkUnitRT
+  , runExpect
+  , testRT
+  )
+import Test.Tasty (TestName, TestTree, testGroup)
 import Test.Tasty.HUnit (testCase, (@?=))
 
-testDummy :: TestTree
-testDummy = testCase "dummy" $ do
-  let actual = (1 + 1) :: Int
-      expected = 2 :: Int
-  actual @?= expected
+type Cmp m a = Maybe a -> Either (Err ParseErr) a -> m ()
+
+expectParse :: (MonadExpect m, P.Pretty a) => Cmp m a -> P a -> Expect m a Text (Either (Err ParseErr) a)
+expectParse cmp p = mkExpect enc dec cmp
+ where
+  enc = pure . render
+  dec = pure . parse p
+
+expectParseOk :: (MonadExpect m, Eq a, Show a, P.Pretty a) => P a -> Expect m a Text (Either (Err ParseErr) a)
+expectParseOk = expectParse (maybe (expectAssertBool "expected ok" . isRight) (\a x -> expectAssertEq x (Right a)))
+
+expectParseErr :: (MonadExpect m, P.Pretty a) => P a -> Expect m a Text (Either (Err ParseErr) a)
+expectParseErr = expectParse (const (expectAssertBool "expected error" . isLeft))
+
+expectText :: (MonadExpect m) => Text -> Expect m a Text c -> Expect m a Text c
+expectText t = expectDuring (\_ u -> expectAssertEq u t)
+
+commonParseCases :: [RT]
+commonParseCases =
+  [ mkUnitRT "var" (expectText "x" (expectParseOk identP)) (Ident "x")
+  , mkUnitRT "factor int" (expectText "5" (expectParseOk factorP)) (FactorInteger 5)
+  , mkUnitRT "factor dec" (expectText "0.75" (expectParseOk factorP)) (FactorRational RationalPresDec (3 % 4))
+  , mkUnitRT "factor frac" (expectText "(3/4)" (expectParseOk factorP)) (FactorRational RationalPresFrac (3 % 4))
+  , mkUnitRT "factor char" (expectText "h" (expectParseOk factorP)) (FactorQuickRatio QuickRatioHalf)
+  ]
+
+type TPat = Pat ()
+
+type UnTPat = UnPat ()
+
+mkTPat :: PatF (TPat Factor) a (UnPat () a) -> TPat a
+mkTPat = Pat . JotP ()
+
+mkUnTPat :: PatF (TPat Factor) a (UnPat () a) -> UnTPat a
+mkUnTPat = unPat . mkTPat
+
+tpatP :: P (TPat Ident)
+tpatP = fmap (first (const ())) identPatP
+
+toNESeq :: [a] -> NESeq a
+toNESeq = NESeq.unsafeFromSeq . Seq.fromList
+
+xPatIdent, yPatIdent :: UnTPat Ident
+xPatIdent = mkUnTPat (PatPure (Ident "x"))
+yPatIdent = mkUnTPat (PatPure (Ident "y"))
+
+xyPatIdents, zwPatIdents :: NESeq (UnTPat Ident)
+xyPatIdents = NESeq.unsafeFromSeq (Seq.fromList (fmap (mkUnTPat . PatPure) [Ident "x", Ident "y"]))
+zwPatIdents = NESeq.unsafeFromSeq (Seq.fromList (fmap (mkUnTPat . PatPure) [Ident "z", Ident "w"]))
+
+patParseCases :: [RT]
+patParseCases =
+  [ mkUnitRT
+      "pat silence"
+      (expectText "~" (expectParseOk tpatP))
+      (mkTPat PatSilence)
+  , mkUnitRT
+      "pat short elongate"
+      (expectText "_" (expectParseOk tpatP))
+      (mkTPat (PatTime (TimeShort ShortTimeElongate)))
+  , mkUnitRT
+      "pat short replicate"
+      (expectText "!" (expectParseOk tpatP))
+      (mkTPat (PatTime (TimeShort ShortTimeReplicate)))
+  , mkUnitRT
+      "pat var"
+      (expectText "x" (expectParseOk tpatP))
+      (Pat xPatIdent)
+  , mkUnitRT
+      "pat seq brace"
+      (expectText "[x y]" (expectParseOk tpatP))
+      (mkTPat (PatGroup (GroupPat 1 (GroupPatTypeSeq SeqPresSpace) xyPatIdents)))
+  , mkUnitRT
+      "pat seq space"
+      (expectText "x y" (expectParseOk tpatP))
+      (mkTPat (PatGroup (GroupPat 0 (GroupPatTypeSeq SeqPresSpace) xyPatIdents)))
+  , mkUnitRT
+      "pat seq dot"
+      (expectText "x . y" (expectParseOk tpatP))
+      (mkTPat (PatGroup (GroupPat 0 (GroupPatTypeSeq SeqPresDot) xyPatIdents)))
+  , mkUnitRT
+      "pat seq dot space"
+      (expectText "x y . z w" (expectParseOk tpatP))
+      ( let p vs = mkUnTPat (PatGroup (GroupPat 0 (GroupPatTypeSeq SeqPresSpace) vs))
+        in  mkTPat
+              (PatGroup (GroupPat 0 (GroupPatTypeSeq SeqPresDot) (NESeq.unsafeFromSeq (Seq.fromList [p xyPatIdents, p zwPatIdents]))))
+      )
+  , mkUnitRT
+      "pat par"
+      (expectText "[x , y]" (expectParseOk tpatP))
+      (mkTPat (PatGroup (GroupPat 1 GroupPatTypePar xyPatIdents)))
+  , mkUnitRT
+      "pat alt"
+      (expectText "<x y>" (expectParseOk tpatP))
+      (mkTPat (PatGroup (GroupPat 0 GroupPatTypeAlt xyPatIdents)))
+  , mkUnitRT
+      "pat rand"
+      (expectText "[x | y]" (expectParseOk tpatP))
+      (mkTPat (PatGroup (GroupPat 1 GroupPatTypeRand xyPatIdents)))
+  , mkUnitRT
+      "pat poly"
+      (expectText "{x , y}" (expectParseOk tpatP))
+      (mkTPat (PatPoly (PolyPat xyPatIdents Nothing)))
+  , mkUnitRT
+      "pat poly div"
+      (expectText "{x , y}%7" (expectParseOk tpatP))
+      (mkTPat (PatPoly (PolyPat xyPatIdents (Just 7))))
+  , mkUnitRT
+      "pat speed fast"
+      (expectText "x*9" (expectParseOk tpatP))
+      (mkTPat (PatMod (Mod xPatIdent (ModPatSpeed (Speed SpeedDirFast (mkTPat (PatPure (FactorInteger 9))))))))
+  , mkUnitRT
+      "pat speed fast decimal"
+      (expectText "x*9.2" (expectParseOk tpatP))
+      ( mkTPat
+          ( PatMod (Mod xPatIdent (ModPatSpeed (Speed SpeedDirFast (mkTPat (PatPure (FactorRational RationalPresDec (92 % 10)))))))
+          )
+      )
+  , mkUnitRT
+      "pat speed slow"
+      (expectText "x/(1/3)" (expectParseOk tpatP))
+      ( mkTPat
+          (PatMod (Mod xPatIdent (ModPatSpeed (Speed SpeedDirSlow (mkTPat (PatPure (FactorRational RationalPresFrac (1 % 3))))))))
+      )
+  , mkUnitRT
+      "pat long elongate"
+      (expectText "x@(3/7)" (expectParseOk tpatP))
+      (mkTPat (PatTime (TimeLong xPatIdent (LongTimeElongate (FactorRational RationalPresFrac (3 % 7))))))
+  , mkUnitRT
+      "pat long replicate"
+      (expectText "x!5" (expectParseOk tpatP))
+      (mkTPat (PatTime (TimeLong xPatIdent (LongTimeReplicate (Just 5)))))
+  , mkUnitRT
+      "pat long replicate implicit"
+      (expectText "x!" (expectParseOk tpatP))
+      (mkTPat (PatTime (TimeLong xPatIdent (LongTimeReplicate Nothing))))
+  , mkUnitRT
+      "pat adj optional implicit"
+      (expectText "x?" (expectParseOk tpatP))
+      (mkTPat (PatMod (Mod xPatIdent (ModPatDegrade (Degrade Nothing)))))
+  , mkUnitRT
+      "pat adj optional explicit"
+      (expectText "x?0.5" (expectParseOk tpatP))
+      (mkTPat (PatMod (Mod xPatIdent (ModPatDegrade (Degrade (Just (FactorRational RationalPresDec (1 % 2))))))))
+  , mkUnitRT
+      "pat adj euclid 2"
+      (expectText "x(1,2)" (expectParseOk tpatP))
+      (mkTPat (PatMod (Mod xPatIdent (ModPatEuclid (Euclid 1 2 Nothing)))))
+  , mkUnitRT
+      "pat adj euclid 3"
+      (expectText "x(1,2,3)" (expectParseOk tpatP))
+      (mkTPat (PatMod (Mod xPatIdent (ModPatEuclid (Euclid 1 2 (Just 3))))))
+  , mkUnitRT
+      "pat adj select sample"
+      (expectText "x:4" (expectParseOk tpatP))
+      (mkTPat (PatMod (Mod xPatIdent (ModPatSelect (SelectSample 4)))))
+  , mkUnitRT
+      "pat adj select transform"
+      (expectText "x:hello" (expectParseOk tpatP))
+      (mkTPat (PatMod (Mod xPatIdent (ModPatSelect (SelectTransform "hello")))))
+  , mkUnitRT
+      "pat multi mod"
+      (expectText "x:foo(1,2)" (expectParseOk tpatP))
+      ( let p = mkUnTPat (PatMod (Mod xPatIdent (ModPatSelect (SelectTransform "foo"))))
+        in  mkTPat (PatMod (Mod p (ModPatEuclid (Euclid 1 2 Nothing))))
+      )
+  , mkUnitRT
+      "pat par multi"
+      (expectText "[x y , z w]" (expectParseOk tpatP))
+      ( let p vs = mkUnTPat (PatGroup (GroupPat 0 (GroupPatTypeSeq SeqPresSpace) vs))
+        in  mkTPat (PatGroup (GroupPat 1 GroupPatTypePar (NESeq.unsafeFromSeq (Seq.fromList [p xyPatIdents, p zwPatIdents]))))
+      )
+  , mkUnitRT
+      "pat long replicate implicit seq"
+      (expectText "x! y" (expectParseOk tpatP))
+      ( mkTPat
+          ( PatGroup
+              ( GroupPat
+                  0
+                  (GroupPatTypeSeq SeqPresSpace)
+                  ( toNESeq
+                      [ mkUnTPat (PatTime (TimeLong xPatIdent (LongTimeReplicate Nothing)))
+                      , yPatIdent
+                      ]
+                  )
+              )
+          )
+      )
+  , mkUnitRT
+      "pat short replicate seq"
+      (expectText "x !" (expectParseOk tpatP))
+      ( mkTPat
+          ( PatGroup
+              ( GroupPat
+                  0
+                  (GroupPatTypeSeq SeqPresSpace)
+                  ( toNESeq
+                      [ xPatIdent
+                      , mkUnTPat (PatTime (TimeShort ShortTimeReplicate))
+                      ]
+                  )
+              )
+          )
+      )
+  ]
+
+runTripCase :: (Eq a, Show a, P.Pretty a) => P a -> TestName -> Text -> Maybe Text -> TestTree
+runTripCase parser name txt mnorm = testCase name $ do
+  -- print txt
+  let e = expectParseOk parser
+  (_, act) <- e (Left txt)
+  ea <- act
+  -- pPrint ea
+  case ea of
+    Left err -> throwIO err
+    Right a ->
+      let etxt = fromMaybe txt mnorm
+      in  void (runExpect (expectText etxt e) a)
+
+patTripCases :: [TestTree]
+patTripCases =
+  fmap
+    (\(a, b, c) -> runTripCase tpatP a b c)
+    [ ("ex00", "x", Nothing)
+    , ("ex01", "~ hh", Nothing)
+    , ("ex02", "[bd sd] hh", Nothing)
+    , ("ex03", "bd sd . hh hh hh", Nothing)
+    ,
+      ( "ex04"
+      , "[bd sd, hh hh hh]"
+      , Just "[bd sd , hh hh hh]"
+      )
+    , ("ex05", "bd*2 sd", Nothing)
+    , ("ex06", "bd/2", Nothing)
+    ,
+      ( "ex07"
+      , "[bd |cp |hh]"
+      , Just "[bd | cp | hh]"
+      )
+    , ("ex08", "bd <sd hh cp>", Nothing)
+    , ("ex09", "bd!3 sd", Nothing)
+    , ("ex10", "bd _ _ ~ sd _", Nothing)
+    , ("ex11", "superpiano@3 superpiano", Nothing)
+    , ("ex12", "bd? sd", Nothing)
+    , ("ex13", "bd:3", Nothing)
+    , ("ex14", "bd(3,8)", Nothing)
+    ,
+      ( "ex15"
+      , "{bd bd bd bd, cp cp hh}"
+      , Just "{bd bd bd bd , cp cp hh}"
+      )
+    , ("ex16", "{bd cp hh}%8", Nothing)
+    , ("ex17", "[bd [hh [cp sn:2] hh]] bd bd bd", Nothing)
+    , ("ex18", "bd*3 . hh*4 cp", Nothing)
+    , ("ex19", "[bd*3 . hh:2*2] . hh*4 cp", Nothing)
+    ,
+      ( "ex20"
+      , "[bd*3,hh*4,[~ cp]*2, bass*4]"
+      , Just "[bd*3 , hh*4 , [~ cp]*2 , bass*4]"
+      )
+    , ("ex21", "[[c3*3],[c e g c6*3]]", Just "[[c3*3] , [c e g c6*3]]")
+    , ("ex22", "cp cp cp*2", Nothing)
+    , ("ex23", "bd <[hh sn] [hh cp]>", Nothing)
+    , ("ex24", "bd hh? bd hh?0.8", Nothing)
+    ,
+      ( "ex25"
+      , "[bd*4, [arpy:1,arpy:2,arpy:3,arpy:4,arpy:5](5,8)]"
+      , Just "[bd*4 , [arpy:1 , arpy:2 , arpy:3 , arpy:4 , arpy:5](5,8)]"
+      )
+    ,
+      ( "ex26"
+      , "[bd(5,8), cp(1,8)?, hh(7,8), bass:1(8,16)]"
+      , Just "[bd(5,8) , cp(1,8)? , hh(7,8) , bass:1(8,16)]"
+      )
+    ,
+      ( "ex27"
+      , "{bd*2, hh*4, bd hh 808:4}"
+      , Just "{bd*2 , hh*4 , bd hh 808:4}"
+      )
+    , ("ex28", "{bd cp 808:5}%4", Nothing)
+    , ("ex29", "x! y", Nothing)
+    , ("ex30", "x !", Nothing)
+    , ("ex31", "x@2 y", Nothing)
+    , ("ex32", "x _", Nothing)
+    ]
+
+testParseCases :: TestTree
+testParseCases =
+  testGroup
+    "parse cases"
+    [ testGroup "common" (fmap testRT commonParseCases)
+    , testGroup "pat parse" (fmap testRT patParseCases)
+    , testGroup "pat trip" patTripCases
+    ]
+
+-- neseq :: [a] -> NESeq a
+-- neseq = NESeq.unsafeFromSeq . Seq.fromList
+
+-- type TSigStream = SigStream ()
+--
+-- mkTSigStream :: SigStreamF x (TSigStream x) -> TSigStream x
+-- mkTSigStream = Memo . Anno ()
+--
+-- type TPatStream = PatStream ()
+--
+-- mkTPatStream :: PatStreamF x (TPatStream x) -> TPatStream x
+-- mkTPatStream = Memo . Anno ()
+
+-- testSigInterpCases :: TestTree
+-- testSigInterpCases =
+--   testGroup "sig interp cases" $
+--     let defCtx = mkCtx (Arc 0 1)
+--     in  fmap
+--           ( \(n, mayCtx, sigStr :: Text, evs :: TSigStream (Anno Arc Ident)) ->
+--               testCase n $ do
+--                 sig <- either throwIO pure (parse tsigP sigStr)
+--                 sig' <- either throwIO pure (normSig sig)
+--                 putStrLn "*** NORM SIG"
+--                 print sig'
+--                 actualEvs <- interpSig (fromMaybe defCtx mayCtx) selSigFail sig'
+--                 actualEvs @?= Right evs
+--           )
+--           -- [
+--           --   ( "pure"
+--           --   , Nothing
+--           --   , "x"
+--           --   , mkTSigStream (SigStreamPure (Anno (Arc 0 1) "x"))
+--           --   )
+--           -- ,
+--           --   ( "pure longer"
+--           --   , Just (mkCtx (Arc 0 2))
+--           --   , "x"
+--           --   , mkTSigStream $
+--           --       SigStreamBranch $
+--           --         neseq
+--           --           [ mkTSigStream (SigStreamPure (Anno (Arc 0 1) "x"))
+--           --           , mkTSigStream (SigStreamPure (Anno (Arc 1 2) "x"))
+--           --           ]
+--           --   )
+--           -- ,
+--           --   ( "pure shift"
+--           --   , Just (mkCtx (Arc (1 % 2) (3 % 2)))
+--           --   , "x"
+--           --   , mkTSigStream $
+--           --       SigStreamBranch $
+--           --         neseq
+--           --           [ mkTSigStream (SigStreamPure (Anno (Arc (1 % 2) 1) "x"))
+--           --           , mkTSigStream (SigStreamPure (Anno (Arc 1 (3 % 2)) "x"))
+--           --           ]
+--           --   )
+--           -- ,
+--           --   ( "seq singleton"
+--           --   , Nothing
+--           --   , "[x]"
+--           --   , mkTSigStream (SigStreamPure (Anno (Arc 0 1) "x"))
+--           --   )
+--           -- ,
+--           --   ( "seq simple"
+--           --   , Nothing
+--           --   , "[x y]"
+--           --   , mkTSigStream $
+--           --       SigStreamBranch $
+--           --         neseq
+--           --           [ mkTSigStream (SigStreamPure (Anno (Arc 0 (1 % 2)) "x"))
+--           --           , mkTSigStream (SigStreamPure (Anno (Arc (1 % 2) 1) "y"))
+--           --           ]
+--           --   )
+--           -- ,
+--           --   ( "seq two cycle"
+--           --   , Just (mkCtx (Arc 0 2))
+--           --   , "[x y]"
+--           --   , mkTSigStream $
+--           --       SigStreamBranch $
+--           --         neseq
+--           --           [ mkTSigStream (SigStreamPure (Anno (Arc 0 (1 % 2)) "x"))
+--           --           , mkTSigStream (SigStreamPure (Anno (Arc (1 % 2) 1) "y"))
+--           --           , mkTSigStream (SigStreamPure (Anno (Arc 1 (3 % 2)) "x"))
+--           --           , mkTSigStream (SigStreamPure (Anno (Arc (3 % 2) 2) "y"))
+--           --           ]
+--           --   )
+--           -- ,
+--           --   ( "repeat one long"
+--           --   , Nothing
+--           --   , "x!1"
+--           --   , mkTSigStream (SigStreamPure (Anno (Arc 0 1) "x"))
+--           --   )
+--           -- ,
+--           --   ( "repeat two long"
+--           --   , Nothing
+--           --   , "x!2"
+--           --   , mkTSigStream $
+--           --       SigStreamBranch $
+--           --         neseq
+--           --           [ mkTSigStream (SigStreamPure (Anno (Arc 0 (1 % 2)) "x"))
+--           --           , mkTSigStream (SigStreamPure (Anno (Arc (1 % 2) 1) "x"))
+--           --           ]
+--           --   )
+--           -- ,
+--           --   ( "repeat two long implicit"
+--           --   , Nothing
+--           --   , "x!"
+--           --   , mkTSigStream $
+--           --       SigStreamBranch $
+--           --         neseq
+--           --           [ mkTSigStream (SigStreamPure (Anno (Arc 0 (1 % 2)) "x"))
+--           --           , mkTSigStream (SigStreamPure (Anno (Arc (1 % 2) 1) "x"))
+--           --           ]
+--           --   )
+--           -- ,
+--           --   ( "repeat two short"
+--           --   , Nothing
+--           --   , "x !"
+--           --   , mkTSigStream $
+--           --       SigStreamBranch $
+--           --         neseq
+--           --           [ mkTSigStream (SigStreamPure (Anno (Arc 0 (1 % 2)) "x"))
+--           --           , mkTSigStream (SigStreamPure (Anno (Arc (1 % 2) 1) "x"))
+--           --           ]
+--           --   )
+--           -- ,
+--           --   ( "repeat three long"
+--           --   , Nothing
+--           --   , "x!3"
+--           --   , mkTSigStream $
+--           --       SigStreamBranch $
+--           --         neseq
+--           --           [ mkTSigStream (SigStreamPure (Anno (Arc 0 (1 % 3)) "x"))
+--           --           , mkTSigStream (SigStreamPure (Anno (Arc (1 % 3) (2 % 3)) "x"))
+--           --           , mkTSigStream (SigStreamPure (Anno (Arc (2 % 3) 1) "x"))
+--           --           ]
+--           --   )
+--           -- ,
+--           --   ( "repeat three short"
+--           --   , Nothing
+--           --   , "x ! !"
+--           --   , mkTSigStream $
+--           --       SigStreamBranch $
+--           --         neseq
+--           --           [ mkTSigStream (SigStreamPure (Anno (Arc 0 (1 % 3)) "x"))
+--           --           , mkTSigStream (SigStreamPure (Anno (Arc (1 % 3) (2 % 3)) "x"))
+--           --           , mkTSigStream (SigStreamPure (Anno (Arc (2 % 3) 1) "x"))
+--           --           ]
+--           --   )
+--           -- ,
+--           --   ( "repeat seq short"
+--           --   , Nothing
+--           --   , "x ! y"
+--           --   , mkTSigStream $
+--           --       SigStreamBranch $
+--           --         neseq
+--           --           [ mkTSigStream (SigStreamPure (Anno (Arc 0 (1 % 3)) "x"))
+--           --           , mkTSigStream (SigStreamPure (Anno (Arc (1 % 3) (2 % 3)) "x"))
+--           --           , mkTSigStream (SigStreamPure (Anno (Arc (2 % 3) 1) "y"))
+--           --           ]
+--           --   )
+--           -- ,
+--           --   ( "elongate noop"
+--           --   , Nothing
+--           --   , "x@2"
+--           --   , mkTSigStream (SigStreamPure (Anno (Arc 0 1) "x"))
+--           --   )
+--           -- ,
+--           --   ( "elongate long seq"
+--           --   , Nothing
+--           --   , "x@2 y"
+--           --   , mkTSigStream $
+--           --       SigStreamBranch $
+--           --         neseq
+--           --           [ mkTSigStream (SigStreamPure (Anno (Arc 0 (2 % 3)) "x"))
+--           --           , mkTSigStream (SigStreamPure (Anno (Arc (2 % 3) 1) "y"))
+--           --           ]
+--           --   )
+--           -- ,
+--           --   ( "elongate short seq"
+--           --   , Nothing
+--           --   , "x _ y"
+--           --   , mkTSigStream $
+--           --       SigStreamBranch $
+--           --         neseq
+--           --           [ mkTSigStream (SigStreamPure (Anno (Arc 0 (2 % 3)) "x"))
+--           --           , mkTSigStream (SigStreamPure (Anno (Arc (2 % 3) 1) "y"))
+--           --           ]
+--           --   )
+--           -- ,
+--           --   ( "rand two"
+--           --   , Nothing
+--           --   , "[x | y]"
+--           --   , mkTSigStream (SigStreamPure (Anno (Arc 0 1) "x"))
+--           --   )
+--           -- ,
+--           --   ( "rand many"
+--           --   , Just (mkCtx (Arc 5 8))
+--           --   , "[x | y | z]"
+--           --   , mkTSigStream $
+--           --       SigStreamBranch $
+--           --         neseq
+--           --           [ mkTSigStream (SigStreamPure (Anno (Arc 5 6) "x"))
+--           --           , mkTSigStream (SigStreamPure (Anno (Arc 6 7) "x"))
+--           --           , mkTSigStream (SigStreamPure (Anno (Arc 7 8) "y"))
+--           --           ]
+--           --   )
+--           -- ,
+--           --   ( "alt singleton"
+--           --   , Nothing
+--           --   , "<x>"
+--           --   , mkTSigStream (SigStreamPure (Anno (Arc 0 1) "x"))
+--           --   )
+--           -- ,
+--           --   ( "alt two"
+--           --   , Nothing
+--           --   , "<x y>"
+--           --   , mkTSigStream (SigStreamPure (Anno (Arc 0 1) "x"))
+--           --   )
+--           -- ,
+--           --   ( "alt many"
+--           --   , Just (mkCtx (Arc 5 8))
+--           --   , "<x y z>"
+--           --   , mkTSigStream $
+--           --       SigStreamBranch $
+--           --         neseq
+--           --           [ mkTSigStream (SigStreamPure (Anno (Arc 5 6) "z"))
+--           --           , mkTSigStream (SigStreamPure (Anno (Arc 6 7) "x"))
+--           --           , mkTSigStream (SigStreamPure (Anno (Arc 7 8) "y"))
+--           --           ]
+--           --   )
+--             -- TODO make speeds work
+--             [ ( "fast 2 pure"
+--               , Nothing
+--               , "x*2"
+--               , mkTSigStream $
+--                   SigStreamBranch $
+--                     neseq
+--                       [ mkTSigStream (SigStreamPure (Anno (Arc 0 (1%2)) "x"))
+--                       , mkTSigStream (SigStreamPure (Anno (Arc (1%2) 1) "x"))
+--                       ]
+--               )
+--             -- , ( "fast alt pure"
+--             --   , Nothing
+--             --   , "x*<2 3>"
+--             --   , mkTSigStream $
+--             --       SigStreamBranch $
+--             --         neseq
+--             --           [ mkTSigStream (SigStreamPure (Anno (Arc 0 (1%2)) "x"))
+--             --           , mkTSigStream (SigStreamPure (Anno (Arc (1%2) 1) "x"))
+--             --           , mkTSigStream (SigStreamPure (Anno (Arc 1 (1%3)) "x"))
+--             --           , mkTSigStream (SigStreamPure (Anno (Arc (1%3) (2%3)) "x"))
+--             --           , mkTSigStream (SigStreamPure (Anno (Arc (2%3) 1) "x"))
+--             --           ]
+--             --   )
+--           ]
+--
+-- testPatInterpCases :: TestTree
+-- testPatInterpCases =
+--   testGroup "pat interp cases" $
+--     let defCtx = mkCtx (Arc 0 1)
+--     in  fmap
+--           ( \(n, mayCtx, patStr :: Text, evs :: TPatStream (Anno Arc Ident)) ->
+--               testCase n $ do
+--                 pat <- either throwIO pure (parse tpatP patStr)
+--                 pat' <- either throwIO pure (normPat pat)
+--                 actualEvs <- interpPat (fromMaybe defCtx mayCtx) selSigFail selPatFail pat'
+--                 actualEvs @?= Right evs
+--           )
+--           [
+--             ( "pure"
+--             , Nothing
+--             , "x"
+--             , mkTPatStream (PatStreamPure (Anno (Arc 0 1) "x"))
+--             )
+--           ,
+--             ( "pure longer"
+--             , Just (mkCtx (Arc 0 2))
+--             , "x"
+--             , mkTPatStream $
+--                 PatStreamBranch PatStreamTypeSeq $
+--                   neseq
+--                     [ mkTPatStream (PatStreamPure (Anno (Arc 0 1) "x"))
+--                     , mkTPatStream (PatStreamPure (Anno (Arc 1 2) "x"))
+--                     ]
+--             )
+--           ,
+--             ( "pure shift"
+--             , Just (mkCtx (Arc (1 % 2) (3 % 2)))
+--             , "x"
+--             , mkTPatStream $
+--                 PatStreamBranch PatStreamTypeSeq $
+--                   neseq
+--                     [ mkTPatStream (PatStreamPure (Anno (Arc (1 % 2) 1) "x"))
+--                     , mkTPatStream (PatStreamPure (Anno (Arc 1 (3 % 2)) "x"))
+--                     ]
+--             )
+--           ,
+--             ( "seq singleton"
+--             , Nothing
+--             , "[x]"
+--             , mkTPatStream (PatStreamPure (Anno (Arc 0 1) "x"))
+--             )
+--           ,
+--             ( "seq simple"
+--             , Nothing
+--             , "[x y]"
+--             , mkTPatStream $
+--                 PatStreamBranch PatStreamTypeSeq $
+--                   neseq
+--                     [ mkTPatStream (PatStreamPure (Anno (Arc 0 (1 % 2)) "x"))
+--                     , mkTPatStream (PatStreamPure (Anno (Arc (1 % 2) 1) "y"))
+--                     ]
+--             )
+--           ,
+--             ( "seq two cycle"
+--             , Just (mkCtx (Arc 0 2))
+--             , "[x y]"
+--             , mkTPatStream $
+--                 PatStreamBranch PatStreamTypeSeq $
+--                   neseq
+--                     [ mkTPatStream (PatStreamPure (Anno (Arc 0 (1 % 2)) "x"))
+--                     , mkTPatStream (PatStreamPure (Anno (Arc (1 % 2) 1) "y"))
+--                     , mkTPatStream (PatStreamPure (Anno (Arc 1 (3 % 2)) "x"))
+--                     , mkTPatStream (PatStreamPure (Anno (Arc (3 % 2) 2) "y"))
+--                     ]
+--             )
+--           ,
+--             ( "repeat one long"
+--             , Nothing
+--             , "x!1"
+--             , mkTPatStream (PatStreamPure (Anno (Arc 0 1) "x"))
+--             )
+--           ,
+--             ( "repeat two long"
+--             , Nothing
+--             , "x!2"
+--             , mkTPatStream $
+--                 PatStreamBranch PatStreamTypeSeq $
+--                   neseq
+--                     [ mkTPatStream (PatStreamPure (Anno (Arc 0 (1 % 2)) "x"))
+--                     , mkTPatStream (PatStreamPure (Anno (Arc (1 % 2) 1) "x"))
+--                     ]
+--             )
+--           ,
+--             ( "repeat two long implicit"
+--             , Nothing
+--             , "x!"
+--             , mkTPatStream $
+--                 PatStreamBranch PatStreamTypeSeq $
+--                   neseq
+--                     [ mkTPatStream (PatStreamPure (Anno (Arc 0 (1 % 2)) "x"))
+--                     , mkTPatStream (PatStreamPure (Anno (Arc (1 % 2) 1) "x"))
+--                     ]
+--             )
+--           ,
+--             ( "repeat two short"
+--             , Nothing
+--             , "x !"
+--             , mkTPatStream $
+--                 PatStreamBranch PatStreamTypeSeq $
+--                   neseq
+--                     [ mkTPatStream (PatStreamPure (Anno (Arc 0 (1 % 2)) "x"))
+--                     , mkTPatStream (PatStreamPure (Anno (Arc (1 % 2) 1) "x"))
+--                     ]
+--             )
+--           ,
+--             ( "repeat three long"
+--             , Nothing
+--             , "x!3"
+--             , mkTPatStream $
+--                 PatStreamBranch PatStreamTypeSeq $
+--                   neseq
+--                     [ mkTPatStream (PatStreamPure (Anno (Arc 0 (1 % 3)) "x"))
+--                     , mkTPatStream (PatStreamPure (Anno (Arc (1 % 3) (2 % 3)) "x"))
+--                     , mkTPatStream (PatStreamPure (Anno (Arc (2 % 3) 1) "x"))
+--                     ]
+--             )
+--           ,
+--             ( "repeat three short"
+--             , Nothing
+--             , "x ! !"
+--             , mkTPatStream $
+--                 PatStreamBranch PatStreamTypeSeq $
+--                   neseq
+--                     [ mkTPatStream (PatStreamPure (Anno (Arc 0 (1 % 3)) "x"))
+--                     , mkTPatStream (PatStreamPure (Anno (Arc (1 % 3) (2 % 3)) "x"))
+--                     , mkTPatStream (PatStreamPure (Anno (Arc (2 % 3) 1) "x"))
+--                     ]
+--             )
+--           ,
+--             ( "repeat seq short"
+--             , Nothing
+--             , "x ! y"
+--             , mkTPatStream $
+--                 PatStreamBranch PatStreamTypeSeq $
+--                   neseq
+--                     [ mkTPatStream (PatStreamPure (Anno (Arc 0 (1 % 3)) "x"))
+--                     , mkTPatStream (PatStreamPure (Anno (Arc (1 % 3) (2 % 3)) "x"))
+--                     , mkTPatStream (PatStreamPure (Anno (Arc (2 % 3) 1) "y"))
+--                     ]
+--             )
+--           ,
+--             ( "elongate noop"
+--             , Nothing
+--             , "x@2"
+--             , mkTPatStream (PatStreamPure (Anno (Arc 0 1) "x"))
+--             )
+--           ,
+--             ( "elongate long seq"
+--             , Nothing
+--             , "x@2 y"
+--             , mkTPatStream $
+--                 PatStreamBranch PatStreamTypeSeq $
+--                   neseq
+--                     [ mkTPatStream (PatStreamPure (Anno (Arc 0 (2 % 3)) "x"))
+--                     , mkTPatStream (PatStreamPure (Anno (Arc (2 % 3) 1) "y"))
+--                     ]
+--             )
+--           ,
+--             ( "elongate short seq"
+--             , Nothing
+--             , "x _ y"
+--             , mkTPatStream $
+--                 PatStreamBranch PatStreamTypeSeq $
+--                   neseq
+--                     [ mkTPatStream (PatStreamPure (Anno (Arc 0 (2 % 3)) "x"))
+--                     , mkTPatStream (PatStreamPure (Anno (Arc (2 % 3) 1) "y"))
+--                     ]
+--             )
+--           ,
+--             ( "rand two"
+--             , Nothing
+--             , "[x | y]"
+--             , mkTPatStream (PatStreamPure (Anno (Arc 0 1) "x"))
+--             )
+--           ,
+--             ( "rand many"
+--             , Just (mkCtx (Arc 5 8))
+--             , "[x | y | z]"
+--             , mkTPatStream $
+--                 PatStreamBranch PatStreamTypeSeq $
+--                   neseq
+--                     [ mkTPatStream (PatStreamPure (Anno (Arc 5 6) "x"))
+--                     , mkTPatStream (PatStreamPure (Anno (Arc 6 7) "x"))
+--                     , mkTPatStream (PatStreamPure (Anno (Arc 7 8) "y"))
+--                     ]
+--             )
+--           ,
+--             ( "alt singleton"
+--             , Nothing
+--             , "<x>"
+--             , mkTPatStream (PatStreamPure (Anno (Arc 0 1) "x"))
+--             )
+--           ,
+--             ( "alt two"
+--             , Nothing
+--             , "<x y>"
+--             , mkTPatStream (PatStreamPure (Anno (Arc 0 1) "x"))
+--             )
+--           ,
+--             ( "alt many"
+--             , Just (mkCtx (Arc 5 8))
+--             , "<x y z>"
+--             , mkTPatStream $
+--                 PatStreamBranch PatStreamTypeSeq $
+--                   neseq
+--                     [ mkTPatStream (PatStreamPure (Anno (Arc 5 6) "z"))
+--                     , mkTPatStream (PatStreamPure (Anno (Arc 6 7) "x"))
+--                     , mkTPatStream (PatStreamPure (Anno (Arc 7 8) "y"))
+--                     ]
+--             )
+--           ,
+--             ( "par many"
+--             , Nothing
+--             , "[x , y , z]"
+--             , mkTPatStream $
+--                 PatStreamBranch PatStreamTypePar $
+--                   neseq
+--                     [ mkTPatStream (PatStreamPure (Anno (Arc 0 1) "x"))
+--                     , mkTPatStream (PatStreamPure (Anno (Arc 0 1) "y"))
+--                     , mkTPatStream (PatStreamPure (Anno (Arc 0 1) "z"))
+--                     ]
+--             )
+--           ]
 
 main :: IO ()
-main =
-  defaultMain $
+main = do
+  hSetBuffering stdout LineBuffering
+  daytripperMain $
     testGroup
       "Minipat"
-      [ testDummy
+      [ testParseCases
+      -- , testPatInterpCases
       ]

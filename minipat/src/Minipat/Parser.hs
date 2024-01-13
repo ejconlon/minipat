@@ -3,9 +3,12 @@
 
 module Minipat.Parser
   ( Loc (..)
+  , P
   , ParseErr (..)
   , PPat
   , identPatP
+  , factorP
+  , identP
   )
 where
 

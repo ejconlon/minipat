@@ -8,4 +8,10 @@ packages:
 
 extra-deps:
 - bowtie-0.2.0
+- daytripper-0.3.1
+- falsify-0.2.0
 - looksee-0.5.2
+
+allow-newer: true
+allow-newer-deps:
+- falsify

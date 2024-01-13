@@ -23,7 +23,6 @@ dependencies:
 - nonempty-containers >= 0.3 && < 0.4
 - prettyprinter >= 1.7 && < 1.8
 - text >= 2.0 && < 2.1
-- transformers >= 0.6 && < 0.7
 
 library:
   source-dirs: src
@@ -38,5 +37,6 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - minipat
-    - tasty
-    - tasty-hunit
+    - daytripper >= 0.3 && < 0.4
+    - tasty >= 1.4 && < 1.5
+    - tasty-hunit >= 0.10 && < 0.11
