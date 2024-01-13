@@ -128,6 +128,7 @@ normPatKM = \case
       -- Unwrap any singletons we find
       q :<|| Empty -> normPatM (A.Pat q)
       -- Otherwise normalize by folding
+      -- TODO Throw error on non-seq type
       _ -> foldNormPatKM lvl ty ss
   A.PatMod (A.Mod r m) ->
     -- Just propagate time controls upward
