@@ -11,22 +11,24 @@ module Minipat.Interp where
 -- import Data.Sequence.NonEmpty qualified as NESeq
 -- import Minipat.Ast qualified as A
 -- import Minipat.Base qualified as B
--- import Minipat.Norm qualified as N
--- import Minipat.Proc qualified as P
--- import Minipat.Rand qualified as R
+-- import Minipat.Rewrite qualified as R
+-- import Minipat.Rand qualified as D
 --
--- data InterpErr = InterpErrTime
+-- data InterpErr = InterpErrShort
 --   deriving stock (Eq, Ord, Show)
 --
 -- instance Exception InterpErr
 --
--- type M b = P.ProcM InterpErr b (N.Expansion b)
+-- type M b = R.RwM InterpErr b
 --
--- lookInterpPat :: N.NPatX b a (B.Pat a, Rational) -> M b (B.Pat a, Rational)
+-- lookInterpPat :: A.PatX b a (B.Pat a, Rational) -> M b (B.Pat a, Rational)
 -- lookInterpPat = \case
 --   A.PatPure a -> pure (pure a, 1)
 --   A.PatSilence -> pure (empty, 1)
---   A.PatTime _ -> P.throwPM InterpErrTime
+--   A.PatTime t ->
+--     case t of
+--       A.TimeShort _ -> R.throwRw InterpErrShort
+--       _ -> error "TODO"
 --   A.PatGroup (A.Group _ ty els) -> pure $
 --     case ty of
 --       A.GroupTypeSeq _ -> foldl1' (\(pout, wout) (pin, win) -> (pout <> B.patLateBy wout pin, wout + win)) els
@@ -34,8 +36,8 @@ module Minipat.Interp where
 --       A.GroupTypeRand ->
 --         let l = NESeq.length els
 --             f arc' =
---               let s = R.arcSeed arc'
---                   i = R.randInt l s
+--               let s = D.arcSeed arc'
+--                   i = D.randInt l s
 --                   (el, w) = NESeq.index els i
 --               in  B.unPat (B.patFastBy w el) arc'
 --         in  (B.Pat (foldMap' (f . B.spanActive . snd) . B.spanSplit), 1)
@@ -61,6 +63,6 @@ module Minipat.Interp where
 --   reps <- P.asksPM (N.measReps . N.expMeasure)
 --   (midPat, width) <- lookInterpPat initPat
 --   pure (repeatPat reps midPat width)
---
--- interpPat :: N.NPat b a -> Either (P.ProcErr InterpErr b) (B.Pat a)
--- interpPat = fmap (\(p', w) -> B.patFastBy w p') . P.bottomUpPM N.expInfo repInterpPat
+
+-- interpPat :: A.Pat b a -> Either (R.RwErr InterpErr b) (B.Pat a)
+-- interpPat = fmap (\(p', w) -> B.patFastBy w p') . R.rewriteM lookInterpPat

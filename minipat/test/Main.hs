@@ -341,7 +341,7 @@ testParseCases =
 runPatNormCase :: (TestName, Text, Pat () Ident) -> TestTree
 runPatNormCase (n, patStr, npat) = testCase n $ do
   pat <- either throwIO pure (parse tpatP patStr)
-  pat' <- either throwIO pure (normPat pat)
+  let pat' = normPat pat
   pat' @?= npat
 
 testPatNormCases :: TestTree
@@ -417,7 +417,7 @@ testPatNormCases =
 -- runPatInterpCase :: (TestName, Maybe Arc, Text, [Ev Ident]) -> TestTree
 -- runPatInterpCase (n, mayArc, patStr, evs) = testCase n $ do
 --   pat <- either throwIO pure (parse tpatP patStr)
---   pat' <- either throwIO pure (normPat pat)
+--   let pat' = normPat pat
 --   pat'' <- either throwIO pure (interpPat pat')
 --   let arc = fromMaybe (Arc 0 1) mayArc
 --       actualEvs = patRun pat'' arc
