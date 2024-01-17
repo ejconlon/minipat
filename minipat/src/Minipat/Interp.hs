@@ -26,8 +26,8 @@ type M b = Except (R.RwErr InterpErr b)
 runM :: M b a -> Either (R.RwErr InterpErr b) a
 runM = runExcept
 
-lookInterpPat :: A.PatX b a (M b (B.Pat a, Rational)) -> R.RwT b (M b) (B.Pat a, Rational)
-lookInterpPat = \case
+lookInterp :: A.PatX b a (M b (B.Pat a, Rational)) -> R.RwT b (M b) (B.Pat a, Rational)
+lookInterp = \case
   A.PatPure a -> pure (pure a, 1)
   A.PatSilence -> pure (empty, 1)
   A.PatTime t ->
@@ -55,7 +55,20 @@ lookInterpPat = \case
                   (el, w) = NESeq.index els' i
               in  B.unPat (B.patFastBy w el) arc'
         in  (B.Pat (foldMap' (\(z, sp) -> f z (B.spanActive sp)) . B.spanSplit), 1)
+  A.PatMod (A.Mod mx md) -> do
+    (r', _) <- lift mx
+    case md of
+      A.ModTypeSpeed (A.Speed dir spat) -> do
+        spat' <- lift (subInterp spat)
+        let f = case dir of
+              A.SpeedDirFast -> B.patFast
+              A.SpeedDirSlow -> B.patSlow
+        pure (f (fmap A.factorValue spat') r', 1)
+      _ -> error "TODO"
   _ -> error "TODO"
 
+subInterp :: A.Pat b a -> M b (B.Pat a)
+subInterp = fmap (\(p', w) -> B.patFastBy w p') . R.rewriteM lookInterp . A.unPat
+
 interpPat :: A.Pat b a -> Either (R.RwErr InterpErr b) (B.Pat a)
-interpPat = fmap (\(p', w) -> B.patFastBy w p') . runM . R.rewriteM lookInterpPat . A.unPat
+interpPat = runM . subInterp
