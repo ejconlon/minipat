@@ -1,14 +1,21 @@
-module Minipat.Rewrite where
-
--- ( RwErr (..)
--- , RwM
--- , finishRw
--- , throwRw
--- , askRw
--- , asksRw
--- , rewrite
--- , rewriteM
--- )
+module Minipat.Rewrite
+  ( RwErr (..)
+  , Rw
+  , RwT
+  , askRw
+  , asksRw
+  , throwRw
+  , wrapRw
+  , PatRw
+  , rewrite
+  , PatRwM
+  , rewriteM
+  , PatOv
+  , overhaul
+  , PatOvM
+  , overhaulM
+  )
+where
 
 import Bowtie (pattern JotP)
 import Control.Exception (Exception)
@@ -51,15 +58,15 @@ throwRw e = ask >>= \bs -> throwError (RwErr bs e)
 wrapRw :: (Monad m) => A.PatX b a (A.UnPat b a) -> RwT b m (A.UnPat b a)
 wrapRw = asksRw . flip JotP
 
-type PatRw b c a z = A.PatX b a (A.UnPat c z) -> Rw b (A.UnPat c z)
+type PatRw b a x = A.PatX b a x -> Rw b x
 
-rewrite :: PatRw b c a z -> A.Pat b a -> A.Pat c z
+rewrite :: PatRw b a x -> A.UnPat b a -> x
 rewrite f = runIdentity . rewriteM (f . fmap runIdentity)
 
-type PatRwM b c m a z = A.PatX b a (m (A.UnPat c z)) -> RwT b m (A.UnPat c z)
+type PatRwM b a m x = A.PatX b a (m x) -> RwT b m x
 
-rewriteM :: (Monad m) => PatRwM b c m a z -> A.Pat b a -> m (A.Pat c z)
-rewriteM f (A.Pat (JotP b0 pf0)) = fmap A.Pat (go (NESeq.singleton b0) pf0)
+rewriteM :: PatRwM b a m x -> A.UnPat b a -> m x
+rewriteM f (JotP b0 pf0) = go (NESeq.singleton b0) pf0
  where
   go bs pf = runReaderT (f (fmap (push bs) pf)) bs
   push bs (JotP b pf) = go (bs NESeq.|> b) pf
@@ -102,15 +109,15 @@ instance Bitraversable (TapF a) where
       A.PatMod m -> fmap A.PatMod (bitraverse f g m)
       A.PatPoly p -> fmap A.PatPoly (traverse g p)
 
-type PatOv b = forall x. PatRw b b x x
+type PatOv b = forall a. PatRw b a (A.UnPat b a)
 
-overhaul :: PatOv b -> A.Pat b a -> A.Pat b a
+overhaul :: PatOv b -> A.UnPat b a -> A.UnPat b a
 overhaul f = runIdentity . overhaulM (f . fmap runIdentity)
 
-type PatOvM b m = forall x. PatRwM b b m x x
+type PatOvM b m = forall a. PatRwM b a m (A.UnPat b a)
 
-overhaulM :: (Monad m) => PatOvM b m -> A.Pat b a -> m (A.Pat b a)
-overhaulM f (A.Pat (JotP b0 pf0)) = fmap A.Pat (goOvM f (NESeq.singleton b0) pf0)
+overhaulM :: (Monad m) => PatOvM b m -> A.UnPat b a -> m (A.UnPat b a)
+overhaulM f (JotP b0 pf0) = goOvM f (NESeq.singleton b0) pf0
 
 goOvM :: (Monad m) => PatOvM b m -> NESeq b -> A.PatX b a (A.UnPat b a) -> m (A.UnPat b a)
 goOvM f bs pf = do

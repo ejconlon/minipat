@@ -1,6 +1,7 @@
-module Minipat.Norm where
-
--- TODO explicit exports
+module Minipat.Norm
+  ( normPat
+  )
+where
 
 import Bowtie (pattern JotP)
 import Data.Sequence (Seq (..))
@@ -40,4 +41,4 @@ subNorm x = case x of
   _ -> R.wrapRw x
 
 normPat :: A.Pat b a -> A.Pat b a
-normPat = R.overhaul subNorm
+normPat = A.Pat . R.overhaul subNorm . A.unPat
