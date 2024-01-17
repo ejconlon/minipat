@@ -30,8 +30,8 @@ library
       Minipat.Norm
       Minipat.Parser
       Minipat.Print
-      Minipat.Proc
       Minipat.Rand
+      Minipat.Rewrite
   other-modules:
       Paths_minipat
   hs-source-dirs:
@@ -76,6 +76,7 @@ library
     , nonempty-containers ==0.3.*
     , prettyprinter ==1.7.*
     , text ==2.0.*
+    , transformers ==0.6.*
   default-language: GHC2021
 
 test-suite minipat-test
@@ -129,4 +130,5 @@ test-suite minipat-test
     , tasty ==1.4.*
     , tasty-hunit ==0.10.*
     , text ==2.0.*
+    , transformers ==0.6.*
   default-language: GHC2021

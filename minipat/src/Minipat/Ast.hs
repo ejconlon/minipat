@@ -102,6 +102,28 @@ instance Pretty Factor where
     FactorInteger i -> pretty i
     FactorQuickRatio qr -> pretty qr
 
+factorFromRational :: Rational -> Factor
+factorFromRational = FactorRational RationalPresDec
+
+factorUnary :: (forall a. Num a => a -> a) -> Factor -> Factor
+factorUnary f = \case
+  FactorRational rp rat -> FactorRational rp (f rat)
+  FactorInteger i -> FactorInteger (f i)
+  FactorQuickRatio qr -> FactorRational RationalPresDec (f (quickRatioValue qr))
+
+factorBinary :: (forall a. Num a => a -> a -> a) -> Factor -> Factor -> Factor
+factorBinary f (FactorInteger i) (FactorInteger j) = FactorInteger (f i j)
+factorBinary f x y = factorFromRational (f (factorValue x) (factorValue y) )
+
+instance Num Factor where
+  (+) = factorBinary (+)
+  (-) = factorBinary (-)
+  (*) = factorBinary (*)
+  abs = factorUnary abs
+  signum = factorUnary signum
+  fromInteger = FactorInteger
+  negate = factorUnary negate
+
 -- | The 'Rational' represented by this 'Factor'
 factorValue :: Factor -> Rational
 factorValue = \case
@@ -127,6 +149,15 @@ data Mod s r = Mod
 
 instance (Pretty c, Pretty r) => Pretty (Mod c r) where
   pretty (Mod tar ty) = P.hcat [pretty tar, pretty ty]
+
+instance Bifunctor Mod where
+  bimap f g (Mod r mt) = Mod (g r) (fmap f mt)
+
+instance Bifoldable Mod where
+  bifoldr f g z (Mod r mt) = g r (foldr f z mt)
+
+instance Bitraversable Mod where
+  bitraverse f g (Mod r mt) = Mod <$> g r <*> traverse f mt
 
 -- * Speed
 
@@ -362,7 +393,7 @@ type PatX b = PatF (Pat b Factor)
 
 type UnPat b = Jot (PatX b) b
 
-type PatK b a = PatX b a (UnPat b a)
+-- type PatK b a = PatX b a (UnPat b a)
 
 instance Traversable (Pat a) where traverse f = fmap Pat . traverse f . unPat
 
