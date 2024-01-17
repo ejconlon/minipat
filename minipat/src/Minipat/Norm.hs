@@ -29,35 +29,24 @@ foldNormPat = goFirst
       let ws' = case pf of
             A.PatTime (A.TimeShort s) ->
               let pf' = A.PatTime $ A.TimeLong wlast $ case s of
-                    A.ShortTimeElongate -> A.LongTimeElongate 1
+                    A.ShortTimeElongate -> A.LongTimeElongate 2
                     A.ShortTimeReplicate -> A.LongTimeReplicate Nothing
               in  winit :||> JotP b pf'
             _ -> ws NESeq.|> y
       in  goRest ws' ys
 
 normPatM :: A.PatX b a (A.UnPat b a) -> M b (A.UnPat b a)
-normPatM = \case
-  -- Simple cases first - just rewrap
-  A.PatPure a -> R.wrapRw (A.PatPure a)
-  A.PatSilence -> R.wrapRw A.PatSilence
-  A.PatMod m -> R.wrapRw (A.PatMod m)
-  A.PatPoly p -> R.wrapRw (A.PatPoly p)
-  -- Handling time expressions
-  A.PatTime t ->
-    case t of
-      -- Time shorthands at top level are nonsense - throw error
-      A.TimeShort _ -> R.throwRw NormErrShort
-      -- Otherwise rewrap
-      A.TimeLong r l -> R.wrapRw (A.PatTime (A.TimeLong r l))
-  -- Handling groups
+normPatM x = case x of
   A.PatGroup (A.Group lvl ty ss) -> do
+    -- Fold over sequences, eliminating time shorthands
     let ss' = case ty of
           A.GroupTypeSeq _ -> foldNormPat ss
           _ -> ss
-    -- Unwrap any singletons we find
+    -- Unwrap any group singletons we find
     case ss' of
       q :<|| Empty -> pure q
       _ -> R.wrapRw (A.PatGroup (A.Group lvl ty ss'))
+  _ -> R.wrapRw x
 
 normPat :: A.Pat b a -> Either (R.RwErr NormErr b) (A.Pat b a)
 normPat = R.finishRw . R.overhaulM normPatM

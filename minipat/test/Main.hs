@@ -20,7 +20,7 @@ import Looksee (Err, parse)
 import Minipat.Ast -- TODO qualify
 import Minipat.Base (Arc (..), Ev (..), Span (..), patRun)
 -- import Minipat.Interp (interpPat)
--- import Minipat.Norm (normPat, NPat, Expansion (..), Measure (..))
+import Minipat.Norm (normPat)
 import Minipat.Parser (P, ParseErr, factorP, identP, identPatP)
 import Minipat.Print (render)
 import Prettyprinter qualified as P
@@ -338,67 +338,81 @@ testParseCases =
     , testGroup "pat trip" patTripTests
     ]
 
--- runPatNormCase :: (TestName, Text, NPat () Ident) -> TestTree
--- runPatNormCase (n, patStr, npat) = testCase n $ do
---   pat <- either throwIO pure (parse tpatP patStr)
---   pat' <- either throwIO pure (normPat pat)
---   pat' @?= npat
---
--- testPatNormCases :: TestTree
--- testPatNormCases =
---   let patPure r w x = JotP (Expansion (Measure r w) ()) (PatPure x)
---   in testGroup "pat norm cases" $ fmap runPatNormCase
---     [ ( "pure"
---       , "x"
---       , Pat (patPure 1 1 "x")
---       )
---     , ( "seq singleton"
---       , "[x]"
---       , Pat (patPure 1 1 "x")
---       )
---     ,
---       ( "seq simple"
---       , "[x y]"
---       , Pat (JotP (Expansion (Measure 1 1) ())
---           (PatGroup (Group 1 (GroupTypeSeq SeqPresSpace) (neseq [patPure 1 1 "x", patPure 1 1 "y"]))))
---       )
---     , ( "repeat one long"
---       , "x!1"
---       , Pat (patPure 1 1 "x")
---       )
---     ,
---       ( "repeat two long"
---       , "x!2"
---       , Pat (patPure 2 1 "x")
---       )
---     ,
---       ( "repeat two long implicit"
---       , "x!"
---       , Pat (patPure 2 1 "x")
---       )
---     -- TODO un-nest singleton sequence
---     -- ,
---     --   ( "repeat two short"
---     --   , "x !"
---     --   , Pat (patPure 2 1 "x")
---     --   )
---     -- ,
---     --   ( "repeat three short"
---     --   , "x ! !"
---     --   , Pat (patPure 3 1 "x")
---     --   )
---     ,
---       ( "repeat seq short"
---       , "x ! y"
---       , Pat (JotP (Expansion (Measure 1 1) ())
---           (PatGroup (Group 1 (GroupTypeSeq SeqPresSpace) (neseq [patPure 2 1 "x", patPure 1 1 "y"]))))
---       )
---     -- ,
---     --   ( "elongate noop"
---     --   , "x@2"
---     --   , mkTPatStream (PatStreamPure (Anno (Arc 0 1) "x"))
---     --   )
---     ]
+runPatNormCase :: (TestName, Text, Pat () Ident) -> TestTree
+runPatNormCase (n, patStr, npat) = testCase n $ do
+  pat <- either throwIO pure (parse tpatP patStr)
+  pat' <- either throwIO pure (normPat pat)
+  pat' @?= npat
+
+testPatNormCases :: TestTree
+testPatNormCases =
+  let patPure = JotP () . PatPure
+      patTime r l = JotP () (PatTime (TimeLong r l))
+  in  testGroup "pat norm cases" $
+        fmap
+          runPatNormCase
+          [
+            ( "pure"
+            , "x"
+            , Pat (patPure "x")
+            )
+          ,
+            ( "seq singleton"
+            , "[x]"
+            , Pat (patPure "x")
+            )
+          ,
+            ( "seq simple"
+            , "[x y]"
+            , Pat
+                ( JotP
+                    ()
+                    (PatGroup (Group 1 (GroupTypeSeq SeqPresSpace) (neseq [patPure "x", patPure "y"])))
+                )
+            )
+          ,
+            ( "repeat one long"
+            , "x!1"
+            , Pat (patTime (patPure "x") (LongTimeReplicate (Just 1)))
+            )
+          ,
+            ( "repeat two long"
+            , "x!2"
+            , Pat (patTime (patPure "x") (LongTimeReplicate (Just 2)))
+            )
+          ,
+            ( "repeat two long implicit"
+            , "x!"
+            , Pat (patTime (patPure "x") (LongTimeReplicate Nothing))
+            )
+          ,
+            ( "repeat two short"
+            , "x !"
+            , Pat (patTime (patPure "x") (LongTimeReplicate Nothing))
+            )
+          ,
+            ( "repeat three short"
+            , "x ! !"
+            , let xpart = patTime (patPure "x") (LongTimeReplicate Nothing)
+              in  Pat (patTime xpart (LongTimeReplicate Nothing))
+            )
+          ,
+            ( "repeat seq short"
+            , "x ! y"
+            , let xpart = patTime (patPure "x") (LongTimeReplicate Nothing)
+              in  Pat (JotP () (PatGroup (Group 0 (GroupTypeSeq SeqPresSpace) (neseq [xpart, patPure "y"]))))
+            )
+          ,
+            ( "elongate two long"
+            , "x@2"
+            , Pat (patTime (patPure "x") (LongTimeElongate 2))
+            )
+          ,
+            ( "elongate two short"
+            , "x _"
+            , Pat (patTime (patPure "x") (LongTimeElongate 2))
+            )
+          ]
 
 -- runPatInterpCase :: (TestName, Maybe Arc, Text, [Ev Ident]) -> TestTree
 -- runPatInterpCase (n, mayArc, patStr, evs) = testCase n $ do
@@ -629,6 +643,6 @@ main = do
     testGroup
       "Minipat"
       [ testParseCases
-      -- , testPatNormCases
+      , testPatNormCases
       -- , testPatInterpCases
       ]
