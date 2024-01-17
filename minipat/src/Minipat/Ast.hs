@@ -105,15 +105,15 @@ instance Pretty Factor where
 factorFromRational :: Rational -> Factor
 factorFromRational = FactorRational RationalPresDec
 
-factorUnary :: (forall a. Num a => a -> a) -> Factor -> Factor
+factorUnary :: (forall a. (Num a) => a -> a) -> Factor -> Factor
 factorUnary f = \case
   FactorRational rp rat -> FactorRational rp (f rat)
   FactorInteger i -> FactorInteger (f i)
   FactorQuickRatio qr -> FactorRational RationalPresDec (f (quickRatioValue qr))
 
-factorBinary :: (forall a. Num a => a -> a -> a) -> Factor -> Factor -> Factor
+factorBinary :: (forall a. (Num a) => a -> a -> a) -> Factor -> Factor -> Factor
 factorBinary f (FactorInteger i) (FactorInteger j) = FactorInteger (f i j)
-factorBinary f x y = factorFromRational (f (factorValue x) (factorValue y) )
+factorBinary f x y = factorFromRational (f (factorValue x) (factorValue y))
 
 instance Num Factor where
   (+) = factorBinary (+)

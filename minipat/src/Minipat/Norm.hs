@@ -31,9 +31,9 @@ foldNormPat = goFirst
               let pf' = A.PatTime $ A.TimeLong wlast $ case s of
                     A.ShortTimeElongate -> A.LongTimeElongate 1
                     A.ShortTimeReplicate -> A.LongTimeReplicate Nothing
-              in winit :||> JotP b pf'
+              in  winit :||> JotP b pf'
             _ -> ws NESeq.|> y
-      in goRest ws' ys
+      in  goRest ws' ys
 
 normPatM :: A.PatX b a (A.UnPat b a) -> M b (A.UnPat b a)
 normPatM = \case
@@ -61,4 +61,3 @@ normPatM = \case
 
 normPat :: A.Pat b a -> Either (R.RwErr NormErr b) (A.Pat b a)
 normPat = R.finishRw . R.overhaulM normPatM
-
