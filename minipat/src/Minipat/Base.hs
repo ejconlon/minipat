@@ -34,13 +34,13 @@ where
 
 import Control.Applicative (Alternative (..))
 import Control.Monad (ap)
-import Data.Foldable (toList, foldl')
+import Data.Foldable (foldl', toList)
+import Data.Foldable1 (foldMap1')
 import Data.Heap (Entry (..), Heap)
 import Data.Heap qualified as H
-import Data.String (IsString (..))
-import Data.Sequence.NonEmpty (NESeq)
-import Data.Foldable1 (foldMap1')
 import Data.Semigroup (Sum (..))
+import Data.Sequence.NonEmpty (NESeq)
+import Data.String (IsString (..))
 
 type Time = Rational
 
@@ -81,7 +81,7 @@ arcWrap (Arc s e) w =
       let d = e - s
           k = w * fromInteger (floor (s / w))
           c = s - k
-      in (k, c, d)
+      in  (k, c, d)
     else (0, s, e - s)
 
 data Span = Span
@@ -128,12 +128,12 @@ instance Functor Tape where
 tapeFastBy :: Integer -> Rational -> Tape a -> Tape a
 tapeFastBy o r =
   let o' = fromInteger o
-  in tapeTimeMapMono (\t -> (t - o') / r + o')
+  in  tapeTimeMapMono (\t -> (t - o') / r + o')
 
 tapeSlowBy :: Integer -> Rational -> Tape a -> Tape a
 tapeSlowBy o r =
   let o' = fromInteger o
-  in tapeTimeMapMono (\t -> (t - o') * r + o')
+  in  tapeTimeMapMono (\t -> (t - o') * r + o')
 
 tapeLateBy :: Time -> Tape a -> Tape a
 tapeLateBy t = tapeTimeMapMono (+ t)
@@ -184,7 +184,7 @@ instance Semigroup (Pat a) where
 instance Monoid (Pat a) where
   mempty = empty
 
-instance IsString s => IsString (Pat s) where
+instance (IsString s) => IsString (Pat s) where
   fromString = pure . fromString
 
 -- goC :: Show a => NESeq (Pat a, Rational) -> Time -> Time -> Time -> Tape a
@@ -211,7 +211,8 @@ instance IsString s => IsString (Pat s) where
 -- Sketch: split arc into cycles, for each render the pattern over the cycle, slowing by length, then speed everything
 -- up by whole amount to fit all into one cycle
 goC :: Rational -> NESeq (Pat a, Rational) -> Arc -> Tape a
-goC w pats arc = foldl' go1 mempty (spanSplit arc) where
+goC w pats arc = foldl' go1 mempty (spanSplit arc)
+ where
   go1 t (i, Span subArc _) = t <> tapeFastBy i w (snd (go2 i subArc))
   go2 i subArc = foldl' (go3 i subArc) (0, mempty) pats
   go3 i subArc (o, t) (p, v) =
@@ -220,7 +221,7 @@ goC w pats arc = foldl' go1 mempty (spanSplit arc) where
 patConcat :: NESeq (Pat a, Rational) -> Pat a
 patConcat pats =
   let w = getSum (foldMap1' (Sum . snd) pats)
-  in Pat (goC w pats)
+  in  Pat (goC w pats)
 
 patTimeMapInv :: (Time -> Time) -> (Time -> Time) -> Pat a -> Pat a
 patTimeMapInv onTape onArc (Pat k) = Pat (tapeTimeMapMono onTape . k . arcTimeMapMono onArc)
@@ -272,4 +273,3 @@ patCont f = Pat (tapeSingleton . evCont f)
 --
 -- patSine :: Rational -> Pat Double
 -- patSine = patCont . fnSine
-

@@ -418,7 +418,7 @@ runPatInterpCase :: (TestName, Maybe Arc, Text, [Ev Ident]) -> TestTree
 runPatInterpCase (n, mayArc, patStr, evs) = testCase n $ do
   pat <- either throwIO pure (parse tpatP patStr)
   let pat' = normPat pat
-  pat'' <- either throwIO pure =<< (interpPat pat')
+  pat'' <- either throwIO pure =<< interpPat pat'
   let arc = fromMaybe (Arc 0 1) mayArc
       actualEvs = patRun pat'' arc
   actualEvs @?= evs
@@ -471,21 +471,22 @@ testPatInterpCases =
           , Ev (Span (Arc (1 % 2) 1) (Just (Arc (1 % 2) 1))) "x"
           ]
         )
-        -- ,
+      , -- ,
         --   ( "slow down"
         --   , Nothing
         --   , "x/2"
         --   , [ Ev (Span (Arc 0 1) (Just (Arc 0 2))) "x"
         --     ]
         --   )
+
+        ( "seq simple"
+        , Nothing
+        , "[x y]"
         ,
-          ( "seq simple"
-          , Nothing
-          , "[x y]"
-          , [ Ev (Span (Arc 0 (1 % 2)) (Just (Arc 0 (1 % 2)))) "x"
-            , Ev (Span (Arc (1 % 2) 1) (Just (Arc (1 % 2) 1))) "y"
-            ]
-          )
+          [ Ev (Span (Arc 0 (1 % 2)) (Just (Arc 0 (1 % 2)))) "x"
+          , Ev (Span (Arc (1 % 2) 1) (Just (Arc (1 % 2) 1))) "y"
+          ]
+        )
         -- ,
         --   ( "seq two cycle"
         --   , Just (mkCtx (Arc 0 2))
@@ -664,7 +665,7 @@ main = do
   daytripperMain $
     testGroup
       "Minipat"
-      -- [ testParseCases
-      -- , testPatNormCases
-      [ testPatInterpCases
+      [ testParseCases
+      , testPatNormCases
+      , testPatInterpCases
       ]

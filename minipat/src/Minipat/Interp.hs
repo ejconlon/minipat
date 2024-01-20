@@ -6,16 +6,16 @@ where
 
 import Control.Applicative (Alternative (..))
 import Control.Exception (Exception)
-import Control.Monad.Except (Except, runExcept, ExceptT, runExceptT)
+import Control.Monad.Except (Except, ExceptT, runExcept, runExceptT)
 import Control.Monad.Trans (lift)
 import Data.Foldable (foldMap')
-import Data.Foldable1 (foldl1', foldMap1')
+import Data.Foldable1 (foldMap1', foldl1')
+import Data.Semigroup (Sum (..))
 import Data.Sequence.NonEmpty qualified as NESeq
 import Minipat.Ast qualified as A
 import Minipat.Base qualified as B
 import Minipat.Rand qualified as D
 import Minipat.Rewrite qualified as R
-import Data.Semigroup (Sum (..))
 
 data InterpErr = InterpErrShort
   deriving stock (Eq, Ord, Show)
@@ -47,14 +47,14 @@ lookInterp = \case
                   i = D.randInt l s
                   (el, w) = NESeq.index els' i
               in  B.unPat (B.patFastBy w el) arc'
-        in pure (B.Pat (foldMap' (f . B.spanActive . snd) . B.spanSplit), 1)
+        in  pure (B.Pat (foldMap' (f . B.spanActive . snd) . B.spanSplit), 1)
       A.GroupTypeAlt ->
         let l = NESeq.length els
             f z arc' =
               let i = mod (fromInteger z) l
                   (el, w) = NESeq.index els' i
               in  B.unPat (B.patFastBy w el) arc'
-        in pure (B.Pat (foldMap' (\(z, sp) -> f z (B.spanActive sp)) . B.spanSplit), 1)
+        in  pure (B.Pat (foldMap' (\(z, sp) -> f z (B.spanActive sp)) . B.spanSplit), 1)
   A.PatMod (A.Mod mx md) -> do
     (r', _) <- lift mx
     case md of
