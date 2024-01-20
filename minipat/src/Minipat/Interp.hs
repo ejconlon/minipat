@@ -6,25 +6,26 @@ where
 
 import Control.Applicative (Alternative (..))
 import Control.Exception (Exception)
-import Control.Monad.Except (Except, runExcept)
+import Control.Monad.Except (Except, runExcept, ExceptT, runExceptT)
 import Control.Monad.Trans (lift)
 import Data.Foldable (foldMap')
-import Data.Foldable1 (foldl1')
+import Data.Foldable1 (foldl1', foldMap1')
 import Data.Sequence.NonEmpty qualified as NESeq
 import Minipat.Ast qualified as A
 import Minipat.Base qualified as B
 import Minipat.Rand qualified as D
 import Minipat.Rewrite qualified as R
+import Data.Semigroup (Sum (..))
 
 data InterpErr = InterpErrShort
   deriving stock (Eq, Ord, Show)
 
 instance Exception InterpErr
 
-type M b = Except (R.RwErr InterpErr b)
+type M b = ExceptT (R.RwErr InterpErr b) IO
 
-runM :: M b a -> Either (R.RwErr InterpErr b) a
-runM = runExcept
+runM :: M b a -> IO (Either (R.RwErr InterpErr b) a)
+runM = runExceptT
 
 lookInterp :: A.PatX b a (M b (B.Pat a, Rational)) -> R.RwT b (M b) (B.Pat a, Rational)
 lookInterp = \case
@@ -36,10 +37,9 @@ lookInterp = \case
       _ -> error "TODO"
   A.PatGroup (A.Group _ ty els) -> do
     els' <- lift (sequenceA els)
-    pure $ case ty of
-      A.GroupTypeSeq _ ->
-        foldl1' (\(pout, wout) (pin, win) -> (pout <> B.patLateBy wout pin, wout + win)) els'
-      A.GroupTypePar -> (foldl1' (<|>) (fmap fst els'), 1)
+    case ty of
+      A.GroupTypeSeq _ -> pure (B.patConcat els', 1)
+      A.GroupTypePar -> pure (foldl1' (<|>) (fmap fst els'), 1)
       A.GroupTypeRand ->
         let l = NESeq.length els
             f arc' =
@@ -47,14 +47,14 @@ lookInterp = \case
                   i = D.randInt l s
                   (el, w) = NESeq.index els' i
               in  B.unPat (B.patFastBy w el) arc'
-        in  (B.Pat (foldMap' (f . B.spanActive . snd) . B.spanSplit), 1)
+        in pure (B.Pat (foldMap' (f . B.spanActive . snd) . B.spanSplit), 1)
       A.GroupTypeAlt ->
         let l = NESeq.length els
             f z arc' =
               let i = mod (fromInteger z) l
                   (el, w) = NESeq.index els' i
               in  B.unPat (B.patFastBy w el) arc'
-        in  (B.Pat (foldMap' (\(z, sp) -> f z (B.spanActive sp)) . B.spanSplit), 1)
+        in pure (B.Pat (foldMap' (\(z, sp) -> f z (B.spanActive sp)) . B.spanSplit), 1)
   A.PatMod (A.Mod mx md) -> do
     (r', _) <- lift mx
     case md of
@@ -68,7 +68,7 @@ lookInterp = \case
   _ -> error "TODO"
 
 subInterp :: A.Pat b a -> M b (B.Pat a)
-subInterp = fmap (\(p', w) -> B.patFastBy w p') . R.rewriteM lookInterp . A.unPat
+subInterp = fmap fst . R.rewriteM lookInterp . A.unPat
 
-interpPat :: A.Pat b a -> Either (R.RwErr InterpErr b) (B.Pat a)
+interpPat :: A.Pat b a -> IO (Either (R.RwErr InterpErr b) (B.Pat a))
 interpPat = runM . subInterp

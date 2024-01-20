@@ -19,6 +19,7 @@ module Minipat.Base
   , patMixBind
   , patRun
   , patAdjust
+  , patConcat
   , patFastBy
   , patSlowBy
   , patEarlyBy
@@ -33,9 +34,13 @@ where
 
 import Control.Applicative (Alternative (..))
 import Control.Monad (ap)
-import Data.Foldable (toList)
+import Data.Foldable (toList, foldl')
 import Data.Heap (Entry (..), Heap)
 import Data.Heap qualified as H
+import Data.String (IsString (..))
+import Data.Sequence.NonEmpty (NESeq)
+import Data.Foldable1 (foldMap1')
+import Data.Semigroup (Sum (..))
 
 type Time = Rational
 
@@ -68,6 +73,16 @@ arcMid (Arc s e) = timeLerp s e
 
 arcTimeMapMono :: (Time -> Time) -> Arc -> Arc
 arcTimeMapMono f (Arc s e) = Arc (f s) (f e)
+
+arcWrap :: Arc -> Rational -> (Time, Time, Time)
+arcWrap (Arc s e) w =
+  if s >= w
+    then
+      let d = e - s
+          k = w * fromInteger (floor (s / w))
+          c = s - k
+      in (k, c, d)
+    else (0, s, e - s)
 
 data Span = Span
   { spanActive :: !Arc
@@ -109,6 +124,22 @@ newtype Tape a = Tape {unTape :: Heap (Entry Span a)}
 
 instance Functor Tape where
   fmap f = Tape . H.mapMonotonic (\(Entry s a) -> Entry s (f a)) . unTape
+
+tapeFastBy :: Integer -> Rational -> Tape a -> Tape a
+tapeFastBy o r =
+  let o' = fromInteger o
+  in tapeTimeMapMono (\t -> (t - o') / r + o')
+
+tapeSlowBy :: Integer -> Rational -> Tape a -> Tape a
+tapeSlowBy o r =
+  let o' = fromInteger o
+  in tapeTimeMapMono (\t -> (t - o') * r + o')
+
+tapeLateBy :: Time -> Tape a -> Tape a
+tapeLateBy t = tapeTimeMapMono (+ t)
+
+tapeEarlyBy :: Time -> Tape a -> Tape a
+tapeEarlyBy t = tapeTimeMapMono (subtract t)
 
 tapeTimeMapMono :: (Time -> Time) -> Tape a -> Tape a
 tapeTimeMapMono f = Tape . H.mapMonotonic (\(Entry s a) -> Entry (spanTimeMapMono f s) a) . unTape
@@ -153,16 +184,54 @@ instance Semigroup (Pat a) where
 instance Monoid (Pat a) where
   mempty = empty
 
+instance IsString s => IsString (Pat s) where
+  fromString = pure . fromString
+
+-- goC :: Show a => NESeq (Pat a, Rational) -> Time -> Time -> Time -> Tape a
+-- goC pats0 k = go mempty (toList pats0) where
+--   go !t !pats !c !d =
+--     trace (unwords ["go", show (length pats), show c, show d]) $
+--     if d <= 0
+--       then t
+--       else case pats of
+--         [] -> go t (toList pats0) c d
+--         (p, w) : pats' ->
+--           if c >= w
+--             then go t pats' (c - w) d
+--             else
+--               let e = min w (c + d)
+--                   u = unPat p (Arc (k + c) (k + e))
+--                   t' = t <> trace (unwords ["->", show u]) u
+--                   d' = d - (e - c)
+--               in go t' pats' w d'
+
+-- LAW TO VERIFY
+-- forall p a. patRun p a == spanSplit a >>= \(_, a') -> fmap (_) (patRun p a')
+
+-- Sketch: split arc into cycles, for each render the pattern over the cycle, slowing by length, then speed everything
+-- up by whole amount to fit all into one cycle
+goC :: Rational -> NESeq (Pat a, Rational) -> Arc -> Tape a
+goC w pats arc = foldl' go1 mempty (spanSplit arc) where
+  go1 t (i, Span subArc _) = t <> tapeFastBy i w (snd (go2 i subArc))
+  go2 i subArc = foldl' (go3 i subArc) (0, mempty) pats
+  go3 i subArc (o, t) (p, v) =
+    (o + v, t <> tapeLateBy o (tapeSlowBy i v (unPat p subArc)))
+
+patConcat :: NESeq (Pat a, Rational) -> Pat a
+patConcat pats =
+  let w = getSum (foldMap1' (Sum . snd) pats)
+  in Pat (goC w pats)
+
 patTimeMapInv :: (Time -> Time) -> (Time -> Time) -> Pat a -> Pat a
-patTimeMapInv f g (Pat k) = Pat (tapeTimeMapMono f . k . arcTimeMapMono g)
+patTimeMapInv onTape onArc (Pat k) = Pat (tapeTimeMapMono onTape . k . arcTimeMapMono onArc)
 
 patFastBy, patSlowBy :: Rational -> Pat a -> Pat a
 patFastBy t = patTimeMapInv (/ t) (* t)
 patSlowBy t = patTimeMapInv (+ t) (/ t)
 
 patEarlyBy, patLateBy :: Time -> Pat a -> Pat a
-patEarlyBy t = patTimeMapInv (+ t) (subtract t)
-patLateBy t = patTimeMapInv (subtract t) (+ t)
+patEarlyBy t = patTimeMapInv id (subtract t)
+patLateBy t = patTimeMapInv id (+ t)
 
 patBindWith :: (Maybe Arc -> Maybe Arc -> Maybe Arc) -> Pat a -> (a -> Pat b) -> Pat b
 patBindWith g pa f = Pat $ \arc ->
@@ -203,3 +272,4 @@ patCont f = Pat (tapeSingleton . evCont f)
 --
 -- patSine :: Rational -> Pat Double
 -- patSine = patCont . fnSine
+
