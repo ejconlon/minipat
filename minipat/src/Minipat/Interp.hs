@@ -34,7 +34,13 @@ lookInterp = \case
   A.PatTime t ->
     case t of
       A.TimeShort _ -> R.throwRw InterpErrShort
-      _ -> error "TODO"
+      A.TimeLong melw t -> do
+        (el, w) <- lift melw
+        case t of
+          A.LongTimeElongate f -> pure (el, A.factorValue f * w)
+          A.LongTimeReplicate mf ->
+            let v = maybe 2 fromInteger mf
+            in pure (B.patConcat (NESeq.replicate v (el, 1)), fromIntegral v)
   A.PatGroup (A.Group _ ty els) -> do
     els' <- lift (sequenceA els)
     case ty of
@@ -56,14 +62,14 @@ lookInterp = \case
               in  B.unPat (B.patFastBy w el) arc'
         in  pure (B.Pat (foldMap' (\(z, sp) -> f z (B.spanActive sp)) . B.spanSplit), 1)
   A.PatMod (A.Mod mx md) -> do
-    (r', _) <- lift mx
+    (r', w) <- lift mx
     case md of
       A.ModTypeSpeed (A.Speed dir spat) -> do
         spat' <- lift (subInterp spat)
         let f = case dir of
               A.SpeedDirFast -> B.patFast
               A.SpeedDirSlow -> B.patSlow
-        pure (f (fmap A.factorValue spat') r', 1)
+        pure (f (fmap A.factorValue spat') r', w)
       _ -> error "TODO"
   _ -> error "TODO"
 

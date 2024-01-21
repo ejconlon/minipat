@@ -187,24 +187,6 @@ instance Monoid (Pat a) where
 instance (IsString s) => IsString (Pat s) where
   fromString = pure . fromString
 
--- goC :: Show a => NESeq (Pat a, Rational) -> Time -> Time -> Time -> Tape a
--- goC pats0 k = go mempty (toList pats0) where
---   go !t !pats !c !d =
---     trace (unwords ["go", show (length pats), show c, show d]) $
---     if d <= 0
---       then t
---       else case pats of
---         [] -> go t (toList pats0) c d
---         (p, w) : pats' ->
---           if c >= w
---             then go t pats' (c - w) d
---             else
---               let e = min w (c + d)
---                   u = unPat p (Arc (k + c) (k + e))
---                   t' = t <> trace (unwords ["->", show u]) u
---                   d' = d - (e - c)
---               in go t' pats' w d'
-
 -- LAW TO VERIFY
 -- forall p a. patRun p a == spanSplit a >>= \(_, a') -> fmap (_) (patRun p a')
 
@@ -228,7 +210,7 @@ patTimeMapInv onTape onArc (Pat k) = Pat (tapeTimeMapMono onTape . k . arcTimeMa
 
 patFastBy, patSlowBy :: Rational -> Pat a -> Pat a
 patFastBy t = patTimeMapInv (/ t) (* t)
-patSlowBy t = patTimeMapInv (+ t) (/ t)
+patSlowBy t = patTimeMapInv (* t) (/ t)
 
 patEarlyBy, patLateBy :: Time -> Pat a -> Pat a
 patEarlyBy t = patTimeMapInv id (subtract t)

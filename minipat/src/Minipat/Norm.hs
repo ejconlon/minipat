@@ -15,15 +15,28 @@ foldNorm = goFirst
  where
   goFirst (y :<|| ys) = do
     goRest (NESeq.singleton y) ys
-  goRest ws@(winit :||> wlast) = \case
+  goRest ws@(winit :||> wlast@(JotP wlb wlpf)) = \case
     Empty -> ws
     y@(JotP b pf) :<| ys ->
       let ws' = case pf of
             A.PatTime (A.TimeShort s) ->
-              let pf' = A.PatTime $ A.TimeLong wlast $ case s of
-                    A.ShortTimeElongate -> A.LongTimeElongate 2
-                    A.ShortTimeReplicate -> A.LongTimeReplicate Nothing
-              in  winit :||> JotP b pf'
+              case (s, wlpf) of
+                (A.ShortTimeReplicate, A.PatTime (A.TimeLong c (A.LongTimeReplicate x))) ->
+                  error "TODO"
+                (A.ShortTimeElongate, A.PatTime (A.TimeLong c (A.LongTimeElongate mx))) ->
+                  error "TODO"
+                _ ->
+                  let pf' = A.PatTime $ A.TimeLong wlast $ case s of
+                        A.ShortTimeElongate -> A.LongTimeElongate 2
+                        A.ShortTimeReplicate -> A.LongTimeReplicate Nothing
+                  in winit :||> JotP b pf'
+            A.PatTime (A.TimeLong q l) ->
+              case (l, wlpf) of
+                (A.LongTimeReplicate i, A.PatTime (A.TimeLong c (A.LongTimeReplicate x))) ->
+                  error "TODO"
+                (A.LongTimeElongate i, A.PatTime (A.TimeLong c (A.LongTimeElongate mx))) ->
+                  error "TODO"
+                _ -> ws
             _ -> ws NESeq.|> y
       in  goRest ws' ys
 
