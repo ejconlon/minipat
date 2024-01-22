@@ -21,6 +21,7 @@ import Minipat.Ast qualified as A
 import Minipat.Base qualified as B
 import Minipat.Rand qualified as D
 import Minipat.Rewrite qualified as R
+import Minipat.Time qualified as T
 
 type Sel = Anno (Seq A.Select)
 
@@ -65,14 +66,14 @@ lookInterp g = \case
                   i = D.randInt l s
                   (el, w) = NESeq.index els' i
               in  B.unPat (B.patFastBy w el) arc'
-        in  pure (B.Pat (foldMap' (f . B.spanActive . snd) . B.spanSplit), 1)
+        in  pure (B.Pat (foldMap' (f . T.spanActive . snd) . T.spanSplit), 1)
       A.GroupTypeAlt ->
         let l = NESeq.length els
             f z arc' =
               let i = mod (fromInteger z) l
                   (el, w) = NESeq.index els' i
               in  B.unPat (B.patFastBy w el) arc'
-        in  pure (B.Pat (foldMap' (\(z, sp) -> f z (B.spanActive sp)) . B.spanSplit), 1)
+        in  pure (B.Pat (foldMap' (\(z, sp) -> f z (T.spanActive sp)) . T.spanSplit), 1)
   A.PatMod (A.Mod mx md) -> do
     case md of
       A.ModTypeSpeed (A.Speed dir spat) -> do

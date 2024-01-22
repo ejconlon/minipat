@@ -1,16 +1,5 @@
 module Minipat.Base
-  ( Time
-  , timeFloor
-  , timeCeil
-  , timeLerp
-  , Arc (..)
-  , arcUnion
-  , arcIntersect
-  , arcWiden
-  , arcMid
-  , Span (..)
-  , spanSplit
-  , Ev (..)
+  ( Ev (..)
   , evCont
   , Tape
   , Pat (..)
@@ -43,73 +32,17 @@ import Data.Heap qualified as H
 import Data.Semigroup (Sum (..))
 import Data.Sequence.NonEmpty (NESeq)
 import Data.String (IsString (..))
-
-type Time = Rational
-
-timeFloor :: Time -> Integer
-timeFloor = floor
-
-timeCeil :: Time -> Integer
-timeCeil = (+ 1) . timeFloor
-
-timeLerp :: Time -> Time -> Time
-timeLerp s e = s + (e - s) / 2
-
-data Arc = Arc {arcStart :: !Time, arcEnd :: !Time}
-  deriving stock (Eq, Ord, Show)
-
-arcUnion :: Arc -> Arc -> Arc
-arcUnion (Arc s1 e1) (Arc s2 e2) = Arc (min s1 s2) (max e1 e2)
-
-arcIntersect :: Arc -> Arc -> Arc
-arcIntersect (Arc s1 e1) (Arc s2 e2) =
-  let s3 = max s1 s2
-      e3 = min e1 e2
-  in  Arc s3 (max s3 e3)
-
-arcWiden :: Arc -> Arc
-arcWiden (Arc s e) = Arc (fromInteger (timeFloor s)) (fromInteger (timeCeil e))
-
-arcMid :: Arc -> Time
-arcMid (Arc s e) = timeLerp s e
-
-arcTimeMapMono :: (Time -> Time) -> Arc -> Arc
-arcTimeMapMono f (Arc s e) = Arc (f s) (f e)
-
-arcWrap :: Arc -> Rational -> (Time, Time, Time)
-arcWrap (Arc s e) w =
-  if s >= w
-    then
-      let d = e - s
-          k = w * fromInteger (floor (s / w))
-          c = s - k
-      in  (k, c, d)
-    else (0, s, e - s)
-
-data Span = Span
-  { spanActive :: !Arc
-  , spanWhole :: !(Maybe Arc)
-  }
-  deriving stock (Eq, Ord, Show)
-
-spanTimeMapMono :: (Time -> Time) -> Span -> Span
-spanTimeMapMono f (Span ac wh) = Span (arcTimeMapMono f ac) (fmap (arcTimeMapMono f) wh)
-
-spanWholeMapMono :: (Maybe Arc -> Maybe Arc) -> Span -> Span
-spanWholeMapMono f (Span ac wh) = Span ac (f wh)
-
-spanSplit :: Arc -> [(Integer, Span)]
-spanSplit (Arc s0 e) =
-  let ef = fromInteger (timeFloor e)
-      go s =
-        let si = timeFloor s
-            sf = fromInteger si
-            sc = fromInteger (timeCeil s)
-            wh = Just (Arc sf sc)
-        in  if sf == ef || sc == e
-              then [(si, Span (Arc s e) wh)]
-              else (si, Span (Arc s sc) wh) : go sc
-  in  go s0
+import Minipat.Rand (randFrac, spanSeed)
+import Minipat.Time
+  ( Arc (..)
+  , Span (..)
+  , Time
+  , arcIntersect
+  , arcTimeMapMono
+  , spanSplit
+  , spanTimeMapMono
+  , spanWholeMapMono
+  )
 
 data Ev a = Ev
   { evSpan :: !Span
@@ -142,6 +75,11 @@ tapeLateBy t = tapeTimeMapMono (+ t)
 
 tapeEarlyBy :: Time -> Tape a -> Tape a
 tapeEarlyBy t = tapeTimeMapMono (subtract t)
+
+tapeDegradeBy :: Rational -> Tape a -> Tape a
+tapeDegradeBy r = Tape . H.filter f . unTape
+ where
+  f (Entry sp _) = randFrac (spanSeed sp) < r
 
 tapeTimeMapMono :: (Time -> Time) -> Tape a -> Tape a
 tapeTimeMapMono f = Tape . H.mapMonotonic (\(Entry s a) -> Entry (spanTimeMapMono f s) a) . unTape
@@ -192,21 +130,6 @@ instance (IsString s) => IsString (Pat s) where
 -- LAW TO VERIFY
 -- forall p a. patRun p a == spanSplit a >>= \(_, a') -> fmap (_) (patRun p a')
 
--- Sketch: split arc into cycles, for each render the pattern over the cycle, slowing by length, then speed everything
--- up by whole amount to fit all into one cycle
-goC :: Rational -> NESeq (Pat a, Rational) -> Arc -> Tape a
-goC w pats arc = foldl' go1 mempty (spanSplit arc)
- where
-  go1 t (i, Span subArc _) = t <> tapeFastBy i w (snd (go2 i subArc))
-  go2 i subArc = foldl' (go3 i subArc) (0, mempty) pats
-  go3 i subArc (o, t) (p, v) =
-    (o + v, t <> tapeLateBy o (tapeSlowBy i v (unPat p subArc)))
-
-patConcat :: NESeq (Pat a, Rational) -> Pat a
-patConcat pats =
-  let w = getSum (foldMap1' (Sum . snd) pats)
-  in  Pat (goC w pats)
-
 patBindWith :: (Maybe Arc -> Maybe Arc -> Maybe Arc) -> Pat a -> (a -> Pat b) -> Pat b
 patBindWith g pa f = Pat $ \arc ->
   let ta = unPat pa arc
@@ -249,10 +172,27 @@ patEarly = patAdjust patEarlyBy
 patLate = patAdjust patLateBy
 
 patDegradeBy :: Rational -> Pat a -> Pat a
-patDegradeBy _ = id -- TODO fix it
+patDegradeBy r (Pat k) = Pat (tapeDegradeBy r . k)
 
 patDegrade :: Pat Rational -> Pat a -> Pat a
 patDegrade = patAdjust patDegradeBy
+
+-- Sketch: split arc into cycles, for each render the pattern over the cycle, slowing by length, then speed everything
+-- up by whole amount to fit all into one cycle
+goC :: Rational -> NESeq (Pat a, Rational) -> Arc -> Tape a
+goC w pats arc = foldl' go1 mempty (spanSplit arc)
+ where
+  go1 t (i, Span subArc _) = t <> tapeFastBy i w (snd (go2 i subArc))
+  go2 i subArc = foldl' (go3 i subArc) (0, mempty) pats
+  go3 i subArc (o, t) (p, v) =
+    (o + v, t <> tapeLateBy o (tapeSlowBy i v (unPat p subArc)))
+
+patConcat :: NESeq (Pat a, Rational) -> Pat a
+patConcat pats =
+  let w = getSum (foldMap1' (Sum . snd) pats)
+  in  Pat (goC w pats)
+
+-- TODO implement pat repeat more efficiently than just using patConcat
 
 patCont :: (Time -> a) -> Pat a
 patCont f = Pat (tapeSingleton . evCont f)

@@ -19,11 +19,12 @@ import Data.Sequence.NonEmpty qualified as NESeq
 import Data.Text (Text)
 import Looksee (Err, parse)
 import Minipat.Ast -- TODO qualify
-import Minipat.Base (Arc (..), Ev (..), Span (..), patRun)
+import Minipat.Base (Ev (..), patRun)
 import Minipat.Interp (Sel, interpPat)
 import Minipat.Norm (normPat)
 import Minipat.Parser (P, ParseErr, factorP, identP, identPatP)
 import Minipat.Print (render)
+import Minipat.Time (Arc (..), Span (..))
 import Prettyprinter qualified as P
 import System.IO (BufferMode (..), hSetBuffering, stdout)
 import Test.Daytripper
@@ -663,14 +664,15 @@ testPatInterpCases =
               (Anno (SelectTransform "s" :<| SelectSample 1 :<| Empty) "x")
           ]
         )
-        -- ,
-        --   ( "degrade"
-        --   , Just (Arc 0 4)
-        --   , "x?"
-        --   ,
-        --     [ ev 0 1 (sel "x")
-        --     ]
-        --   )
+      ,
+        ( "degrade"
+        , Just (Arc 0 4)
+        , "x?"
+        ,
+          [ ev 0 1 (sel "x")
+          , ev 2 3 (sel "x")
+          ]
+        )
       ]
 
 main :: IO ()
