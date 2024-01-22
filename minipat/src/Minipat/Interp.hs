@@ -1,20 +1,25 @@
 module Minipat.Interp
-  ( InterpErr (..)
+  ( Sel
+  , InterpErr (..)
   , interpPat
   )
 where
 
+import Bowtie (Anno (..))
 import Control.Applicative (Alternative (..))
 import Control.Exception (Exception)
 import Control.Monad.Except (ExceptT, runExceptT)
 import Control.Monad.Trans (lift)
 import Data.Foldable (foldMap')
 import Data.Foldable1 (foldl1')
+import Data.Sequence (Seq (..))
 import Data.Sequence.NonEmpty qualified as NESeq
 import Minipat.Ast qualified as A
 import Minipat.Base qualified as B
 import Minipat.Rand qualified as D
 import Minipat.Rewrite qualified as R
+
+type Sel = Anno (Seq A.Select)
 
 data InterpErr = InterpErrShort
   deriving stock (Eq, Ord, Show)
@@ -26,9 +31,12 @@ type M b = ExceptT (R.RwErr InterpErr b) IO
 runM :: M b a -> IO (Either (R.RwErr InterpErr b) a)
 runM = runExceptT
 
-lookInterp :: A.PatX b a (M b (B.Pat a, Rational)) -> R.RwT b (M b) (B.Pat a, Rational)
-lookInterp = \case
-  A.PatPure a -> pure (pure a, 1)
+lookInterp
+  :: (Sel A.Factor -> A.Factor)
+  -> A.PatX b a (M b (B.Pat (Sel a), Rational))
+  -> R.RwT b (M b) (B.Pat (Sel a), Rational)
+lookInterp g = \case
+  A.PatPure a -> pure (pure (Anno Empty a), 1)
   A.PatSilence -> pure (empty, 1)
   A.PatTime t ->
     case t of
@@ -64,16 +72,21 @@ lookInterp = \case
     (r', w) <- lift mx
     case md of
       A.ModTypeSpeed (A.Speed dir spat) -> do
-        spat' <- lift (subInterp spat)
+        spat' <- lift (subInterp g spat)
         let f = case dir of
               A.SpeedDirFast -> B.patFast
               A.SpeedDirSlow -> B.patSlow
-        pure (f (fmap A.factorValue spat') r', w)
-      _ -> error "TODO"
-  _ -> error "TODO"
+        pure (f (fmap (A.factorValue . g) spat') r', w)
+      A.ModTypeSelect _ -> error "TODO"
+      A.ModTypeDegrade _ -> error "TODO"
+      A.ModTypeEuclid _ -> error "TODO"
+  A.PatPoly (A.PolyPat _ _) -> error "TODO"
 
-subInterp :: A.Pat b a -> M b (B.Pat a)
-subInterp = fmap fst . R.rewriteM lookInterp . A.unPat
+subInterp :: (Sel A.Factor -> A.Factor) -> A.Pat b a -> M b (B.Pat (Sel a))
+subInterp g = fmap fst . R.rewriteM (lookInterp g) . A.unPat
 
-interpPat :: A.Pat b a -> IO (Either (R.RwErr InterpErr b) (B.Pat a))
-interpPat = runM . subInterp
+interpPat' :: (Sel A.Factor -> A.Factor) -> A.Pat b a -> IO (Either (R.RwErr InterpErr b) (B.Pat (Sel a)))
+interpPat' g = runM . subInterp g
+
+interpPat :: A.Pat b a -> IO (Either (R.RwErr InterpErr b) (B.Pat (Sel a)))
+interpPat = interpPat' annoVal
