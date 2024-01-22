@@ -1,5 +1,6 @@
 module Minipat.Interp
   ( Sel
+  , SelFn
   , InterpErr (..)
   , interpPat
   )
@@ -8,7 +9,8 @@ where
 import Bowtie (Anno (..))
 import Control.Applicative (Alternative (..))
 import Control.Exception (Exception)
-import Control.Monad.Except (ExceptT, runExceptT)
+import Control.Monad.Except (Except, runExcept)
+import Control.Monad.Reader (ReaderT, runReaderT)
 import Control.Monad.Trans (lift)
 import Data.Foldable (foldMap')
 import Data.Foldable1 (foldl1')
@@ -21,18 +23,20 @@ import Minipat.Rewrite qualified as R
 
 type Sel = Anno (Seq A.Select)
 
+type SelFn = Sel A.Factor -> A.Factor
+
 data InterpErr = InterpErrShort
   deriving stock (Eq, Ord, Show)
 
 instance Exception InterpErr
 
-type M b = ExceptT (R.RwErr InterpErr b) IO
+type M b = ReaderT (Seq A.Select) (Except (R.RwErr InterpErr b))
 
-runM :: M b a -> IO (Either (R.RwErr InterpErr b) a)
-runM = runExceptT
+runM :: M b a -> Either (R.RwErr InterpErr b) a
+runM = runExcept . flip runReaderT Empty
 
 lookInterp
-  :: (Sel A.Factor -> A.Factor)
+  :: SelFn
   -> A.PatX b a (M b (B.Pat (Sel a), Rational))
   -> R.RwT b (M b) (B.Pat (Sel a), Rational)
 lookInterp g = \case
@@ -76,17 +80,18 @@ lookInterp g = \case
         let f = case dir of
               A.SpeedDirFast -> B.patFast
               A.SpeedDirSlow -> B.patSlow
-        pure (f (fmap (A.factorValue . g) spat') r', w)
+            spat'' = fmap (A.factorValue . g) spat'
+        pure (f spat'' r', w)
       A.ModTypeSelect _ -> error "TODO"
       A.ModTypeDegrade _ -> error "TODO"
       A.ModTypeEuclid _ -> error "TODO"
   A.PatPoly (A.PolyPat _ _) -> error "TODO"
 
-subInterp :: (Sel A.Factor -> A.Factor) -> A.Pat b a -> M b (B.Pat (Sel a))
+subInterp :: SelFn -> A.Pat b a -> M b (B.Pat (Sel a))
 subInterp g = fmap fst . R.rewriteM (lookInterp g) . A.unPat
 
-interpPat' :: (Sel A.Factor -> A.Factor) -> A.Pat b a -> IO (Either (R.RwErr InterpErr b) (B.Pat (Sel a)))
+interpPat' :: SelFn -> A.Pat b a -> Either (R.RwErr InterpErr b) (B.Pat (Sel a))
 interpPat' g = runM . subInterp g
 
-interpPat :: A.Pat b a -> IO (Either (R.RwErr InterpErr b) (B.Pat (Sel a)))
+interpPat :: A.Pat b a -> Either (R.RwErr InterpErr b) (B.Pat (Sel a))
 interpPat = interpPat' annoVal

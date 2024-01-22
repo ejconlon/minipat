@@ -418,7 +418,7 @@ runPatInterpCase :: (TestName, Maybe Arc, Text, [Ev (Sel Ident)]) -> TestTree
 runPatInterpCase (n, mayArc, patStr, evs) = testCase n $ do
   pat <- either throwIO pure (parse tpatP patStr)
   let pat' = normPat pat
-  pat'' <- either throwIO pure =<< interpPat pat'
+  pat'' <- either throwIO pure (interpPat pat')
   let arc = fromMaybe (Arc 0 1) mayArc
       actualEvs = patRun pat'' arc
   actualEvs @?= evs
