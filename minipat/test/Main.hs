@@ -647,6 +647,16 @@ testPatInterpCases =
           , Ev (Span (Arc 0 1) (Just (Arc 0 1))) (sel "y")
           ] -- Note this order is arbitrary, just comes from heap behavior
         )
+      ,
+        ( "sel"
+        , Nothing
+        , "x:1:s"
+        ,
+          [ Ev
+              (Span (Arc 0 1) (Just (Arc 0 1)))
+              (Anno (SelectTransform "s" :<| SelectSample 1 :<| Empty) "x")
+          ]
+        )
       ]
 
 main :: IO ()

@@ -10,7 +10,7 @@ import Bowtie (Anno (..))
 import Control.Applicative (Alternative (..))
 import Control.Exception (Exception)
 import Control.Monad.Except (Except, runExcept)
-import Control.Monad.Reader (ReaderT, runReaderT)
+import Control.Monad.Reader (ReaderT, asks, local, runReaderT)
 import Control.Monad.Trans (lift)
 import Data.Foldable (foldMap')
 import Data.Foldable1 (foldl1')
@@ -40,7 +40,7 @@ lookInterp
   -> A.PatX b a (M b (B.Pat (Sel a), Rational))
   -> R.RwT b (M b) (B.Pat (Sel a), Rational)
 lookInterp g = \case
-  A.PatPure a -> pure (pure (Anno Empty a), 1)
+  A.PatPure a -> lift (asks (\ss -> (pure (Anno ss a), 1)))
   A.PatSilence -> pure (empty, 1)
   A.PatTime t ->
     case t of
@@ -73,7 +73,6 @@ lookInterp g = \case
               in  B.unPat (B.patFastBy w el) arc'
         in  pure (B.Pat (foldMap' (\(z, sp) -> f z (B.spanActive sp)) . B.spanSplit), 1)
   A.PatMod (A.Mod mx md) -> do
-    (r', w) <- lift mx
     case md of
       A.ModTypeSpeed (A.Speed dir spat) -> do
         spat' <- lift (subInterp g spat)
@@ -81,8 +80,9 @@ lookInterp g = \case
               A.SpeedDirFast -> B.patFast
               A.SpeedDirSlow -> B.patSlow
             spat'' = fmap (A.factorValue . g) spat'
+        (r', w) <- lift mx
         pure (f spat'' r', w)
-      A.ModTypeSelect _ -> error "TODO"
+      A.ModTypeSelect s -> lift (local (:|> s) mx)
       A.ModTypeDegrade _ -> error "TODO"
       A.ModTypeEuclid _ -> error "TODO"
   A.PatPoly (A.PolyPat _ _) -> error "TODO"
