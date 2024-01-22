@@ -1,5 +1,7 @@
 module Minipat.Time where
 
+import Nanotime (TimeDelta, timeDeltaFromFracSecs, timeDeltaToFracSecs)
+
 type Time = Rational
 
 timeFloor :: Time -> Integer
@@ -71,3 +73,19 @@ spanSplit (Arc s0 e) =
               then [(si, Span (Arc s e) wh)]
               else (si, Span (Arc s sc) wh) : go sc
   in  go s0
+
+-- | Convert BPM to CPS
+bpmToCps :: Rational -> Rational
+bpmToCps = (/ 60)
+
+-- | Convert CPS to BPM
+cpsToBpm :: Rational -> Rational
+cpsToBpm = (60 *)
+
+-- | Given CPS convert absolute time diff from start to cycle time
+deltaToCycle :: Rational -> TimeDelta -> Time
+deltaToCycle cps = (cps *) . timeDeltaToFracSecs
+
+-- | Given CPS convert cycle time to absolute time diff from start
+cycleToDelta :: Rational -> Time -> TimeDelta
+cycleToDelta cps = timeDeltaFromFracSecs . (/ cps)

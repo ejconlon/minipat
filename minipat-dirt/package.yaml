@@ -1,0 +1,32 @@
+name: minipat-dirt
+version: 0.1.0
+
+github: ejconlon/minipat
+license: BSD3
+author: Eric Conlon
+maintainer: ejconlon@gmail.com
+copyright: (c) 2024 Eric Conlon
+synopsis: Supercollider integration for minipat
+description: Please see the README on GitHub at <https://github.com/ejconlon/minipat#readme>
+tested-with: GHC == 9.6.4
+
+defaults:
+  local: ../defaults.yaml
+
+dependencies:
+- base >= 4.12 && < 5
+- containers >= 0.6 && < 0.7
+- dahdit >= 0.5 && < 0.6
+- dahdit-midi >= 0.5 && < 0.6
+- dahdit-network >= 0.5 && < 0.6
+- minipat >= 0.1 && < 0.2
+- mtl >= 2.3 && < 2.4
+- nanotime >= 0.1 && < 0.2
+- network >= 3.1 && < 3.2
+- optics >= 0.4 && < 0.5
+- resourcet >= 1.3 && < 1.4
+- text >= 2.0 && < 2.1
+
+library:
+  source-dirs: src
+

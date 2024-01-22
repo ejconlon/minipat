@@ -10,9 +10,9 @@ module Minipat.Rewrite
   , rewrite
   , PatRwM
   , rewriteM
-  , PatOv
+  , PatOvh
   , overhaul
-  , PatOvM
+  , PatOvhM
   , overhaulM
   )
 where
@@ -109,20 +109,20 @@ instance Bitraversable (TapF a) where
       A.PatMod m -> fmap A.PatMod (bitraverse f g m)
       A.PatPoly p -> fmap A.PatPoly (traverse g p)
 
-type PatOv b = forall a. PatRw b a (A.UnPat b a)
+type PatOvh b = forall a. PatRw b a (A.UnPat b a)
 
-overhaul :: PatOv b -> A.UnPat b a -> A.UnPat b a
+overhaul :: PatOvh b -> A.UnPat b a -> A.UnPat b a
 overhaul f = runIdentity . overhaulM (f . fmap runIdentity)
 
-type PatOvM b m = forall a. PatRwM b a m (A.UnPat b a)
+type PatOvhM b m = forall a. PatRwM b a m (A.UnPat b a)
 
-overhaulM :: (Monad m) => PatOvM b m -> A.UnPat b a -> m (A.UnPat b a)
-overhaulM f (JotP b0 pf0) = goOvM f (NESeq.singleton b0) pf0
+overhaulM :: (Monad m) => PatOvhM b m -> A.UnPat b a -> m (A.UnPat b a)
+overhaulM f (JotP b0 pf0) = goOvhM f (NESeq.singleton b0) pf0
 
-goOvM :: (Monad m) => PatOvM b m -> NESeq b -> A.PatX b a (A.UnPat b a) -> m (A.UnPat b a)
-goOvM f bs pf = do
-  pf' <- fmap unTapF (bitraverse (fmap A.Pat . pushOvM f bs . A.unPat) (pure . pushOvM f bs) (TapF pf))
+goOvhM :: (Monad m) => PatOvhM b m -> NESeq b -> A.PatX b a (A.UnPat b a) -> m (A.UnPat b a)
+goOvhM f bs pf = do
+  pf' <- fmap unTapF (bitraverse (fmap A.Pat . pushOvhM f bs . A.unPat) (pure . pushOvhM f bs) (TapF pf))
   runReaderT (f pf') bs
 
-pushOvM :: (Monad m) => PatOvM b m -> NESeq b -> A.UnPat b a -> m (A.UnPat b a)
-pushOvM f bs (JotP b pf) = goOvM f (bs NESeq.|> b) pf
+pushOvhM :: (Monad m) => PatOvhM b m -> NESeq b -> A.UnPat b a -> m (A.UnPat b a)
+pushOvhM f bs (JotP b pf) = goOvhM f (bs NESeq.|> b) pf
