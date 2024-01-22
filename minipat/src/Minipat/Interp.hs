@@ -6,11 +6,10 @@ where
 
 import Control.Applicative (Alternative (..))
 import Control.Exception (Exception)
-import Control.Monad.Except (Except, ExceptT, runExcept, runExceptT)
+import Control.Monad.Except (ExceptT, runExceptT)
 import Control.Monad.Trans (lift)
 import Data.Foldable (foldMap')
-import Data.Foldable1 (foldMap1', foldl1')
-import Data.Semigroup (Sum (..))
+import Data.Foldable1 (foldl1')
 import Data.Sequence.NonEmpty qualified as NESeq
 import Minipat.Ast qualified as A
 import Minipat.Base qualified as B
@@ -34,13 +33,13 @@ lookInterp = \case
   A.PatTime t ->
     case t of
       A.TimeShort _ -> R.throwRw InterpErrShort
-      A.TimeLong melw t -> do
+      A.TimeLong melw u -> do
         (el, w) <- lift melw
-        case t of
+        case u of
           A.LongTimeElongate f -> pure (el, A.factorValue f * w)
           A.LongTimeReplicate mf ->
             let v = maybe 2 fromInteger mf
-            in pure (B.patConcat (NESeq.replicate v (el, 1)), fromIntegral v)
+            in  pure (B.patConcat (NESeq.replicate v (el, 1)), fromIntegral v)
   A.PatGroup (A.Group _ ty els) -> do
     els' <- lift (sequenceA els)
     case ty of

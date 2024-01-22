@@ -393,8 +393,7 @@ testPatNormCases =
           ,
             ( "repeat three short"
             , "x ! !"
-            , let xpart = patTime (patPure "x") (LongTimeReplicate Nothing)
-              in  Pat (patTime xpart (LongTimeReplicate Nothing))
+            , Pat (patTime (patPure "x") (LongTimeReplicate (Just 3)))
             )
           ,
             ( "repeat seq short"
@@ -475,10 +474,12 @@ testPatInterpCases =
         ( "slow down"
         , Nothing
         , "x/2"
-        , [ Ev (Span (Arc 0 1) (Just (Arc 0 2))) "x"
+        ,
+          [ Ev (Span (Arc 0 1) (Just (Arc 0 2))) "x"
           ]
         )
-      , ( "seq simple"
+      ,
+        ( "seq simple"
         , Nothing
         , "[x y]"
         ,
@@ -490,7 +491,8 @@ testPatInterpCases =
         ( "seq two cycle"
         , Just (Arc 0 2)
         , "[x y]"
-        , [ Ev (Span (Arc 0 (1 % 2)) (Just (Arc 0 (1 % 2)))) "x"
+        ,
+          [ Ev (Span (Arc 0 (1 % 2)) (Just (Arc 0 (1 % 2)))) "x"
           , Ev (Span (Arc (1 % 2) 1) (Just (Arc (1 % 2) 1))) "y"
           , Ev (Span (Arc 1 (3 % 2)) (Just (Arc 1 (3 % 2)))) "x"
           , Ev (Span (Arc (3 % 2) 2) (Just (Arc (3 % 2) 2))) "y"
@@ -500,145 +502,147 @@ testPatInterpCases =
         ( "repeat one long"
         , Nothing
         , "x!1"
-        , [ Ev (Span (Arc 0 1) (Just (Arc 0 1))) "x"
+        ,
+          [ Ev (Span (Arc 0 1) (Just (Arc 0 1))) "x"
           ]
         )
       ,
         ( "repeat two long"
         , Nothing
         , "x!2"
-        , [ Ev (Span (Arc 0 (1%2)) (Just (Arc 0 (1%2)))) "x"
-          , Ev (Span (Arc (1%2) 1) (Just (Arc (1%2) 1))) "x"
+        ,
+          [ Ev (Span (Arc 0 (1 % 2)) (Just (Arc 0 (1 % 2)))) "x"
+          , Ev (Span (Arc (1 % 2) 1) (Just (Arc (1 % 2) 1))) "x"
           ]
         )
-        ,
+      ,
         ( "repeat two long implicit"
         , Nothing
         , "x!"
-        , [ Ev (Span (Arc 0 (1%2)) (Just (Arc 0 (1%2)))) "x"
-          , Ev (Span (Arc (1%2) 1) (Just (Arc (1%2) 1))) "x"
+        ,
+          [ Ev (Span (Arc 0 (1 % 2)) (Just (Arc 0 (1 % 2)))) "x"
+          , Ev (Span (Arc (1 % 2) 1) (Just (Arc (1 % 2) 1))) "x"
           ]
         )
       ,
         ( "repeat two short"
         , Nothing
         , "x !"
-        , [ Ev (Span (Arc 0 (1%2)) (Just (Arc 0 (1%2)))) "x"
-          , Ev (Span (Arc (1%2) 1) (Just (Arc (1%2) 1))) "x"
+        ,
+          [ Ev (Span (Arc 0 (1 % 2)) (Just (Arc 0 (1 % 2)))) "x"
+          , Ev (Span (Arc (1 % 2) 1) (Just (Arc (1 % 2) 1))) "x"
           ]
         )
       ,
         ( "repeat three long"
         , Nothing
         , "x!3"
-        , [ Ev (Span (Arc 0 (1%3)) (Just (Arc 0 (1%3)))) "x"
-          , Ev (Span (Arc (1%3) (2%3)) (Just (Arc (1%3) (2%3)))) "x"
-          , Ev (Span (Arc (2%3) 1) (Just (Arc (2%3) 1))) "x"
+        ,
+          [ Ev (Span (Arc 0 (1 % 3)) (Just (Arc 0 (1 % 3)))) "x"
+          , Ev (Span (Arc (1 % 3) (2 % 3)) (Just (Arc (1 % 3) (2 % 3)))) "x"
+          , Ev (Span (Arc (2 % 3) 1) (Just (Arc (2 % 3) 1))) "x"
           ]
         )
       ,
         ( "repeat three short"
         , Nothing
         , "x ! !"
-        , [ Ev (Span (Arc 0 (1%3)) (Just (Arc 0 (1%3)))) "x"
-          , Ev (Span (Arc (1%3) (2%3)) (Just (Arc (1%3) (2%3)))) "x"
-          , Ev (Span (Arc (2%3) 1) (Just (Arc (2%3) 1))) "x"
+        ,
+          [ Ev (Span (Arc 0 (1 % 3)) (Just (Arc 0 (1 % 3)))) "x"
+          , Ev (Span (Arc (1 % 3) (2 % 3)) (Just (Arc (1 % 3) (2 % 3)))) "x"
+          , Ev (Span (Arc (2 % 3) 1) (Just (Arc (2 % 3) 1))) "x"
           ]
         )
-        -- ,
-        --   ( "repeat seq short"
-        --   , Nothing
-        --   , "x ! y"
-        --   , mkTPatStream $
-        --       PatStreamBranch PatStreamTypeSeq $
-        --         neseq
-        --           [ mkTPatStream (PatStreamPure (Anno (Arc 0 (1 % 3)) "x"))
-        --           , mkTPatStream (PatStreamPure (Anno (Arc (1 % 3) (2 % 3)) "x"))
-        --           , mkTPatStream (PatStreamPure (Anno (Arc (2 % 3) 1) "y"))
-        --           ]
-        --   )
-        -- ,
-        --   ( "elongate noop"
-        --   , Nothing
-        --   , "x@2"
-        --   , mkTPatStream (PatStreamPure (Anno (Arc 0 1) "x"))
-        --   )
-        -- ,
-        --   ( "elongate long seq"
-        --   , Nothing
-        --   , "x@2 y"
-        --   , mkTPatStream $
-        --       PatStreamBranch PatStreamTypeSeq $
-        --         neseq
-        --           [ mkTPatStream (PatStreamPure (Anno (Arc 0 (2 % 3)) "x"))
-        --           , mkTPatStream (PatStreamPure (Anno (Arc (2 % 3) 1) "y"))
-        --           ]
-        --   )
-        -- ,
-        --   ( "elongate short seq"
-        --   , Nothing
-        --   , "x _ y"
-        --   , mkTPatStream $
-        --       PatStreamBranch PatStreamTypeSeq $
-        --         neseq
-        --           [ mkTPatStream (PatStreamPure (Anno (Arc 0 (2 % 3)) "x"))
-        --           , mkTPatStream (PatStreamPure (Anno (Arc (2 % 3) 1) "y"))
-        --           ]
-        --   )
-        -- ,
-        --   ( "rand two"
-        --   , Nothing
-        --   , "[x | y]"
-        --   , mkTPatStream (PatStreamPure (Anno (Arc 0 1) "x"))
-        --   )
-        -- ,
-        --   ( "rand many"
-        --   , Just (mkCtx (Arc 5 8))
-        --   , "[x | y | z]"
-        --   , mkTPatStream $
-        --       PatStreamBranch PatStreamTypeSeq $
-        --         neseq
-        --           [ mkTPatStream (PatStreamPure (Anno (Arc 5 6) "x"))
-        --           , mkTPatStream (PatStreamPure (Anno (Arc 6 7) "x"))
-        --           , mkTPatStream (PatStreamPure (Anno (Arc 7 8) "y"))
-        --           ]
-        --   )
-        -- ,
-        --   ( "alt singleton"
-        --   , Nothing
-        --   , "<x>"
-        --   , mkTPatStream (PatStreamPure (Anno (Arc 0 1) "x"))
-        --   )
-        -- ,
-        --   ( "alt two"
-        --   , Nothing
-        --   , "<x y>"
-        --   , mkTPatStream (PatStreamPure (Anno (Arc 0 1) "x"))
-        --   )
-        -- ,
-        --   ( "alt many"
-        --   , Just (mkCtx (Arc 5 8))
-        --   , "<x y z>"
-        --   , mkTPatStream $
-        --       PatStreamBranch PatStreamTypeSeq $
-        --         neseq
-        --           [ mkTPatStream (PatStreamPure (Anno (Arc 5 6) "z"))
-        --           , mkTPatStream (PatStreamPure (Anno (Arc 6 7) "x"))
-        --           , mkTPatStream (PatStreamPure (Anno (Arc 7 8) "y"))
-        --           ]
-        --   )
-        -- ,
-        --   ( "par many"
-        --   , Nothing
-        --   , "[x , y , z]"
-        --   , mkTPatStream $
-        --       PatStreamBranch PatStreamTypePar $
-        --         neseq
-        --           [ mkTPatStream (PatStreamPure (Anno (Arc 0 1) "x"))
-        --           , mkTPatStream (PatStreamPure (Anno (Arc 0 1) "y"))
-        --           , mkTPatStream (PatStreamPure (Anno (Arc 0 1) "z"))
-        --           ]
-        --   )
+      ,
+        ( "repeat seq short"
+        , Nothing
+        , "x ! y"
+        ,
+          [ Ev (Span (Arc 0 (1 % 3)) (Just (Arc 0 (1 % 3)))) "x"
+          , Ev (Span (Arc (1 % 3) (2 % 3)) (Just (Arc (1 % 3) (2 % 3)))) "x"
+          , Ev (Span (Arc (2 % 3) 1) (Just (Arc (2 % 3) 1))) "y"
+          ]
+        )
+      ,
+        ( "elongate noop"
+        , Nothing
+        , "x@2"
+        ,
+          [ Ev (Span (Arc 0 1) (Just (Arc 0 1))) "x"
+          ]
+        )
+      ,
+        ( "elongate long seq"
+        , Nothing
+        , "x@2 y"
+        ,
+          [ Ev (Span (Arc 0 (2 % 3)) (Just (Arc 0 (2 % 3)))) "x"
+          , Ev (Span (Arc (2 % 3) 1) (Just (Arc (2 % 3) 1))) "y"
+          ]
+        )
+      ,
+        ( "elongate short seq"
+        , Nothing
+        , "x _ y"
+        ,
+          [ Ev (Span (Arc 0 (2 % 3)) (Just (Arc 0 (2 % 3)))) "x"
+          , Ev (Span (Arc (2 % 3) 1) (Just (Arc (2 % 3) 1))) "y"
+          ]
+        )
+      ,
+        ( "rand two"
+        , Nothing
+        , "[x | y]"
+        ,
+          [ Ev (Span (Arc 0 1) (Just (Arc 0 1))) "x"
+          ]
+        )
+      ,
+        ( "rand many"
+        , Just (Arc 5 8)
+        , "[x | y | z]"
+        ,
+          [ Ev (Span (Arc 5 6) (Just (Arc 5 6))) "x"
+          , Ev (Span (Arc 6 7) (Just (Arc 6 7))) "y"
+          , Ev (Span (Arc 7 8) (Just (Arc 7 8))) "x"
+          ] -- Arbitrary, based on rand seed
+        )
+      ,
+        ( "alt singleton"
+        , Nothing
+        , "<x>"
+        ,
+          [ Ev (Span (Arc 0 1) (Just (Arc 0 1))) "x"
+          ]
+        )
+      ,
+        ( "alt two"
+        , Nothing
+        , "<x y>"
+        ,
+          [ Ev (Span (Arc 0 1) (Just (Arc 0 1))) "x"
+          ]
+        )
+      ,
+        ( "alt many"
+        , Just (Arc 5 8)
+        , "<x y z>"
+        ,
+          [ Ev (Span (Arc 5 6) (Just (Arc 5 6))) "z"
+          , Ev (Span (Arc 6 7) (Just (Arc 6 7))) "x"
+          , Ev (Span (Arc 7 8) (Just (Arc 7 8))) "y"
+          ]
+        )
+      ,
+        ( "par many"
+        , Nothing
+        , "[x , y , z]"
+        ,
+          [ Ev (Span (Arc 0 1) (Just (Arc 0 1))) "x"
+          , Ev (Span (Arc 0 1) (Just (Arc 0 1))) "z"
+          , Ev (Span (Arc 0 1) (Just (Arc 0 1))) "y"
+          ] -- Note this order is arbitrary, just comes from heap behavior
+        )
       ]
 
 main :: IO ()
