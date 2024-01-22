@@ -22,12 +22,14 @@ module Minipat.Base
   , patConcat
   , patFastBy
   , patSlowBy
-  , patEarlyBy
-  , patLateBy
   , patFast
   , patSlow
+  , patEarlyBy
+  , patLateBy
   , patEarly
   , patLate
+  , patDegradeBy
+  , patDegrade
   , patCont
   )
 where
@@ -205,17 +207,6 @@ patConcat pats =
   let w = getSum (foldMap1' (Sum . snd) pats)
   in  Pat (goC w pats)
 
-patTimeMapInv :: (Time -> Time) -> (Time -> Time) -> Pat a -> Pat a
-patTimeMapInv onTape onArc (Pat k) = Pat (tapeTimeMapMono onTape . k . arcTimeMapMono onArc)
-
-patFastBy, patSlowBy :: Rational -> Pat a -> Pat a
-patFastBy t = patTimeMapInv (/ t) (* t)
-patSlowBy t = patTimeMapInv (* t) (/ t)
-
-patEarlyBy, patLateBy :: Time -> Pat a -> Pat a
-patEarlyBy t = patTimeMapInv id (subtract t)
-patLateBy t = patTimeMapInv id (+ t)
-
 patBindWith :: (Maybe Arc -> Maybe Arc -> Maybe Arc) -> Pat a -> (a -> Pat b) -> Pat b
 patBindWith g pa f = Pat $ \arc ->
   let ta = unPat pa arc
@@ -235,16 +226,33 @@ patMixBind = patBindWith (liftA2 arcIntersect)
 patRun :: Pat a -> Arc -> [Ev a]
 patRun pa arc = tapeToList (unPat pa arc)
 
+patTimeMapInv :: (Time -> Time) -> (Time -> Time) -> Pat a -> Pat a
+patTimeMapInv onTape onArc (Pat k) = Pat (tapeTimeMapMono onTape . k . arcTimeMapMono onArc)
+
 patAdjust :: (a -> Pat b -> Pat c) -> Pat a -> Pat b -> Pat c
 patAdjust f pa pb = patInnerBind pa (`f` pb)
+
+patFastBy, patSlowBy :: Rational -> Pat a -> Pat a
+patFastBy t = patTimeMapInv (/ t) (* t)
+patSlowBy t = patTimeMapInv (* t) (/ t)
 
 patFast, patSlow :: Pat Rational -> Pat a -> Pat a
 patFast = patAdjust patFastBy
 patSlow = patAdjust patSlowBy
 
+patEarlyBy, patLateBy :: Time -> Pat a -> Pat a
+patEarlyBy t = patTimeMapInv id (subtract t)
+patLateBy t = patTimeMapInv id (+ t)
+
 patEarly, patLate :: Pat Time -> Pat a -> Pat a
 patEarly = patAdjust patEarlyBy
 patLate = patAdjust patLateBy
+
+patDegradeBy :: Rational -> Pat a -> Pat a
+patDegradeBy _ = id -- TODO fix it
+
+patDegrade :: Pat Rational -> Pat a -> Pat a
+patDegrade = patAdjust patDegradeBy
 
 patCont :: (Time -> a) -> Pat a
 patCont f = Pat (tapeSingleton . evCont f)

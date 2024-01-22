@@ -423,6 +423,11 @@ runPatInterpCase (n, mayArc, patStr, evs) = testCase n $ do
       actualEvs = patRun pat'' arc
   actualEvs @?= evs
 
+ev :: Rational -> Rational -> x -> Ev x
+ev start end val =
+  let arc = Arc start end
+  in  Ev (Span arc (Just arc)) val
+
 sel :: a -> Sel a
 sel = Anno Empty
 
@@ -436,7 +441,7 @@ testPatInterpCases =
         , Nothing
         , "x"
         ,
-          [ Ev (Span (Arc 0 1) (Just (Arc 0 1))) (sel "x")
+          [ ev 0 1 (sel "x")
           ]
         )
       ,
@@ -444,8 +449,8 @@ testPatInterpCases =
         , Just (Arc 0 2)
         , "x"
         ,
-          [ Ev (Span (Arc 0 1) (Just (Arc 0 1))) (sel "x")
-          , Ev (Span (Arc 1 2) (Just (Arc 1 2))) (sel "x")
+          [ ev 0 1 (sel "x")
+          , ev 1 2 (sel "x")
           ]
         )
       ,
@@ -462,7 +467,7 @@ testPatInterpCases =
         , Nothing
         , "[x]"
         ,
-          [ Ev (Span (Arc 0 1) (Just (Arc 0 1))) (sel "x")
+          [ ev 0 1 (sel "x")
           ]
         )
       ,
@@ -470,8 +475,8 @@ testPatInterpCases =
         , Nothing
         , "x*2"
         ,
-          [ Ev (Span (Arc 0 (1 % 2)) (Just (Arc 0 (1 % 2)))) (sel "x")
-          , Ev (Span (Arc (1 % 2) 1) (Just (Arc (1 % 2) 1))) (sel "x")
+          [ ev 0 (1 % 2) (sel "x")
+          , ev (1 % 2) 1 (sel "x")
           ]
         )
       ,
@@ -487,8 +492,8 @@ testPatInterpCases =
         , Nothing
         , "[x y]"
         ,
-          [ Ev (Span (Arc 0 (1 % 2)) (Just (Arc 0 (1 % 2)))) (sel "x")
-          , Ev (Span (Arc (1 % 2) 1) (Just (Arc (1 % 2) 1))) (sel "y")
+          [ ev 0 (1 % 2) (sel "x")
+          , ev (1 % 2) 1 (sel "y")
           ]
         )
       ,
@@ -496,10 +501,10 @@ testPatInterpCases =
         , Just (Arc 0 2)
         , "[x y]"
         ,
-          [ Ev (Span (Arc 0 (1 % 2)) (Just (Arc 0 (1 % 2)))) (sel "x")
-          , Ev (Span (Arc (1 % 2) 1) (Just (Arc (1 % 2) 1))) (sel "y")
-          , Ev (Span (Arc 1 (3 % 2)) (Just (Arc 1 (3 % 2)))) (sel "x")
-          , Ev (Span (Arc (3 % 2) 2) (Just (Arc (3 % 2) 2))) (sel "y")
+          [ ev 0 (1 % 2) (sel "x")
+          , ev (1 % 2) 1 (sel "y")
+          , ev 1 (3 % 2) (sel "x")
+          , ev (3 % 2) 2 (sel "y")
           ]
         )
       ,
@@ -507,7 +512,7 @@ testPatInterpCases =
         , Nothing
         , "x!1"
         ,
-          [ Ev (Span (Arc 0 1) (Just (Arc 0 1))) (sel "x")
+          [ ev 0 1 (sel "x")
           ]
         )
       ,
@@ -515,8 +520,8 @@ testPatInterpCases =
         , Nothing
         , "x!2"
         ,
-          [ Ev (Span (Arc 0 (1 % 2)) (Just (Arc 0 (1 % 2)))) (sel "x")
-          , Ev (Span (Arc (1 % 2) 1) (Just (Arc (1 % 2) 1))) (sel "x")
+          [ ev 0 (1 % 2) (sel "x")
+          , ev (1 % 2) 1 (sel "x")
           ]
         )
       ,
@@ -524,8 +529,8 @@ testPatInterpCases =
         , Nothing
         , "x!"
         ,
-          [ Ev (Span (Arc 0 (1 % 2)) (Just (Arc 0 (1 % 2)))) (sel "x")
-          , Ev (Span (Arc (1 % 2) 1) (Just (Arc (1 % 2) 1))) (sel "x")
+          [ ev 0 (1 % 2) (sel "x")
+          , ev (1 % 2) 1 (sel "x")
           ]
         )
       ,
@@ -533,8 +538,8 @@ testPatInterpCases =
         , Nothing
         , "x !"
         ,
-          [ Ev (Span (Arc 0 (1 % 2)) (Just (Arc 0 (1 % 2)))) (sel "x")
-          , Ev (Span (Arc (1 % 2) 1) (Just (Arc (1 % 2) 1))) (sel "x")
+          [ ev 0 (1 % 2) (sel "x")
+          , ev (1 % 2) 1 (sel "x")
           ]
         )
       ,
@@ -542,9 +547,9 @@ testPatInterpCases =
         , Nothing
         , "x!3"
         ,
-          [ Ev (Span (Arc 0 (1 % 3)) (Just (Arc 0 (1 % 3)))) (sel "x")
-          , Ev (Span (Arc (1 % 3) (2 % 3)) (Just (Arc (1 % 3) (2 % 3)))) (sel "x")
-          , Ev (Span (Arc (2 % 3) 1) (Just (Arc (2 % 3) 1))) (sel "x")
+          [ ev 0 (1 % 3) (sel "x")
+          , ev (1 % 3) (2 % 3) (sel "x")
+          , ev (2 % 3) 1 (sel "x")
           ]
         )
       ,
@@ -552,9 +557,9 @@ testPatInterpCases =
         , Nothing
         , "x ! !"
         ,
-          [ Ev (Span (Arc 0 (1 % 3)) (Just (Arc 0 (1 % 3)))) (sel "x")
-          , Ev (Span (Arc (1 % 3) (2 % 3)) (Just (Arc (1 % 3) (2 % 3)))) (sel "x")
-          , Ev (Span (Arc (2 % 3) 1) (Just (Arc (2 % 3) 1))) (sel "x")
+          [ ev 0 (1 % 3) (sel "x")
+          , ev (1 % 3) (2 % 3) (sel "x")
+          , ev (2 % 3) 1 (sel "x")
           ]
         )
       ,
@@ -562,9 +567,9 @@ testPatInterpCases =
         , Nothing
         , "x ! y"
         ,
-          [ Ev (Span (Arc 0 (1 % 3)) (Just (Arc 0 (1 % 3)))) (sel "x")
-          , Ev (Span (Arc (1 % 3) (2 % 3)) (Just (Arc (1 % 3) (2 % 3)))) (sel "x")
-          , Ev (Span (Arc (2 % 3) 1) (Just (Arc (2 % 3) 1))) (sel "y")
+          [ ev 0 (1 % 3) (sel "x")
+          , ev (1 % 3) (2 % 3) (sel "x")
+          , ev (2 % 3) 1 (sel "y")
           ]
         )
       ,
@@ -572,7 +577,7 @@ testPatInterpCases =
         , Nothing
         , "x@2"
         ,
-          [ Ev (Span (Arc 0 1) (Just (Arc 0 1))) (sel "x")
+          [ ev 0 1 (sel "x")
           ]
         )
       ,
@@ -580,8 +585,8 @@ testPatInterpCases =
         , Nothing
         , "x@2 y"
         ,
-          [ Ev (Span (Arc 0 (2 % 3)) (Just (Arc 0 (2 % 3)))) (sel "x")
-          , Ev (Span (Arc (2 % 3) 1) (Just (Arc (2 % 3) 1))) (sel "y")
+          [ ev 0 (2 % 3) (sel "x")
+          , ev (2 % 3) 1 (sel "y")
           ]
         )
       ,
@@ -589,8 +594,8 @@ testPatInterpCases =
         , Nothing
         , "x _ y"
         ,
-          [ Ev (Span (Arc 0 (2 % 3)) (Just (Arc 0 (2 % 3)))) (sel "x")
-          , Ev (Span (Arc (2 % 3) 1) (Just (Arc (2 % 3) 1))) (sel "y")
+          [ ev 0 (2 % 3) (sel "x")
+          , ev (2 % 3) 1 (sel "y")
           ]
         )
       ,
@@ -598,7 +603,7 @@ testPatInterpCases =
         , Nothing
         , "[x | y]"
         ,
-          [ Ev (Span (Arc 0 1) (Just (Arc 0 1))) (sel "x")
+          [ ev 0 1 (sel "x")
           ]
         )
       ,
@@ -606,9 +611,9 @@ testPatInterpCases =
         , Just (Arc 5 8)
         , "[x | y | z]"
         ,
-          [ Ev (Span (Arc 5 6) (Just (Arc 5 6))) (sel "x")
-          , Ev (Span (Arc 6 7) (Just (Arc 6 7))) (sel "y")
-          , Ev (Span (Arc 7 8) (Just (Arc 7 8))) (sel "x")
+          [ ev 5 6 (sel "x")
+          , ev 6 7 (sel "y")
+          , ev 7 8 (sel "x")
           ] -- Arbitrary, based on rand seed
         )
       ,
@@ -616,7 +621,7 @@ testPatInterpCases =
         , Nothing
         , "<x>"
         ,
-          [ Ev (Span (Arc 0 1) (Just (Arc 0 1))) (sel "x")
+          [ ev 0 1 (sel "x")
           ]
         )
       ,
@@ -624,7 +629,7 @@ testPatInterpCases =
         , Nothing
         , "<x y>"
         ,
-          [ Ev (Span (Arc 0 1) (Just (Arc 0 1))) (sel "x")
+          [ ev 0 1 (sel "x")
           ]
         )
       ,
@@ -632,9 +637,9 @@ testPatInterpCases =
         , Just (Arc 5 8)
         , "<x y z>"
         ,
-          [ Ev (Span (Arc 5 6) (Just (Arc 5 6))) (sel "z")
-          , Ev (Span (Arc 6 7) (Just (Arc 6 7))) (sel "x")
-          , Ev (Span (Arc 7 8) (Just (Arc 7 8))) (sel "y")
+          [ ev 5 6 (sel "z")
+          , ev 6 7 (sel "x")
+          , ev 7 8 (sel "y")
           ]
         )
       ,
@@ -642,9 +647,9 @@ testPatInterpCases =
         , Nothing
         , "[x , y , z]"
         ,
-          [ Ev (Span (Arc 0 1) (Just (Arc 0 1))) (sel "x")
-          , Ev (Span (Arc 0 1) (Just (Arc 0 1))) (sel "z")
-          , Ev (Span (Arc 0 1) (Just (Arc 0 1))) (sel "y")
+          [ ev 0 1 (sel "x")
+          , ev 0 1 (sel "z")
+          , ev 0 1 (sel "y")
           ] -- Note this order is arbitrary, just comes from heap behavior
         )
       ,
@@ -652,11 +657,20 @@ testPatInterpCases =
         , Nothing
         , "x:1:s"
         ,
-          [ Ev
-              (Span (Arc 0 1) (Just (Arc 0 1)))
+          [ ev
+              0
+              1
               (Anno (SelectTransform "s" :<| SelectSample 1 :<| Empty) "x")
           ]
         )
+        -- ,
+        --   ( "degrade"
+        --   , Just (Arc 0 4)
+        --   , "x?"
+        --   ,
+        --     [ ev 0 1 (sel "x")
+        --     ]
+        --   )
       ]
 
 main :: IO ()

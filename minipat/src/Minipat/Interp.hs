@@ -14,6 +14,7 @@ import Control.Monad.Reader (ReaderT, asks, local, runReaderT)
 import Control.Monad.Trans (lift)
 import Data.Foldable (foldMap')
 import Data.Foldable1 (foldl1')
+import Data.Ratio ((%))
 import Data.Sequence (Seq (..))
 import Data.Sequence.NonEmpty qualified as NESeq
 import Minipat.Ast qualified as A
@@ -83,7 +84,11 @@ lookInterp g = \case
         (r', w) <- lift mx
         pure (f spat'' r', w)
       A.ModTypeSelect s -> lift (local (:|> s) mx)
-      A.ModTypeDegrade _ -> error "TODO"
+      A.ModTypeDegrade (A.Degrade dd) -> do
+        let d = maybe (1 % 2) A.factorValue dd
+        (r', w) <- lift mx
+        let r'' = B.patDegradeBy d r'
+        pure (r'', w)
       A.ModTypeEuclid _ -> error "TODO"
   A.PatPoly (A.PolyPat _ _) -> error "TODO"
 
