@@ -203,3 +203,9 @@ patCont f = Pat (tapeSingleton . evCont f)
 --
 -- patSine :: Rational -> Pat Double
 -- patSine = patCont . fnSine
+
+-- patDeriv :: Num n => Pat n -> Pat n
+-- patDeriv = undefined
+--
+-- patInteg :: Num n => Pat n -> Pat n
+-- patInteg = undefined

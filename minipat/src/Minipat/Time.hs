@@ -8,8 +8,8 @@ timeFloor = floor
 timeCeil :: Time -> Integer
 timeCeil = (+ 1) . timeFloor
 
-timeLerp :: Time -> Time -> Time
-timeLerp s e = s + (e - s) / 2
+timeMidpoint :: Time -> Time -> Time
+timeMidpoint s e = s + (e - s) / 2
 
 data Arc = Arc {arcStart :: !Time, arcEnd :: !Time}
   deriving stock (Eq, Ord, Show)
@@ -27,7 +27,7 @@ arcWiden :: Arc -> Arc
 arcWiden (Arc s e) = Arc (fromInteger (timeFloor s)) (fromInteger (timeCeil e))
 
 arcMidpoint :: Arc -> Time
-arcMidpoint (Arc s e) = timeLerp s e
+arcMidpoint (Arc s e) = timeMidpoint s e
 
 arcTimeMapMono :: (Time -> Time) -> Arc -> Arc
 arcTimeMapMono f (Arc s e) = Arc (f s) (f e)
@@ -54,6 +54,11 @@ spanTimeMapMono f (Span ac wh) = Span (arcTimeMapMono f ac) (fmap (arcTimeMapMon
 spanWholeMapMono :: (Maybe Arc -> Maybe Arc) -> Span -> Span
 spanWholeMapMono f (Span ac wh) = Span ac (f wh)
 
+-- | Expands the active arc to cover the whole event
+spanExtent :: Span -> Span
+spanExtent sp@(Span _ wh) = maybe sp (`Span` wh) wh
+
+-- | Splits an Arc into single-cycle spans
 spanSplit :: Arc -> [(Integer, Span)]
 spanSplit (Arc s0 e) =
   let ef = fromInteger (timeFloor e)
