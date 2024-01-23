@@ -25,6 +25,8 @@ source-repository head
 library
   exposed-modules:
       Minipat.Dirt.Dirt
+      Minipat.Dirt.Prelude
+      Minipat.Dirt.Ref
       Minipat.Dirt.Spy
   other-modules:
       Paths_minipat_dirt
@@ -72,5 +74,7 @@ library
     , network ==3.1.*
     , optics ==0.4.*
     , resourcet ==1.3.*
+    , stm ==2.5.*
     , text ==2.0.*
+    , unliftio >0.2 && <0.3
   default-language: GHC2021
