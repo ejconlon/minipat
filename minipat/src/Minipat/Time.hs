@@ -75,12 +75,12 @@ spanSplit (Arc s0 e) =
   in  go s0
 
 -- | Convert BPM to CPS
-bpmToCps :: Rational -> Rational
-bpmToCps = (/ 60)
+bpmToCps :: Integer -> Rational -> Rational
+bpmToCps beatsPerBar bpm = (bpm / 60) / fromInteger beatsPerBar
 
 -- | Convert CPS to BPM
-cpsToBpm :: Rational -> Rational
-cpsToBpm = (60 *)
+cpsToBpm :: Integer -> Rational -> Rational
+cpsToBpm beatsPerBar cps = (cps * fromInteger beatsPerBar) * 60
 
 -- | Given CPS convert absolute time diff from start to cycle time
 deltaToCycle :: Rational -> TimeDelta -> Time
