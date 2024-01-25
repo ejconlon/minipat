@@ -1,17 +1,21 @@
 module Minipat.Dirt.Prelude where
 
-import Control.Exception (throwIO)
+import Data.ByteString.Short (ShortByteString)
+import Dahdit (getRemainingString)
+import Control.Exception (throwIO, SomeException)
+import Control.Concurrent (forkFinally)
 import Control.Monad.IO.Class (liftIO)
 import Data.Ratio ((%))
 import Data.IORef (IORef, newIORef)
-import Dahdit.Network (Conn (..), HostPort (..), udpServerConn, runEncoder, runDecoder)
+import Dahdit.Network (Conn (..), HostPort (..), udpServerConn, runEncoder, Decoder (..))
 import Network.Socket qualified as NS
 import Data.Acquire (Acquire)
-import Dahdit.Midi.Osc (Packet)
+-- import Dahdit.Midi.Osc (Packet)
 import Minipat.Dirt.Ref (ReleaseVar, Ref)
 import Minipat.Dirt.Ref qualified as R
 import Minipat.Dirt.Osc qualified as O
-import Nanotime (PosixTime, TimeDelta, currentTime, timeDeltaFromFracSecs)
+import Nanotime (PosixTime, TimeDelta, currentTime, timeDeltaFromFracSecs, threadDelayDelta)
+import Control.Concurrent.Async (async, waitCatch, cancel)
 
 data Env = Env
   { envTargetHp :: !HostPort
@@ -79,11 +83,17 @@ sendHandshake (St _ _ _ ref) = R.refUse ref $ \case
   Just (OscConn targetAddr (Conn _ enc)) -> do
     runEncoder enc targetAddr O.handshakePkt
 
-listen :: St -> IO (Maybe Packet)
+timeout :: TimeDelta -> IO a -> IO (Either SomeException a)
+timeout td act = do
+  thread <- async act
+  _ <- forkFinally (threadDelayDelta td) (const (cancel thread))
+  waitCatch thread
+
+listen :: St -> IO ShortByteString --(Maybe Packet)
 listen (St (Env _ _ _ _timeout) _ _ ref) = R.refUse ref $ \case
   Nothing -> error "Not connected"
   Just (OscConn _ (Conn dec _)) ->
-    runDecoder dec >>= either throwIO pure . snd
+    unDecoder dec getRemainingString >>= either throwIO pure . snd
 
 test :: IO ()
 test = do

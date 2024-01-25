@@ -64,7 +64,9 @@ library
       TypeFamilies
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints -fno-warn-unused-top-binds
   build-depends:
-      base >=4.12 && <5
+      async
+    , base >=4.12 && <5
+    , bytestring
     , containers ==0.6.*
     , dahdit ==0.5.*
     , dahdit-midi ==0.5.*
