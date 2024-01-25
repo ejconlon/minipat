@@ -2,7 +2,19 @@ module Minipat.Base
   ( Ev (..)
   , evCont
   , Tape
+  , tapeFilter
+  , tapeFastBy
+  , tapeSlowBy
+  , tapeEarlyBy
+  , tapeLateBy
+  , tapeDegradeBy
+  , tapeUncons
+  , tapeSingleton
+  , tapeToList
+  , tapeConcatMap
+  , tapeFromList
   , Pat (..)
+  , patFilter
   , patInnerBind
   , patOuterBind
   , patMixBind
@@ -59,6 +71,9 @@ newtype Tape a = Tape {unTape :: Heap (Entry Span a)}
 
 instance Functor Tape where
   fmap f = Tape . H.mapMonotonic (\(Entry s a) -> Entry s (f a)) . unTape
+
+tapeFilter :: (a -> Bool) -> Tape a -> Tape a
+tapeFilter f = Tape . H.filter (\(Entry _ a) -> f a) . unTape
 
 tapeFastBy :: Integer -> Rational -> Tape a -> Tape a
 tapeFastBy o r =
@@ -129,6 +144,9 @@ instance (IsString s) => IsString (Pat s) where
 
 -- LAW TO VERIFY
 -- forall p a. patRun p a == spanSplit a >>= \(_, a') -> fmap (_) (patRun p a')
+
+patFilter :: (a -> Bool) -> Pat a -> Pat a
+patFilter f (Pat k) = Pat (tapeFilter f . k)
 
 patBindWith :: (Maybe Arc -> Maybe Arc -> Maybe Arc) -> Pat a -> (a -> Pat b) -> Pat b
 patBindWith g pa f = Pat $ \arc ->

@@ -74,13 +74,33 @@ spanSplit (Arc s0 e) =
               else (si, Span (Arc s sc) wh) : go sc
   in  go s0
 
--- | Convert BPM to CPS
-bpmToCps :: Integer -> Rational -> Rational
-bpmToCps beatsPerBar bpm = (bpm / 60) / fromInteger beatsPerBar
+-- | The start of the span in cycle time, if active
+spanCycle :: Span -> Maybe Rational
+spanCycle = \case
+  sp@(Span _ (Just (Arc sw _))) | spanIsStart sp -> Just sw
+  _ -> Nothing
 
--- | Convert CPS to BPM
+-- | The length of the whole event in cycle time, if discrete
+spanDelta :: Span -> Maybe Rational
+spanDelta = \case
+  Span _ (Just (Arc sw ew)) -> Just (ew - sw)
+  _ -> Nothing
+
+-- | True if active start aligns with whole start
+spanIsStart :: Span -> Bool
+spanIsStart (Span (Arc sa _) mwh) =
+  case mwh of
+    Nothing -> True
+    Just (Arc sw _) -> sa == sw
+
+-- | Convert BPM to CPS, given BPC (beats per cycle)
+-- (often 4 beats/bar, 1 bar/cycle, so 4 bpc)
+bpmToCps :: Integer -> Rational -> Rational
+bpmToCps bpc bpm = (bpm / 60) / fromInteger bpc
+
+-- | Convert CPS to BPM, given BPC (beats per cycle)
 cpsToBpm :: Integer -> Rational -> Rational
-cpsToBpm beatsPerBar cps = (cps * fromInteger beatsPerBar) * 60
+cpsToBpm bpc cps = (cps * fromInteger bpc) * 60
 
 -- | Given CPS convert absolute time diff from start to cycle time
 deltaToCycle :: Rational -> TimeDelta -> Time
@@ -89,3 +109,7 @@ deltaToCycle cps = (cps *) . timeDeltaToFracSecs
 -- | Given CPS convert cycle time to absolute time diff from start
 cycleToDelta :: Rational -> Time -> TimeDelta
 cycleToDelta cps = timeDeltaFromFracSecs . (/ cps)
+
+-- | Given CPS return relative time from origin to target
+relDelta :: Rational -> Rational -> Rational -> TimeDelta
+relDelta cps origin target = timeDeltaFromFracSecs (cps * (target - origin))

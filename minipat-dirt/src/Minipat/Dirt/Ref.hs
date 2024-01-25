@@ -6,7 +6,6 @@ module Minipat.Dirt.Ref
   , refPure
   , refEmpty
   , refCreate
-  , refCleanup
   , refReplace
   , refUse
   , RefM
