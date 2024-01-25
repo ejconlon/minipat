@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Minipat.Dirt.OSC where
+module Minipat.Dirt.Osc where
 
 import Data.Foldable (foldl', for_)
 import Control.Exception (Exception)
@@ -142,8 +142,8 @@ namedPayload :: PrePayload -> Seq Datum
 namedPayload = foldl' go Empty . Map.toList where
   go !acc (k, v) = acc :|> DatumString k :|> v
 
-playMsg :: Rational -> B.Tape PrePayload -> PosixTime -> M (Maybe Packet)
-playMsg cps tape dawn = go1 where
+playPkt :: Rational -> B.Tape PrePayload -> PosixTime -> M (Maybe Packet)
+playPkt cps tape dawn = go1 where
   go1 = do
     flip fmap (tapeToPayloads cps tape) $ \case
       Nothing -> Nothing
@@ -158,3 +158,9 @@ playMsg cps tape dawn = go1 where
       else
         let ty = posixToNtp (addTime originTy td)
         in PacketBundle (Bundle ty (Seq.singleton pkt))
+
+helloAddr :: RawAddrPat
+helloAddr = "/dirt/hello"
+
+helloPkt :: Packet
+helloPkt = PacketMsg (Msg helloAddr Empty)

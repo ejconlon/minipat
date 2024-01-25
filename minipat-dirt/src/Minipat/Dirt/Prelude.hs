@@ -2,11 +2,12 @@ module Minipat.Dirt.Prelude where
 
 import Data.Ratio ((%))
 import Data.IORef (IORef, newIORef)
-import Dahdit.Network (Conn, HostPort (..), udpClientConn)
+import Dahdit.Network (Conn (..), HostPort (..), udpClientConn, runEncoder)
 import Network.Socket qualified as NS
 import Data.Acquire (Acquire)
 import Minipat.Dirt.Ref (ReleaseVar, Ref)
 import Minipat.Dirt.Ref qualified as R
+import Minipat.Dirt.Osc qualified as O
 import Nanotime (PosixTime, currentTime)
 
 -- private con
@@ -53,3 +54,7 @@ reinitSt st = R.refReplace (stDirt st) (acqDirt (envDirtHp (stEnv st)))
 cleanupSt :: St -> IO ()
 cleanupSt = R.releaseVarCleanup . stRel
 
+sendHello :: St -> IO ()
+sendHello (St _ _ _ ref) = R.refUse ref $ \case
+  Nothing -> error "Not connected"
+  Just (Dirt _ (Conn _ enc)) -> runEncoder enc () O.helloPkt
