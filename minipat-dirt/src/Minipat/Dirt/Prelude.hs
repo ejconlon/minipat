@@ -1,8 +1,8 @@
 module Minipat.Dirt.Prelude where
 
 import Data.ByteString.Short (ShortByteString)
-import Dahdit (getRemainingString)
-import Control.Exception (throwIO, SomeException)
+import Dahdit (Get, get, getRemainingString)
+import Control.Exception (throwIO, SomeException, bracket)
 import Control.Concurrent (forkFinally)
 import Control.Monad.IO.Class (liftIO)
 import Data.Ratio ((%))
@@ -10,7 +10,7 @@ import Data.IORef (IORef, newIORef)
 import Dahdit.Network (Conn (..), HostPort (..), udpServerConn, runEncoder, Decoder (..))
 import Network.Socket qualified as NS
 import Data.Acquire (Acquire)
--- import Dahdit.Midi.Osc (Packet)
+import Dahdit.Midi.Osc (Packet)
 import Minipat.Dirt.Ref (ReleaseVar, Ref)
 import Minipat.Dirt.Ref qualified as R
 import Minipat.Dirt.Osc qualified as O
@@ -77,31 +77,43 @@ reinitSt st = R.refReplace (stConn st) (acqConn (stEnv st))
 cleanupSt :: St -> IO ()
 cleanupSt = R.releaseVarCleanup . stRel
 
-sendHandshake :: St -> IO ()
-sendHandshake (St _ _ _ ref) = R.refUse ref $ \case
+sendPkt :: St -> Packet -> IO ()
+sendPkt (St _ _ _ ref) pkt = R.refUse ref $ \case
   Nothing -> error "Not connected"
   Just (OscConn targetAddr (Conn _ enc)) -> do
-    runEncoder enc targetAddr O.handshakePkt
+    runEncoder enc targetAddr pkt
 
-timeout :: TimeDelta -> IO a -> IO (Either SomeException a)
-timeout td act = do
+-- type Recv = ShortByteString
+-- getRecv :: Get Recv
+-- getRecv = getRemainingString
+
+type Recv = Packet
+getRecv :: Get Recv
+getRecv = get
+
+withTimeout :: TimeDelta -> IO a -> IO (Either SomeException a)
+withTimeout td act = do
   thread <- async act
   _ <- forkFinally (threadDelayDelta td) (const (cancel thread))
   waitCatch thread
 
-listen :: St -> IO ShortByteString --(Maybe Packet)
-listen (St (Env _ _ _ _timeout) _ _ ref) = R.refUse ref $ \case
+recvPkt :: St -> IO (Either SomeException Recv)
+recvPkt (St (Env _ _ _ timeout) _ _ ref) = R.refUse ref $ \case
   Nothing -> error "Not connected"
   Just (OscConn _ (Conn dec _)) ->
-    unDecoder dec getRemainingString >>= either throwIO pure . snd
+    withTimeout timeout $
+      unDecoder dec getRecv >>= either throwIO pure . snd
+
+sendHandshake :: St -> IO ()
+sendHandshake st = sendPkt st O.handshakePkt
 
 test :: IO ()
 test = do
   putStrLn "initializing"
-  st <- initSt defaultEnv
-  putStrLn "sending handshake"
-  sendHandshake st
-  putStrLn "listening"
-  mp <- listen st
-  putStrLn "received"
-  print mp
+  bracket (initSt defaultEnv) cleanupSt $ \st -> do
+    putStrLn "sending handshake"
+    sendHandshake st
+    putStrLn "listening"
+    resp <- recvPkt st
+    putStrLn "received"
+    print resp
