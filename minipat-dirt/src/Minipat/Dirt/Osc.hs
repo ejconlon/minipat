@@ -159,8 +159,8 @@ playPkt cps tape dawn = go1 where
         let ty = posixToNtp (addTime originTy td)
         in PacketBundle (Bundle ty (Seq.singleton pkt))
 
-helloAddr :: RawAddrPat
-helloAddr = "/dirt/hello"
+handshakeAddr :: RawAddrPat
+handshakeAddr = "/dirt/handshake"
 
-helloPkt :: Packet
-helloPkt = PacketMsg (Msg helloAddr Empty)
+handshakePkt :: Packet
+handshakePkt = PacketMsg (Msg handshakeAddr Empty)
