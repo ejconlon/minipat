@@ -20,7 +20,7 @@ dependencies:
 - heaps >= 0.4 && < 0.5
 - looksee >= 0.5 && < 0.6
 - mtl >= 2.3 && < 2.4
-- nanotime >= 0.1 && < 0.2
+- nanotime >= 0.2 && < 0.3
 - nonempty-containers >= 0.3 && < 0.4
 - prettyprinter >= 1.7 && < 1.8
 - text >= 2.0 && < 2.1

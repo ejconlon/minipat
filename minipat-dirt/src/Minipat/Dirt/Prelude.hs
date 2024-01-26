@@ -2,15 +2,16 @@
 
 module Minipat.Dirt.Prelude where
 
+import Control.Applicative (empty)
 import Control.Concurrent (forkFinally)
 import Control.Concurrent.Async (async, cancel, waitCatch)
-import Control.Concurrent.STM.TVar (newTVarIO)
+import Control.Concurrent.STM (atomically)
+import Control.Concurrent.STM.TVar (TVar, newTVarIO, readTVar, writeTVar)
 import Control.Exception (SomeException, bracket, throwIO)
 import Control.Monad.IO.Class (liftIO)
 import Dahdit.Midi.Osc (Datum (..), Packet)
-import Dahdit.Network (Conn (..), HostPort (..), runDecoder, runEncoder, udpServerConn)
+import Dahdit.Network (Conn (..), HostPort (..), resolveAddr, runDecoder, runEncoder, udpServerConn)
 import Data.Acquire (Acquire)
-import Data.IORef (IORef, newIORef)
 import Data.Map.Strict qualified as Map
 import Data.Ratio ((%))
 import Minipat.Base qualified as B
@@ -18,7 +19,7 @@ import Minipat.Dirt.Osc qualified as O
 import Minipat.Dirt.Ref (Ref, ReleaseVar)
 import Minipat.Dirt.Ref qualified as R
 import Minipat.Time qualified as T
-import Nanotime (PosixTime, TimeDelta, currentTime, threadDelayDelta, timeDeltaFromFracSecs)
+import Nanotime (PosixTime (..), TimeDelta, currentTime, threadDelayDelta, timeDeltaFromFracSecs)
 import Network.Socket qualified as NS
 
 data Env = Env
@@ -38,11 +39,58 @@ defaultEnv =
     , envOscTimeout = timeDeltaFromFracSecs @Double 0.1
     }
 
-data Clock = Clock
-  { clDawn :: !PosixTime
-  , clCps :: !Rational
+data Domain = Domain
+  { domDawn :: !(TVar PosixTime)
+  , domCps :: !(TVar Rational)
+  , domAhead :: !(TVar TimeDelta)
+  , domPlaying :: !(TVar Bool)
+  , domCycle :: !(TVar Integer)
+  , domPat :: !(TVar (B.Pat O.OscMap))
   }
-  deriving stock (Eq, Ord, Show)
+
+newDomain :: IO Domain
+newDomain =
+  Domain
+    <$> newTVarIO (PosixTime 0)
+    <*> newTVarIO 0
+    <*> newTVarIO 0
+    <*> newTVarIO False
+    <*> newTVarIO 0
+    <*> newTVarIO empty
+
+initDomain :: Env -> IO Domain
+initDomain env = newDomain >>= \d -> d <$ reinitDomain env d
+
+reinitDomain :: Env -> Domain -> IO ()
+reinitDomain env dom = do
+  now <- currentTime
+  let cps = envCps env
+      td = timeDeltaFromFracSecs (1 / cps)
+  atomically $ do
+    writeTVar (domDawn dom) now
+    writeTVar (domCps dom) cps
+    writeTVar (domAhead dom) td
+    writeTVar (domPlaying dom) False
+    writeTVar (domCycle dom) 0
+    writeTVar (domPat dom) empty
+
+setCps :: St -> Rational -> IO ()
+setCps = undefined -- NOTE have to change dawn + ahead
+
+setPlaying :: St -> Bool -> IO ()
+setPlaying st x = atomically (writeTVar (domPlaying (stDom st)) x)
+
+setPat :: St -> B.Pat O.OscMap -> IO ()
+setPat st x = atomically (writeTVar (domPat (stDom st)) x)
+
+setCycle :: St -> Integer -> IO ()
+setCycle st x =
+  let dom = stDom st
+  in  atomically $ do
+        dawn <- readTVar (domDawn dom)
+        cps <- readTVar (domCps dom)
+        cyc <- readTVar (domCycle dom)
+        error "TODO"
 
 data OscConn = OscConn
   { ocTargetAddr :: !NS.SockAddr
@@ -52,17 +100,9 @@ data OscConn = OscConn
 data St = St
   { stEnv :: !Env
   , stRel :: !ReleaseVar
-  , stClock :: !(IORef Clock)
+  , stDom :: !Domain
   , stConn :: !(Ref OscConn)
   }
-
--- TODO export this from dahdit-network
-resolveAddr :: HostPort -> IO NS.SockAddr
-resolveAddr hp@(HostPort host port) = do
-  infos <- NS.getAddrInfo Nothing host (Just (show port))
-  case infos of
-    [] -> fail ("Could not resolve address: " ++ show hp)
-    info : _ -> pure (NS.addrAddress info)
 
 acqConn :: Env -> Acquire OscConn
 acqConn (Env targetHp listenHp _ _) = do
@@ -74,9 +114,8 @@ initSt :: Env -> IO St
 initSt env = do
   rv <- R.releaseVarCreate
   ref <- R.refCreate rv (acqConn env)
-  now <- currentTime
-  cv <- newIORef (Clock now (envCps env))
-  pure (St env rv cv ref)
+  dom <- initDomain env
+  pure (St env rv dom ref)
 
 reinitSt :: St -> IO ()
 reinitSt st = R.refReplace (stConn st) (acqConn (stEnv st))

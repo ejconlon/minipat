@@ -28,7 +28,7 @@ import Control.Monad.Trans.Resource (createInternalState)
 import Control.Monad.Trans.Resource.Internal (ReleaseMap, registerType, stateCleanup)
 import Data.Acquire.Internal (Acquire (..), Allocated (..), ReleaseType (..), mkAcquire)
 import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef, writeIORef)
-import Nanotime (MonoTime (..), TimeDelta (..), awaitDelta, currentTime)
+import Nanotime (MonoTime (..), TimeDelta, awaitDelta, currentTime)
 
 type ReleaseVar = IORef ReleaseMap
 
@@ -156,8 +156,8 @@ refLoop :: ReleaseVar -> TVar TimeDelta -> IO (Maybe a) -> IO (Ref (Async a))
 refLoop rv tdv act = do
   tv <- newIORef (MonoTime 0)
   let act' = do
-        td@(TimeDelta x) <- readTVarIO tdv
-        unless (x > 0) (throwIO NonPosTimeDeltaErr)
+        td <- readTVarIO tdv
+        unless (td > 0) (throwIO NonPosTimeDeltaErr)
         awaitTime td tv
         act >>= maybe act' pure
   refAsync rv act'

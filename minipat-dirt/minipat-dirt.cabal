@@ -71,7 +71,7 @@ library
     , dahdit-network ==0.5.*
     , minipat ==0.1.*
     , mtl ==2.3.*
-    , nanotime ==0.1.*
+    , nanotime ==0.2.*
     , network ==3.1.*
     , optics ==0.4.*
     , resourcet ==1.3.*
