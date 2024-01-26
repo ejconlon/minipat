@@ -21,7 +21,7 @@ where
 
 import Control.Concurrent.Async (Async, async, cancel)
 import Control.Concurrent.STM (STM, atomically, retry)
-import Control.Concurrent.STM.TVar (TVar, newTVarIO, readTVar, writeTVar, readTVarIO)
+import Control.Concurrent.STM.TVar (TVar, newTVarIO, readTVar, readTVarIO, writeTVar)
 import Control.Exception (Exception, bracket, bracket_, mask, throwIO)
 import Control.Monad (ap, unless, void)
 import Control.Monad.Trans.Resource (createInternalState)
