@@ -6,6 +6,8 @@ module Minipat.Dirt.Ref
   , refPure
   , refEmpty
   , refCreate
+  , refCreate'
+  , refAsync
   , refReplace
   , refUse
   , RefM
@@ -15,8 +17,9 @@ module Minipat.Dirt.Ref
   )
 where
 
-import Data.Acquire.Internal (Acquire (..), Allocated (..), ReleaseType (..))
+import Data.Acquire.Internal (Acquire (..), Allocated (..), ReleaseType (..), mkAcquire)
 import Data.IORef (IORef, newIORef, writeIORef, readIORef, atomicModifyIORef')
+import Control.Concurrent.Async (Async, async, cancel)
 import Control.Concurrent.STM (STM, atomically, retry)
 import Control.Concurrent.STM.TVar (TVar, newTVarIO, readTVar, writeTVar)
 import Control.Exception (mask, bracket, bracket_)
@@ -53,6 +56,12 @@ refCreate rv (Acquire f) = mask $ \restore -> do
   ref <- fmap Ref (newTVarIO (XOpen allo))
   _ <- registerType rv (\rt -> void (refCleanupWith rt ref))
   pure ref
+
+refCreate' :: ReleaseVar -> IO a -> (a -> IO ()) -> IO (Ref a)
+refCreate' rv acq rel = refCreate rv (mkAcquire acq rel)
+
+refAsync :: ReleaseVar -> IO a -> IO (Ref (Async a))
+refAsync rv act = refCreate' rv (async act) cancel
 
 -- | Release the ref, returning True if this was the releaser.
 -- False if early return due to other thread releasing.
