@@ -19,9 +19,14 @@ import Control.Monad.Trans (lift)
 import Control.Monad.Except (throwError)
 import Nanotime (PosixTime, TimeDelta, addTime, posixToNtp)
 
+type OscMap = Map Text Datum
+
+namedPayload :: OscMap -> Seq Datum
+namedPayload = foldl' go Empty . Map.toList where
+  go !acc (k, v) = acc :|> DatumString k :|> v
+
 data OscErr =
-    OscErrReq !Text
-  | OscErrDupe !Text
+    OscErrDupe !Text
   | OscErrLate
   | OscErrCont
   deriving stock (Eq, Ord, Show)
@@ -30,97 +35,76 @@ instance Exception OscErr
 
 type M = Either OscErr
 
-type PrePayload = Map Text Datum
+insertSafe :: Text -> Datum -> OscMap -> M OscMap
+insertSafe k v m =
+  case Map.lookup k m of
+    Nothing -> pure (Map.insert k v m)
+    Just _ -> throwError (OscErrDupe k)
 
-guardRequired :: [Text] -> Map Text a -> M ()
-guardRequired rs m = for_ rs $ \r ->
-  maybe (Left (OscErrReq r)) (const (Right ())) (Map.lookup r m)
-
-replaceAliases :: [(Text, Text)] -> Map Text a -> M (Map Text a)
+replaceAliases :: [(Text, Text)] -> OscMap -> M OscMap
 replaceAliases as m0 = foldM go m0 as where
-  go !m (x, y) =
+  go !m (x, y) = do
     case Map.lookup x m of
-      Nothing -> Right m
-      Just v -> case Map.lookup y m of
-        Nothing -> Right (Map.insert y v (Map.delete x m))
-        Just _ -> Left (OscErrDupe y)
-
-data Endpoint = Endpoint
-  { epAddr :: !RawAddrPat
-  , epReq :: ![Text]
-  , epProvided :: ![Text]
-  , epAliases :: ![(Text, Text)]
-  } deriving stock (Eq, Ord, Show)
+      Nothing -> pure m
+      Just v -> insertSafe y v (Map.delete x m)
 
 -- Useful params:
 -- sound - string, req - name of sound
 -- orbit - int, opt - index of orbit
--- cps - float - current cps
--- cycle - float - event start in cycle time
--- delta - float - microsecond length of event
-playEp :: Endpoint
-playEp = Endpoint
-  { epAddr = "/dirt/play"
-  , epReq =
-    [ "sound"
-    , "orbit"
-    ]
-  , epProvided =
-    [ "delta"
-    , "cps"
-    , "cycle"
-    ]
-  , epAliases =
-    [ ("lpf", "cutoff")
-    , ("lpq", "resonance")
-    , ("hpf", "hcutoff")
-    , ("lpq", "resonance")
-    , ("bpf", "bandf")
-    , ("bpq", "resonance")
-    , ("res", "resonance")
-    , ("midi", "midinote")
-    , ("n", "midinote")
-    , ("oct", "octave")
-    , ("accel", "accelerate")
-    , ("leg", "legato")
-    , ("delayt", "delaytime")
-    , ("delayfb", "delayfeedback")
-    , ("phasr", "phaserrate")
-    , ("phasd", "phaserdepth")
-    , ("tremrate", "tremolorate")
-    , ("tremd", "tremolodepth")
-    , ("dist", "distort")
-    , ("o", "orbit")
-    , ("ts", "timescale")
-    , ("s", "sound")
-    ]
-  }
+-- cps - float, given - current cps
+-- cycle - float, given - event start in cycle time
+-- delta - float, given - microsecond length of event
+playAliases :: [(Text, Text)]
+playAliases =
+  [ ("lpf", "cutoff")
+  , ("lpq", "resonance")
+  , ("hpf", "hcutoff")
+  , ("lpq", "resonance")
+  , ("bpf", "bandf")
+  , ("bpq", "resonance")
+  , ("res", "resonance")
+  , ("midi", "midinote")
+  , ("n", "midinote")
+  , ("oct", "octave")
+  , ("accel", "accelerate")
+  , ("leg", "legato")
+  , ("delayt", "delaytime")
+  , ("delayfb", "delayfeedback")
+  , ("phasr", "phaserrate")
+  , ("phasd", "phaserdepth")
+  , ("tremrate", "tremolorate")
+  , ("tremd", "tremolodepth")
+  , ("dist", "distort")
+  , ("o", "orbit")
+  , ("ts", "timescale")
+  , ("s", "sound")
+  ]
+
+spanCycleM :: T.Span -> M Rational
+spanCycleM = maybe (throwError OscErrLate) (pure . (/ 1000)) . T.spanCycle
+
+spanDeltaM :: T.Span -> M Rational
+spanDeltaM = maybe (throwError OscErrCont) pure . T.spanDelta
 
 modSt :: Monad m => (s -> m s) -> StateT s m ()
 modSt f = get >>= lift . f >>= put
 
-onSt :: Monad m => (s -> m ()) -> StateT s m ()
-onSt f = get >>= lift . f
-
-insSt :: (Monad m, Ord k) => k -> m v -> StateT (Map k v) m ()
-insSt k mv = lift mv >>= modify' . Map.insert k
-
 datFloat :: Rational -> Datum
 datFloat = DatumFloat . fromRational
 
-spanCycleM :: T.Span -> M Rational
-spanCycleM = maybe (throwError OscErrLate) pure . T.spanCycle
-
-evToPayload :: Rational -> B.Ev PrePayload -> M PrePayload
-evToPayload cps (B.Ev sp m0) = flip execStateT m0 $ do
-  modSt (replaceAliases (epAliases playEp))
-  onSt (guardRequired (epReq playEp))
-  insSt "cps" (pure (datFloat cps))
-  insSt "cycle" (fmap (datFloat . (/ 1000)) (spanCycleM sp))
-  insSt "delta" (maybe (throwError OscErrCont) (pure . datFloat) (T.spanDelta sp))
+evToPayload :: Rational -> B.Ev OscMap -> M OscMap
+evToPayload cps (B.Ev sp dat0) = flip execStateT dat0 $ do
+  modSt $ replaceAliases playAliases
+  modSt $ insertSafe "cps" (datFloat cps)
+  modSt $ \dat -> do
+    cycle <- spanCycleM sp
+    insertSafe "cycle" (datFloat cycle) dat
+  modSt $ \dat -> do
+    delta <- spanDeltaM sp
+    insertSafe "delta" (datFloat delta) dat
 
 -- Each time delta is against origin
-tapeToPayloads :: Rational -> B.Tape PrePayload -> M (Maybe (Rational, Seq (TimeDelta, PrePayload)))
+tapeToPayloads :: Rational -> B.Tape OscMap -> M (Maybe (Rational, Seq (TimeDelta, OscMap)))
 tapeToPayloads cps tape = go1 where
   go1 = case B.tapeToList tape of
     [] -> pure Nothing
@@ -138,11 +122,7 @@ tapeToPayloads cps tape = go1 where
 playAddr :: RawAddrPat
 playAddr = "/dirt/play"
 
-namedPayload :: PrePayload -> Seq Datum
-namedPayload = foldl' go Empty . Map.toList where
-  go !acc (k, v) = acc :|> DatumString k :|> v
-
-playPkt :: Rational -> B.Tape PrePayload -> PosixTime -> M (Maybe Packet)
+playPkt :: Rational -> B.Tape OscMap -> PosixTime -> M (Maybe Packet)
 playPkt cps tape dawn = go1 where
   go1 = do
     flip fmap (tapeToPayloads cps tape) $ \case

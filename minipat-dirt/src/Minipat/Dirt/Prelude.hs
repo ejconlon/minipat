@@ -1,7 +1,6 @@
 module Minipat.Dirt.Prelude where
 
-import Data.ByteString.Short (ShortByteString)
-import Dahdit (Get, get, getRemainingString)
+import Dahdit (Get, get)
 import Control.Exception (throwIO, SomeException, bracket)
 import Control.Concurrent (forkFinally)
 import Control.Monad.IO.Class (liftIO)
@@ -82,10 +81,6 @@ sendPkt (St _ _ _ ref) pkt = R.refUse ref $ \case
   Nothing -> error "Not connected"
   Just (OscConn targetAddr (Conn _ enc)) -> do
     runEncoder enc targetAddr pkt
-
--- type Recv = ShortByteString
--- getRecv :: Get Recv
--- getRecv = getRemainingString
 
 type Recv = Packet
 getRecv :: Get Recv
