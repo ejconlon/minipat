@@ -4,6 +4,7 @@ module Minipat.Dirt.Prelude where
 
 import Control.Concurrent (forkFinally)
 import Control.Concurrent.Async (async, cancel, waitCatch)
+import Control.Concurrent.STM.TVar (newTVarIO)
 import Control.Exception (SomeException, bracket, throwIO)
 import Control.Monad.IO.Class (liftIO)
 import Dahdit.Midi.Osc (Datum (..), Packet)
@@ -13,7 +14,6 @@ import Data.IORef (IORef, newIORef)
 import Data.Map.Strict qualified as Map
 import Data.Ratio ((%))
 import Minipat.Base qualified as B
-import Minipat.Dirt.Loop (loopAsync)
 import Minipat.Dirt.Osc qualified as O
 import Minipat.Dirt.Ref (Ref, ReleaseVar)
 import Minipat.Dirt.Ref qualified as R
@@ -146,9 +146,9 @@ testPlay = do
 
 testLoop :: IO ()
 testLoop = do
-  tdv <- newIORef (timeDeltaFromFracSecs 0.5)
+  tdv <- newTVarIO (timeDeltaFromFracSecs 0.5)
   withSt $ \st -> do
-    _ <- loopAsync (stRel st) tdv $ do
+    _ <- R.refLoop (stRel st) tdv $ do
       putStrLn "hello"
       pure Nothing
     threadDelayDelta (timeDeltaFromFracSecs 2)

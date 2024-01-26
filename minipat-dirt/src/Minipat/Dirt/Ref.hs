@@ -7,9 +7,11 @@ module Minipat.Dirt.Ref
   , refEmpty
   , refCreate
   , refCreate'
-  , refAsync
   , refReplace
   , refUse
+  , refAsync
+  , NonPosTimeDeltaErr (..)
+  , refLoop
   , RefM
   , refRead
   , refMayRead
@@ -19,13 +21,14 @@ where
 
 import Control.Concurrent.Async (Async, async, cancel)
 import Control.Concurrent.STM (STM, atomically, retry)
-import Control.Concurrent.STM.TVar (TVar, newTVarIO, readTVar, writeTVar)
-import Control.Exception (bracket, bracket_, mask)
-import Control.Monad (ap, void)
+import Control.Concurrent.STM.TVar (TVar, newTVarIO, readTVar, writeTVar, readTVarIO)
+import Control.Exception (Exception, bracket, bracket_, mask, throwIO)
+import Control.Monad (ap, unless, void)
 import Control.Monad.Trans.Resource (createInternalState)
 import Control.Monad.Trans.Resource.Internal (ReleaseMap, registerType, stateCleanup)
 import Data.Acquire.Internal (Acquire (..), Allocated (..), ReleaseType (..), mkAcquire)
 import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef, writeIORef)
+import Nanotime (MonoTime (..), TimeDelta (..), awaitDelta, currentTime)
 
 type ReleaseVar = IORef ReleaseMap
 
@@ -59,9 +62,6 @@ refCreate rv (Acquire f) = mask $ \restore -> do
 
 refCreate' :: ReleaseVar -> IO a -> (a -> IO ()) -> IO (Ref a)
 refCreate' rv acq rel = refCreate rv (mkAcquire acq rel)
-
-refAsync :: ReleaseVar -> IO a -> IO (Ref (Async a))
-refAsync rv act = refCreate' rv (async act) cancel
 
 -- | Release the ref, returning True if this was the releaser.
 -- False if early return due to other thread releasing.
@@ -132,6 +132,35 @@ refUse (Ref var) f = bracket bacq brel use
     f . \case
       Just (XOpen (Allocated a _)) -> Just a
       _ -> Nothing
+
+refAsync :: ReleaseVar -> IO a -> IO (Ref (Async a))
+refAsync rv act = refCreate' rv (async act) cancel
+
+data NonPosTimeDeltaErr = NonPosTimeDeltaErr
+  deriving stock (Eq, Ord, Show)
+
+instance Exception NonPosTimeDeltaErr
+
+awaitTime :: TimeDelta -> IORef MonoTime -> IO ()
+awaitTime td tv = do
+  lastTime <- readIORef tv
+  if lastTime == MonoTime 0
+    then do
+      curTime <- currentTime
+      writeIORef tv curTime
+    else do
+      nextTime <- awaitDelta lastTime td
+      writeIORef tv nextTime
+
+refLoop :: ReleaseVar -> TVar TimeDelta -> IO (Maybe a) -> IO (Ref (Async a))
+refLoop rv tdv act = do
+  tv <- newIORef (MonoTime 0)
+  let act' = do
+        td@(TimeDelta x) <- readTVarIO tdv
+        unless (x > 0) (throwIO NonPosTimeDeltaErr)
+        awaitTime td tv
+        act >>= maybe act' pure
+  refAsync rv act'
 
 newtype RefM a = RefM {unRefM :: forall b. (Maybe a -> STM () -> STM (b, STM ())) -> STM (b, STM ())}
   deriving stock (Functor)
