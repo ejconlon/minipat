@@ -6,7 +6,7 @@ import Control.Applicative (empty)
 import Control.Concurrent (forkFinally)
 import Control.Concurrent.Async (async, cancel, waitCatch)
 import Control.Concurrent.STM (atomically)
-import Control.Concurrent.STM.TVar (TVar, newTVarIO, readTVar, writeTVar)
+import Control.Concurrent.STM.TVar (TVar, modifyTVar', newTVarIO, readTVar, readTVarIO, writeTVar)
 import Control.Exception (SomeException, bracket, throwIO)
 import Control.Monad.IO.Class (liftIO)
 import Dahdit.Midi.Osc (Datum (..), Packet)
@@ -19,7 +19,7 @@ import Minipat.Dirt.Osc qualified as O
 import Minipat.Dirt.Ref (Ref, ReleaseVar)
 import Minipat.Dirt.Ref qualified as R
 import Minipat.Time qualified as T
-import Nanotime (PosixTime (..), TimeDelta, currentTime, threadDelayDelta, timeDeltaFromFracSecs)
+import Nanotime (PosixTime (..), TimeDelta, TimeLike (..), threadDelayDelta, timeDeltaFromFracSecs)
 import Network.Socket qualified as NS
 
 data Env = Env
@@ -74,8 +74,34 @@ reinitDomain env dom = do
     writeTVar (domCycle dom) 0
     writeTVar (domPat dom) empty
 
+getDawn :: St -> IO PosixTime
+getDawn = readTVarIO . domDawn . stDom
+
+getCps :: St -> IO Rational
+getCps = readTVarIO . domCps . stDom
+
+getAhead :: St -> IO TimeDelta
+getAhead = readTVarIO . domAhead . stDom
+
+getPlaying :: St -> IO Bool
+getPlaying = readTVarIO . domPlaying . stDom
+
+getPat :: St -> IO (B.Pat O.OscMap)
+getPat = readTVarIO . domPat . stDom
+
+getCycle :: St -> IO Integer
+getCycle = readTVarIO . domCycle . stDom
+
 setCps :: St -> Rational -> IO ()
-setCps = undefined -- NOTE have to change dawn + ahead
+setCps st cps' = atomically $ do
+  let dom = stDom st
+  dawn <- readTVar (domDawn dom)
+  cps <- readTVar (domCps dom)
+  cyc <- readTVar (domCycle dom)
+  let dawn' = addTime dawn (timeDeltaFromFracSecs (fromInteger cyc * (cps' - cps)))
+  writeTVar (domDawn dom) dawn'
+  writeTVar (domCps dom) cps'
+  writeTVar (domAhead dom) (timeDeltaFromFracSecs (1 / cps'))
 
 setPlaying :: St -> Bool -> IO ()
 setPlaying st x = atomically (writeTVar (domPlaying (stDom st)) x)
@@ -84,13 +110,32 @@ setPat :: St -> B.Pat O.OscMap -> IO ()
 setPat st x = atomically (writeTVar (domPat (stDom st)) x)
 
 setCycle :: St -> Integer -> IO ()
-setCycle st x =
+setCycle st cyc' = atomically $ do
   let dom = stDom st
-  in  atomically $ do
-        dawn <- readTVar (domDawn dom)
-        cps <- readTVar (domCps dom)
-        cyc <- readTVar (domCycle dom)
-        error "TODO"
+  dawn <- readTVar (domDawn dom)
+  cps <- readTVar (domCps dom)
+  cyc <- readTVar (domCycle dom)
+  let dawn' = addTime dawn (timeDeltaFromFracSecs (cps * fromInteger (cyc' - cyc)))
+  writeTVar (domDawn dom) dawn'
+  writeTVar (domCycle dom) cyc'
+
+data Record = Record
+  { recDawn :: !PosixTime
+  , recCps :: !Rational
+  , recTape :: !(B.Tape O.OscMap)
+  }
+  deriving stock (Eq, Ord, Show)
+
+advanceCycle :: St -> IO Record
+advanceCycle st = atomically $ do
+  let dom = stDom st
+  dawn <- readTVar (domDawn dom)
+  cps <- readTVar (domCps dom)
+  cyc <- fmap fromInteger (readTVar (domCycle dom))
+  pat <- readTVar (domPat dom)
+  let tape = B.unPat pat (T.Arc cyc (cyc + 1))
+  modifyTVar' (domCycle dom) (+ 1)
+  pure (Record dawn cps tape)
 
 data OscConn = OscConn
   { ocTargetAddr :: !NS.SockAddr
@@ -185,9 +230,24 @@ testPlay = do
 
 testLoop :: IO ()
 testLoop = do
-  tdv <- newTVarIO (timeDeltaFromFracSecs @Double 0.5)
   withSt $ \st -> do
+    let tdv = domAhead (stDom st)
     _ <- R.refLoop (stRel st) tdv $ do
       putStrLn "hello"
       pure Nothing
     threadDelayDelta (timeDeltaFromFracSecs @Double 2)
+
+testRecord :: IO ()
+testRecord = do
+  withSt $ \st -> do
+    setPat st $
+      pure $
+        Map.fromList
+          [ ("s", DatumString "tabla")
+          ]
+    let tdv = domAhead (stDom st)
+    _ <- R.refLoop (stRel st) tdv $ do
+      r <- advanceCycle st
+      print r
+      pure Nothing
+    threadDelayDelta (timeDeltaFromFracSecs @Double 3)
