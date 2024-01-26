@@ -1,20 +1,24 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Minipat.Dirt.Prelude where
 
-import Dahdit (Get, get)
 import Control.Exception (throwIO, SomeException, bracket)
 import Control.Concurrent (forkFinally)
 import Control.Monad.IO.Class (liftIO)
 import Data.Ratio ((%))
 import Data.IORef (IORef, newIORef)
-import Dahdit.Network (Conn (..), HostPort (..), udpServerConn, runEncoder, Decoder (..))
+import Dahdit.Network (Conn (..), HostPort (..), udpServerConn, runEncoder, runDecoder)
 import Network.Socket qualified as NS
 import Data.Acquire (Acquire)
-import Dahdit.Midi.Osc (Packet)
+import Dahdit.Midi.Osc (Packet, Datum (..))
 import Minipat.Dirt.Ref (ReleaseVar, Ref)
 import Minipat.Dirt.Ref qualified as R
 import Minipat.Dirt.Osc qualified as O
+import Minipat.Base qualified as B
+import Minipat.Time qualified as T
 import Nanotime (PosixTime, TimeDelta, currentTime, timeDeltaFromFracSecs, threadDelayDelta)
 import Control.Concurrent.Async (async, waitCatch, cancel)
+import Data.Map.Strict qualified as Map
 
 data Env = Env
   { envTargetHp :: !HostPort
@@ -82,29 +86,32 @@ sendPkt (St _ _ _ ref) pkt = R.refUse ref $ \case
   Just (OscConn targetAddr (Conn _ enc)) -> do
     runEncoder enc targetAddr pkt
 
-type Recv = Packet
-getRecv :: Get Recv
-getRecv = get
-
 withTimeout :: TimeDelta -> IO a -> IO (Either SomeException a)
 withTimeout td act = do
   thread <- async act
   _ <- forkFinally (threadDelayDelta td) (const (cancel thread))
   waitCatch thread
 
-recvPkt :: St -> IO (Either SomeException Recv)
+recvPkt :: St -> IO (Either SomeException Packet)
 recvPkt (St (Env _ _ _ timeout) _ _ ref) = R.refUse ref $ \case
   Nothing -> error "Not connected"
   Just (OscConn _ (Conn dec _)) ->
     withTimeout timeout $
-      unDecoder dec getRecv >>= either throwIO pure . snd
+      runDecoder dec >>= either throwIO pure . snd
 
 sendHandshake :: St -> IO ()
 sendHandshake st = sendPkt st O.handshakePkt
 
-test :: IO ()
-test = do
-  putStrLn "initializing"
+sendPlay :: St -> PosixTime -> Rational -> B.Tape O.OscMap -> IO Bool
+sendPlay st dawn cps tape =
+  case O.playPkt dawn cps tape of
+    Left err -> throwIO err
+    Right Nothing -> pure False
+    Right (Just pkt) -> True <$ sendPkt st pkt
+
+testHandshake :: IO ()
+testHandshake = do
+  putStrLn "handshake - initializing"
   bracket (initSt defaultEnv) cleanupSt $ \st -> do
     putStrLn "sending handshake"
     sendHandshake st
@@ -112,3 +119,18 @@ test = do
     resp <- recvPkt st
     putStrLn "received"
     print resp
+
+testPlay :: IO ()
+testPlay = do
+  putStrLn "play - initializing"
+  bracket (initSt defaultEnv) cleanupSt $ \st -> do
+    dawn <- currentTime
+    putStrLn ("sending play @ " <> show dawn)
+    let cps = 1 % 2
+    sendPlay st dawn cps $ B.tapeSingleton $
+      B.Ev (T.Span (T.Arc 0 1) (Just (T.Arc 0 1))) $
+        Map.fromList
+          [ ("sound", DatumString "tabla")
+          , ("orbit", DatumInt32 0)
+          ]
+    putStrLn "done"

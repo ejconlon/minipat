@@ -2,6 +2,7 @@ module Minipat.Time where
 
 import Nanotime (TimeDelta, timeDeltaFromFracSecs, timeDeltaToFracSecs)
 
+-- TODO newtype this CycleTime
 type Time = Rational
 
 timeFloor :: Time -> Integer

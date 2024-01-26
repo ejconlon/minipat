@@ -95,13 +95,13 @@ datFloat = DatumFloat . fromRational
 evToPayload :: Rational -> B.Ev OscMap -> M OscMap
 evToPayload cps (B.Ev sp dat0) = flip execStateT dat0 $ do
   modSt $ replaceAliases playAliases
-  modSt $ insertSafe "cps" (datFloat cps)
+  -- modSt $ insertSafe "cps" (datFloat cps)
+  -- modSt $ \dat -> do
+  --   cyc <- spanCycleM sp
+  --   insertSafe "cycle" (datFloat cyc) dat
   modSt $ \dat -> do
-    cycle <- spanCycleM sp
-    insertSafe "cycle" (datFloat cycle) dat
-  modSt $ \dat -> do
-    delta <- spanDeltaM sp
-    insertSafe "delta" (datFloat delta) dat
+    del <- spanDeltaM sp
+    insertSafe "delta" (datFloat del) dat
 
 -- Each time delta is against origin
 tapeToPayloads :: Rational -> B.Tape OscMap -> M (Maybe (Rational, Seq (TimeDelta, OscMap)))
@@ -122,8 +122,8 @@ tapeToPayloads cps tape = go1 where
 playAddr :: RawAddrPat
 playAddr = "/dirt/play"
 
-playPkt :: Rational -> B.Tape OscMap -> PosixTime -> M (Maybe Packet)
-playPkt cps tape dawn = go1 where
+playPkt :: PosixTime -> Rational -> B.Tape OscMap -> M (Maybe Packet)
+playPkt dawn cps tape = go1 where
   go1 = do
     flip fmap (tapeToPayloads cps tape) $ \case
       Nothing -> Nothing
