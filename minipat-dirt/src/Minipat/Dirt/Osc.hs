@@ -5,11 +5,11 @@ module Minipat.Dirt.Osc where
 import Control.Exception (Exception)
 import Control.Monad (foldM)
 import Control.Monad.Except (throwError)
-import Control.Monad.State.Strict (MonadState (..), StateT, execStateT, modify')
+import Control.Monad.State.Strict (MonadState (..), StateT, execStateT)
 import Control.Monad.Trans (lift)
 import Dahdit.Midi.Osc (Bundle (..), Datum (..), Msg (..), Packet (..))
 import Dahdit.Midi.OscAddr (RawAddrPat)
-import Data.Foldable (foldl', for_)
+import Data.Foldable (foldl')
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Sequence (Seq (..))
@@ -95,7 +95,7 @@ datFloat :: Rational -> Datum
 datFloat = DatumFloat . fromRational
 
 evToPayload :: Rational -> B.Ev OscMap -> M OscMap
-evToPayload cps (B.Ev sp dat0) = flip execStateT dat0 $ do
+evToPayload _cps (B.Ev sp dat0) = flip execStateT dat0 $ do
   modSt $ replaceAliases playAliases
   -- modSt $ insertSafe "cps" (datFloat cps)
   -- modSt $ \dat -> do

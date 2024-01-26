@@ -146,9 +146,9 @@ testPlay = do
 
 testLoop :: IO ()
 testLoop = do
-  tdv <- newTVarIO (timeDeltaFromFracSecs 0.5)
+  tdv <- newTVarIO (timeDeltaFromFracSecs @Double 0.5)
   withSt $ \st -> do
     _ <- R.refLoop (stRel st) tdv $ do
       putStrLn "hello"
       pure Nothing
-    threadDelayDelta (timeDeltaFromFracSecs 2)
+    threadDelayDelta (timeDeltaFromFracSecs @Double 2)

@@ -1,0 +1,8 @@
+#!/bin/bash
+set -eu
+export OS_NAME="$(uname -s)"
+if test "${OS_NAME}" = "Darwin"; then
+  exec open -a /Applications/SuperCollider.app $@
+else
+  /usr/bin/scide $@ &
+fi

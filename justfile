@@ -45,3 +45,7 @@ lint:
 lint-apply:
   find {{ src_dirs }} -name '*.hs' | xargs -t -I % stack exec -- hlint % --refactor --refactor-options="--inplace"
 
+# Run a dirt session in ghci
+dirt:
+  bin/dirt-ghci
+

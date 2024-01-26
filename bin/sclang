@@ -1,0 +1,9 @@
+#!/bin/bash
+set -eu
+export OS_NAME="$(uname -s)"
+if test "${OS_NAME}" = "Darwin"; then
+  SC_EXE="/Applications/SuperCollider.app/Contents/MacOS/sclang"
+else
+  SC_EXE="/usr/bin/sclang"
+fi
+exec ${SC_EXE} $@
