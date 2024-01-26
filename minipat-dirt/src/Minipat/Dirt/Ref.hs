@@ -17,15 +17,15 @@ module Minipat.Dirt.Ref
   )
 where
 
-import Data.Acquire.Internal (Acquire (..), Allocated (..), ReleaseType (..), mkAcquire)
-import Data.IORef (IORef, newIORef, writeIORef, readIORef, atomicModifyIORef')
 import Control.Concurrent.Async (Async, async, cancel)
 import Control.Concurrent.STM (STM, atomically, retry)
 import Control.Concurrent.STM.TVar (TVar, newTVarIO, readTVar, writeTVar)
-import Control.Exception (mask, bracket, bracket_)
+import Control.Exception (bracket, bracket_, mask)
 import Control.Monad (ap, void)
 import Control.Monad.Trans.Resource (createInternalState)
 import Control.Monad.Trans.Resource.Internal (ReleaseMap, registerType, stateCleanup)
+import Data.Acquire.Internal (Acquire (..), Allocated (..), ReleaseType (..), mkAcquire)
+import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef, writeIORef)
 
 type ReleaseVar = IORef ReleaseMap
 
@@ -41,7 +41,7 @@ data X a
   | XClosing
   | XClosed
 
-newtype Ref a = Ref { unRef :: TVar (X a) }
+newtype Ref a = Ref {unRef :: TVar (X a)}
   deriving stock (Eq)
 
 refPure :: a -> IO (Ref a)
@@ -109,7 +109,7 @@ refReplace (Ref var) (Acquire f) = do
           Nothing -> pure ()
           Just x -> atomically (writeTVar var x)
       use = do
-        mx <- atomicModifyIORef' xvar (, Just XClosed)
+        mx <- atomicModifyIORef' xvar (,Just XClosed)
         case mx of
           Just (XOpen (Allocated _ rel)) -> rel ReleaseEarly
           _ -> pure ()
@@ -128,9 +128,10 @@ refUse (Ref var) f = bracket bacq brel use
       XLocked -> retry
       _ -> pure Nothing
   brel = maybe (pure ()) (atomically . writeTVar var)
-  use = f . \case
-    Just (XOpen (Allocated a _)) -> Just a
-    _ -> Nothing
+  use =
+    f . \case
+      Just (XOpen (Allocated a _)) -> Just a
+      _ -> Nothing
 
 newtype RefM a = RefM {unRefM :: forall b. (Maybe a -> STM () -> STM (b, STM ())) -> STM (b, STM ())}
   deriving stock (Functor)

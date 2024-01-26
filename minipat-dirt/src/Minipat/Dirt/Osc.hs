@@ -2,31 +2,32 @@
 
 module Minipat.Dirt.Osc where
 
-import Data.Foldable (foldl', for_)
 import Control.Exception (Exception)
 import Control.Monad (foldM)
+import Control.Monad.Except (throwError)
+import Control.Monad.State.Strict (MonadState (..), StateT, execStateT, modify')
+import Control.Monad.Trans (lift)
+import Dahdit.Midi.Osc (Bundle (..), Datum (..), Msg (..), Packet (..))
+import Dahdit.Midi.OscAddr (RawAddrPat)
+import Data.Foldable (foldl', for_)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
-import Dahdit.Midi.Osc (Datum (..), Msg (..), Bundle (..), Packet (..))
-import Dahdit.Midi.OscAddr (RawAddrPat)
-import Minipat.Base qualified as B
-import Minipat.Time qualified as T
 import Data.Sequence (Seq (..))
 import Data.Sequence qualified as Seq
 import Data.Text (Text)
-import Control.Monad.State.Strict (StateT, execStateT, MonadState (..), modify')
-import Control.Monad.Trans (lift)
-import Control.Monad.Except (throwError)
+import Minipat.Base qualified as B
+import Minipat.Time qualified as T
 import Nanotime (PosixTime, TimeDelta, addTime, posixToNtp)
 
 type OscMap = Map Text Datum
 
 namedPayload :: OscMap -> Seq Datum
-namedPayload = foldl' go Empty . Map.toList where
+namedPayload = foldl' go Empty . Map.toList
+ where
   go !acc (k, v) = acc :|> DatumString k :|> v
 
-data OscErr =
-    OscErrDupe !Text
+data OscErr
+  = OscErrDupe !Text
   | OscErrLate
   | OscErrCont
   deriving stock (Eq, Ord, Show)
@@ -42,7 +43,8 @@ insertSafe k v m =
     Just _ -> throwError (OscErrDupe k)
 
 replaceAliases :: [(Text, Text)] -> OscMap -> M OscMap
-replaceAliases as m0 = foldM go m0 as where
+replaceAliases as m0 = foldM go m0 as
+ where
   go !m (x, y) = do
     case Map.lookup x m of
       Nothing -> pure m
@@ -86,7 +88,7 @@ spanCycleM = maybe (throwError OscErrLate) (pure . (/ 1000)) . T.spanCycle
 spanDeltaM :: T.Span -> M Rational
 spanDeltaM = maybe (throwError OscErrCont) pure . T.spanDelta
 
-modSt :: Monad m => (s -> m s) -> StateT s m ()
+modSt :: (Monad m) => (s -> m s) -> StateT s m ()
 modSt f = get >>= lift . f >>= put
 
 datFloat :: Rational -> Datum
@@ -105,7 +107,8 @@ evToPayload cps (B.Ev sp dat0) = flip execStateT dat0 $ do
 
 -- Each time delta is against origin
 tapeToPayloads :: Rational -> B.Tape OscMap -> M (Maybe (Rational, Seq (TimeDelta, OscMap)))
-tapeToPayloads cps tape = go1 where
+tapeToPayloads cps tape = go1
+ where
   go1 = case B.tapeToList tape of
     [] -> pure Nothing
     evs@(B.Ev sp _ : _) -> do
@@ -123,21 +126,22 @@ playAddr :: RawAddrPat
 playAddr = "/dirt/play"
 
 playPkt :: PosixTime -> Rational -> B.Tape OscMap -> M (Maybe Packet)
-playPkt dawn cps tape = go1 where
+playPkt dawn cps tape = go1
+ where
   go1 = do
     flip fmap (tapeToPayloads cps tape) $ \case
       Nothing -> Nothing
       Just (originCy, pls) ->
         let originTy = addTime dawn (T.cycleToDelta cps originCy)
             subPkts = fmap (go2 originTy) pls
-        in Just (PacketBundle (Bundle (posixToNtp originTy) subPkts))
+        in  Just (PacketBundle (Bundle (posixToNtp originTy) subPkts))
   go2 originTy (td, pl) =
     let pkt = PacketMsg (Msg playAddr (namedPayload pl))
-    in if td == 0
-      then pkt
-      else
-        let ty = posixToNtp (addTime originTy td)
-        in PacketBundle (Bundle ty (Seq.singleton pkt))
+    in  if td == 0
+          then pkt
+          else
+            let ty = posixToNtp (addTime originTy td)
+            in  PacketBundle (Bundle ty (Seq.singleton pkt))
 
 handshakeAddr :: RawAddrPat
 handshakeAddr = "/dirt/handshake"

@@ -2,43 +2,47 @@
 
 module Minipat.Dirt.Prelude where
 
-import Control.Exception (throwIO, SomeException, bracket)
 import Control.Concurrent (forkFinally)
+import Control.Concurrent.Async (async, cancel, waitCatch)
+import Control.Exception (SomeException, bracket, throwIO)
 import Control.Monad.IO.Class (liftIO)
-import Data.Ratio ((%))
-import Data.IORef (IORef, newIORef)
-import Dahdit.Network (Conn (..), HostPort (..), udpServerConn, runEncoder, runDecoder)
-import Network.Socket qualified as NS
+import Dahdit.Midi.Osc (Datum (..), Packet)
+import Dahdit.Network (Conn (..), HostPort (..), runDecoder, runEncoder, udpServerConn)
 import Data.Acquire (Acquire)
-import Dahdit.Midi.Osc (Packet, Datum (..))
-import Minipat.Dirt.Ref (ReleaseVar, Ref)
-import Minipat.Dirt.Ref qualified as R
-import Minipat.Dirt.Osc qualified as O
-import Minipat.Base qualified as B
-import Minipat.Time qualified as T
-import Nanotime (PosixTime, TimeDelta, currentTime, timeDeltaFromFracSecs, threadDelayDelta)
-import Control.Concurrent.Async (async, waitCatch, cancel)
+import Data.IORef (IORef, newIORef)
 import Data.Map.Strict qualified as Map
+import Data.Ratio ((%))
+import Minipat.Base qualified as B
+import Minipat.Dirt.Loop (loopAsync)
+import Minipat.Dirt.Osc qualified as O
+import Minipat.Dirt.Ref (Ref, ReleaseVar)
+import Minipat.Dirt.Ref qualified as R
+import Minipat.Time qualified as T
+import Nanotime (PosixTime, TimeDelta, currentTime, threadDelayDelta, timeDeltaFromFracSecs)
+import Network.Socket qualified as NS
 
 data Env = Env
   { envTargetHp :: !HostPort
   , envListenHp :: !HostPort
   , envCps :: !Rational
   , envOscTimeout :: !TimeDelta
-  } deriving stock (Eq, Ord, Show)
+  }
+  deriving stock (Eq, Ord, Show)
 
 defaultEnv :: Env
-defaultEnv = Env
-  { envTargetHp = HostPort (Just "127.0.0.1") 57120
-  , envListenHp = HostPort (Just "127.0.0.1") 57129
-  , envCps = 1 % 2 -- 120 bpm, 4 bpc
-  , envOscTimeout = timeDeltaFromFracSecs @Double 0.1
-  }
+defaultEnv =
+  Env
+    { envTargetHp = HostPort (Just "127.0.0.1") 57120
+    , envListenHp = HostPort (Just "127.0.0.1") 57129
+    , envCps = 1 % 2 -- 120 bpm, 4 bpc
+    , envOscTimeout = timeDeltaFromFracSecs @Double 0.1
+    }
 
 data Clock = Clock
   { clDawn :: !PosixTime
   , clCps :: !Rational
-  } deriving stock (Eq, Ord, Show)
+  }
+  deriving stock (Eq, Ord, Show)
 
 data OscConn = OscConn
   { ocTargetAddr :: !NS.SockAddr
@@ -80,6 +84,9 @@ reinitSt st = R.refReplace (stConn st) (acqConn (stEnv st))
 cleanupSt :: St -> IO ()
 cleanupSt = R.releaseVarCleanup . stRel
 
+withSt :: (St -> IO a) -> IO a
+withSt = bracket (initSt defaultEnv) cleanupSt
+
 sendPkt :: St -> Packet -> IO ()
 sendPkt (St _ _ _ ref) pkt = R.refUse ref $ \case
   Nothing -> error "Not connected"
@@ -112,7 +119,7 @@ sendPlay st dawn cps tape =
 testHandshake :: IO ()
 testHandshake = do
   putStrLn "handshake - initializing"
-  bracket (initSt defaultEnv) cleanupSt $ \st -> do
+  withSt $ \st -> do
     putStrLn "sending handshake"
     sendHandshake st
     putStrLn "listening"
@@ -123,14 +130,25 @@ testHandshake = do
 testPlay :: IO ()
 testPlay = do
   putStrLn "play - initializing"
-  bracket (initSt defaultEnv) cleanupSt $ \st -> do
+  withSt $ \st -> do
     dawn <- currentTime
     putStrLn ("sending play @ " <> show dawn)
     let cps = 1 % 2
-    sendPlay st dawn cps $ B.tapeSingleton $
-      B.Ev (T.Span (T.Arc 0 1) (Just (T.Arc 0 1))) $
-        Map.fromList
-          [ ("sound", DatumString "tabla")
-          , ("orbit", DatumInt32 0)
-          ]
+    _ <-
+      sendPlay st dawn cps $
+        B.tapeSingleton $
+          B.Ev (T.Span (T.Arc 0 1) (Just (T.Arc 0 1))) $
+            Map.fromList
+              [ ("sound", DatumString "tabla")
+              , ("orbit", DatumInt32 0)
+              ]
     putStrLn "done"
+
+testLoop :: IO ()
+testLoop = do
+  tdv <- newIORef (timeDeltaFromFracSecs 0.5)
+  withSt $ \st -> do
+    _ <- loopAsync (stRel st) tdv $ do
+      putStrLn "hello"
+      pure Nothing
+    threadDelayDelta (timeDeltaFromFracSecs 2)

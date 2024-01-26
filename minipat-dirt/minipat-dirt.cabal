@@ -24,6 +24,7 @@ source-repository head
 
 library
   exposed-modules:
+      Minipat.Dirt.Loop
       Minipat.Dirt.Osc
       Minipat.Dirt.Prelude
       Minipat.Dirt.Ref

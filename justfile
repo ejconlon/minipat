@@ -1,5 +1,5 @@
 stack_build := "stack build --fast"
-src_dirs := "minipat"
+src_dirs := "minipat minipat-dirt"
 
 # No default tasks
 default:

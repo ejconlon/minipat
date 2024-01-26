@@ -4,10 +4,10 @@ module Minipat.Dirt.Spy where
 
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Resource (runResourceT)
+import Dahdit.Midi.Osc (Datum (..), Msg (..), Packet (..))
 import Dahdit.Network (Conn (..), HostPort (..), resolveAddr, runDecoder, runEncoder, udpServerConn)
 import Data.Acquire (allocateAcquire)
 import Data.Sequence qualified as Seq
-import Dahdit.Midi.Osc (Datum (..), Msg (..), Packet (..))
 import Network.Socket qualified as NS
 
 oscSpyLocal :: Int -> Int -> IO ()
