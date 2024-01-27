@@ -7,17 +7,16 @@ import Control.Monad (foldM)
 import Control.Monad.Except (throwError)
 import Control.Monad.State.Strict (MonadState (..), StateT, execStateT)
 import Control.Monad.Trans (lift)
-import Dahdit.Midi.Osc (Bundle (..), Datum (..), Msg (..), Packet (..))
+import Dahdit.Midi.Osc (Datum (..), Msg (..), Packet (..))
 import Dahdit.Midi.OscAddr (RawAddrPat)
 import Data.Foldable (foldl')
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Sequence (Seq (..))
-import Data.Sequence qualified as Seq
 import Data.Text (Text)
 import Minipat.Base qualified as B
 import Minipat.Time qualified as T
-import Nanotime (PosixTime, TimeDelta, addTime, posixToNtp)
+import Nanotime (PosixTime, TimeDelta, addTime)
 
 type OscMap = Map Text Datum
 
@@ -95,15 +94,16 @@ datFloat :: Rational -> Datum
 datFloat = DatumFloat . fromRational
 
 evToPayload :: Rational -> B.Ev OscMap -> M OscMap
-evToPayload _cps (B.Ev sp dat0) = flip execStateT dat0 $ do
+evToPayload _cps (B.Ev _sp dat0) = flip execStateT dat0 $ do
   modSt $ replaceAliases playAliases
-  -- modSt $ insertSafe "cps" (datFloat cps)
-  -- modSt $ \dat -> do
-  --   cyc <- spanCycleM sp
-  --   insertSafe "cycle" (datFloat cyc) dat
-  modSt $ \dat -> do
-    del <- spanDeltaM sp
-    insertSafe "delta" (datFloat del) dat
+
+-- modSt $ insertSafe "cps" (datFloat cps)
+-- modSt $ \dat -> do
+--   cyc <- spanCycleM sp
+--   insertSafe "cycle" (datFloat cyc) dat
+-- modSt $ \dat -> do
+--   del <- spanDeltaM sp
+--   insertSafe "delta" (datFloat del) dat
 
 -- Each time delta is against origin
 tapeToPayloads :: Rational -> B.Tape OscMap -> M (Maybe (Rational, Seq (TimeDelta, OscMap)))
@@ -132,26 +132,28 @@ data PlayRecord = PlayRecord
   }
   deriving stock (Eq, Ord, Show)
 
-playPkt :: PlayRecord -> M (Maybe Packet)
-playPkt (PlayRecord dawn cps tape) = go1
+data TimedPacket = TimedPacket
+  { tpTime :: !PosixTime
+  , tpPacket :: !Packet
+  }
+  deriving stock (Eq, Ord, Show)
+
+playPackets :: PlayRecord -> M (Seq TimedPacket)
+playPackets (PlayRecord dawn cps tape) = go1
  where
   go1 = do
     flip fmap (tapeToPayloads cps tape) $ \case
-      Nothing -> Nothing
+      Nothing -> Empty
       Just (originCy, pls) ->
-        let originTy = addTime dawn (T.cycleToDelta cps originCy)
-            subPkts = fmap (go2 originTy) pls
-        in  Just (PacketBundle (Bundle (posixToNtp originTy) subPkts))
-  go2 originTy (td, pl) =
-    let pkt = PacketMsg (Msg playAddr (namedPayload pl))
-    in  if td == 0
-          then pkt
-          else
-            let ty = posixToNtp (addTime originTy td)
-            in  PacketBundle (Bundle ty (Seq.singleton pkt))
+        let originTm = addTime dawn (T.cycleToDelta cps originCy)
+        in  fmap (go2 originTm) pls
+  go2 originTm (td, pl) =
+    let tm = addTime originTm td
+        pkt = PacketMsg (Msg playAddr (namedPayload pl))
+    in  TimedPacket tm pkt
 
 handshakeAddr :: RawAddrPat
 handshakeAddr = "/dirt/handshake"
 
-handshakePkt :: Packet
-handshakePkt = PacketMsg (Msg handshakeAddr Empty)
+handshakePacket :: Packet
+handshakePacket = PacketMsg (Msg handshakeAddr Empty)
