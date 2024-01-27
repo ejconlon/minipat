@@ -4,10 +4,11 @@ module Minipat.Dirt.Prelude where
 
 import Control.Applicative (empty)
 import Control.Concurrent (forkFinally)
-import Control.Concurrent.Async (async, cancel, waitCatch)
-import Control.Concurrent.STM (atomically)
+import Control.Concurrent.Async (Async, async, cancel, waitCatch)
+import Control.Concurrent.STM (STM, atomically)
 import Control.Concurrent.STM.TVar (TVar, modifyTVar', newTVarIO, readTVar, readTVarIO, writeTVar)
 import Control.Exception (SomeException, bracket, throwIO)
+import Control.Monad (void)
 import Control.Monad.IO.Class (liftIO)
 import Dahdit.Midi.Osc (Datum (..), Packet)
 import Dahdit.Network (Conn (..), HostPort (..), resolveAddr, runDecoder, runEncoder, udpServerConn)
@@ -16,7 +17,7 @@ import Data.Map.Strict qualified as Map
 import Data.Ratio ((%))
 import Minipat.Base qualified as B
 import Minipat.Dirt.Osc qualified as O
-import Minipat.Dirt.Ref (Ref, ReleaseVar)
+import Minipat.Dirt.Ref (Ref, RelVar)
 import Minipat.Dirt.Ref qualified as R
 import Minipat.Time qualified as T
 import Nanotime (PosixTime (..), TimeDelta, TimeLike (..), threadDelayDelta, timeDeltaFromFracSecs)
@@ -40,8 +41,7 @@ defaultEnv =
     }
 
 data Domain = Domain
-  { domDawn :: !(TVar PosixTime)
-  , domCps :: !(TVar Rational)
+  { domCps :: !(TVar Rational)
   , domAhead :: !(TVar TimeDelta)
   , domPlaying :: !(TVar Bool)
   , domCycle :: !(TVar Integer)
@@ -51,8 +51,7 @@ data Domain = Domain
 newDomain :: IO Domain
 newDomain =
   Domain
-    <$> newTVarIO (PosixTime 0)
-    <*> newTVarIO 0
+    <$> newTVarIO 0
     <*> newTVarIO 0
     <*> newTVarIO False
     <*> newTVarIO 0
@@ -62,20 +61,14 @@ initDomain :: Env -> IO Domain
 initDomain env = newDomain >>= \d -> d <$ reinitDomain env d
 
 reinitDomain :: Env -> Domain -> IO ()
-reinitDomain env dom = do
-  now <- currentTime
+reinitDomain env dom = atomically $ do
   let cps = envCps env
       td = timeDeltaFromFracSecs (1 / cps)
-  atomically $ do
-    writeTVar (domDawn dom) now
-    writeTVar (domCps dom) cps
-    writeTVar (domAhead dom) td
-    writeTVar (domPlaying dom) False
-    writeTVar (domCycle dom) 0
-    writeTVar (domPat dom) empty
-
-getDawn :: St -> IO PosixTime
-getDawn = readTVarIO . domDawn . stDom
+  writeTVar (domCps dom) cps
+  writeTVar (domAhead dom) td
+  writeTVar (domPlaying dom) False
+  writeTVar (domCycle dom) 0
+  writeTVar (domPat dom) empty
 
 getCps :: St -> IO Rational
 getCps = readTVarIO . domCps . stDom
@@ -95,11 +88,6 @@ getCycle = readTVarIO . domCycle . stDom
 setCps :: St -> Rational -> IO ()
 setCps st cps' = atomically $ do
   let dom = stDom st
-  dawn <- readTVar (domDawn dom)
-  cps <- readTVar (domCps dom)
-  cyc <- readTVar (domCycle dom)
-  let dawn' = addTime dawn (timeDeltaFromFracSecs (fromInteger cyc * (cps' - cps)))
-  writeTVar (domDawn dom) dawn'
   writeTVar (domCps dom) cps'
   writeTVar (domAhead dom) (timeDeltaFromFracSecs (1 / cps'))
 
@@ -110,32 +98,17 @@ setPat :: St -> B.Pat O.OscMap -> IO ()
 setPat st x = atomically (writeTVar (domPat (stDom st)) x)
 
 setCycle :: St -> Integer -> IO ()
-setCycle st cyc' = atomically $ do
-  let dom = stDom st
-  dawn <- readTVar (domDawn dom)
-  cps <- readTVar (domCps dom)
-  cyc <- readTVar (domCycle dom)
-  let dawn' = addTime dawn (timeDeltaFromFracSecs (cps * fromInteger (cyc' - cyc)))
-  writeTVar (domDawn dom) dawn'
-  writeTVar (domCycle dom) cyc'
+setCycle st x = atomically (writeTVar (domCycle (stDom st)) x)
 
-data Record = Record
-  { recDawn :: !PosixTime
-  , recCps :: !Rational
-  , recTape :: !(B.Tape O.OscMap)
-  }
-  deriving stock (Eq, Ord, Show)
-
-advanceCycle :: St -> IO Record
-advanceCycle st = atomically $ do
-  let dom = stDom st
-  dawn <- readTVar (domDawn dom)
+advanceCycle :: Domain -> PosixTime -> STM O.PlayRecord
+advanceCycle dom now = do
   cps <- readTVar (domCps dom)
   cyc <- fmap fromInteger (readTVar (domCycle dom))
   pat <- readTVar (domPat dom)
   let tape = B.unPat pat (T.Arc cyc (cyc + 1))
+      dawn = addTime now (negate (timeDeltaFromFracSecs (cps * cyc)))
   modifyTVar' (domCycle dom) (+ 1)
-  pure (Record dawn cps tape)
+  pure (O.PlayRecord dawn cps tape)
 
 data OscConn = OscConn
   { ocTargetAddr :: !NS.SockAddr
@@ -144,9 +117,10 @@ data OscConn = OscConn
 
 data St = St
   { stEnv :: !Env
-  , stRel :: !ReleaseVar
+  , stRel :: !RelVar
   , stDom :: !Domain
   , stConn :: !(Ref OscConn)
+  , stThd :: !(Ref (Async ()))
   }
 
 acqConn :: Env -> Acquire OscConn
@@ -155,24 +129,52 @@ acqConn (Env targetHp listenHp _ _) = do
   conn <- udpServerConn Nothing listenHp
   pure (OscConn targetAddr conn)
 
+acqThd :: Ref OscConn -> Domain -> Acquire (Async ())
+acqThd conn dom = R.acquireLoop (domAhead dom) (advanceThread conn dom)
+
 initSt :: Env -> IO St
 initSt env = do
-  rv <- R.releaseVarCreate
-  ref <- R.refCreate rv (acqConn env)
+  rv <- R.relVarInit
   dom <- initDomain env
-  pure (St env rv dom ref)
+  -- conn <- R.refEmpty
+  -- thd <- R.refEmpty
+  -- TODO figure out why reinit doesnt work
+  conn <- R.refCreate rv (acqConn env)
+  thd <- R.refCreate rv (acqThd conn dom)
+  let st = St env rv dom conn thd
+  -- reinitRefs st
+  pure st
 
-reinitSt :: St -> IO ()
-reinitSt st = R.refReplace (stConn st) (acqConn (stEnv st))
+cleanRefs :: St -> IO ()
+cleanRefs st = do
+  void (R.refCleanup (stThd st))
+  void (R.refCleanup (stConn st))
 
-cleanupSt :: St -> IO ()
-cleanupSt = R.releaseVarCleanup . stRel
+reinitRefs :: St -> IO ()
+reinitRefs st = do
+  cleanRefs st
+  R.refReplace (stConn st) (acqConn (stEnv st))
+  R.refReplace (stThd st) (acqThd (stConn st) (stDom st))
+
+disposeSt :: St -> IO ()
+disposeSt = R.relVarDispose . stRel
 
 withSt :: (St -> IO a) -> IO a
-withSt = bracket (initSt defaultEnv) cleanupSt
+withSt = bracket (initSt defaultEnv) disposeSt
 
-sendPkt :: St -> Packet -> IO ()
-sendPkt (St _ _ _ ref) pkt = R.refUse ref $ \case
+advanceThread :: Ref OscConn -> Domain -> IO (Maybe ())
+advanceThread conn dom = do
+  now <- currentTime @PosixTime
+  mr <- atomically $ do
+    playing <- readTVar (domPlaying dom)
+    if playing
+      then fmap Just (advanceCycle dom now)
+      else pure Nothing
+  maybe (pure ()) (void . sendPlay conn) mr
+  pure Nothing
+
+sendPkt :: Ref OscConn -> Packet -> IO ()
+sendPkt conn pkt = R.refUse conn $ \case
   Nothing -> error "Not connected"
   Just (OscConn targetAddr (Conn _ enc)) -> do
     runEncoder enc targetAddr pkt
@@ -184,28 +186,28 @@ withTimeout td act = do
   waitCatch thread
 
 recvPkt :: St -> IO (Either SomeException Packet)
-recvPkt (St (Env _ _ _ timeout) _ _ ref) = R.refUse ref $ \case
+recvPkt st = R.refUse (stConn st) $ \case
   Nothing -> error "Not connected"
   Just (OscConn _ (Conn dec _)) ->
-    withTimeout timeout $
+    withTimeout (envOscTimeout (stEnv st)) $
       runDecoder dec >>= either throwIO pure . snd
 
-sendHandshake :: St -> IO ()
-sendHandshake st = sendPkt st O.handshakePkt
+sendHandshake :: Ref OscConn -> IO ()
+sendHandshake conn = sendPkt conn O.handshakePkt
 
-sendPlay :: St -> PosixTime -> Rational -> B.Tape O.OscMap -> IO Bool
-sendPlay st dawn cps tape =
-  case O.playPkt dawn cps tape of
+sendPlay :: Ref OscConn -> O.PlayRecord -> IO Bool
+sendPlay conn pr =
+  case O.playPkt pr of
     Left err -> throwIO err
     Right Nothing -> pure False
-    Right (Just pkt) -> True <$ sendPkt st pkt
+    Right (Just pkt) -> True <$ sendPkt conn pkt
 
 testHandshake :: IO ()
 testHandshake = do
   putStrLn "handshake - initializing"
   withSt $ \st -> do
     putStrLn "sending handshake"
-    sendHandshake st
+    sendHandshake (stConn st)
     putStrLn "listening"
     resp <- recvPkt st
     putStrLn "received"
@@ -219,20 +221,21 @@ testPlay = do
     putStrLn ("sending play @ " <> show dawn)
     let cps = 1 % 2
     _ <-
-      sendPlay st dawn cps $
-        B.tapeSingleton $
-          B.Ev (T.Span (T.Arc 0 1) (Just (T.Arc 0 1))) $
-            Map.fromList
-              [ ("sound", DatumString "tabla")
-              , ("orbit", DatumInt32 0)
-              ]
+      sendPlay (stConn st) $
+        O.PlayRecord dawn cps $
+          B.tapeSingleton $
+            B.Ev (T.Span (T.Arc 0 1) (Just (T.Arc 0 1))) $
+              Map.fromList
+                [ ("sound", DatumString "tabla")
+                , ("orbit", DatumInt32 0)
+                ]
     putStrLn "done"
 
 testLoop :: IO ()
 testLoop = do
   withSt $ \st -> do
     let tdv = domAhead (stDom st)
-    _ <- R.refLoop (stRel st) tdv $ do
+    _ <- R.refCreate (stRel st) $ R.acquireLoop tdv $ do
       putStrLn "hello"
       pure Nothing
     threadDelayDelta (timeDeltaFromFracSecs @Double 2)
@@ -246,8 +249,9 @@ testRecord = do
           [ ("s", DatumString "tabla")
           ]
     let tdv = domAhead (stDom st)
-    _ <- R.refLoop (stRel st) tdv $ do
-      r <- advanceCycle st
+    _ <- R.refCreate (stRel st) $ R.acquireLoop tdv $ do
+      now <- currentTime
+      r <- atomically (advanceCycle (stDom st) now)
       print r
       pure Nothing
     threadDelayDelta (timeDeltaFromFracSecs @Double 3)

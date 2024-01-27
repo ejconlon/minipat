@@ -125,8 +125,15 @@ tapeToPayloads cps tape = go1
 playAddr :: RawAddrPat
 playAddr = "/dirt/play"
 
-playPkt :: PosixTime -> Rational -> B.Tape OscMap -> M (Maybe Packet)
-playPkt dawn cps tape = go1
+data PlayRecord = PlayRecord
+  { prDawn :: !PosixTime
+  , prCps :: !Rational
+  , prTape :: !(B.Tape OscMap)
+  }
+  deriving stock (Eq, Ord, Show)
+
+playPkt :: PlayRecord -> M (Maybe Packet)
+playPkt (PlayRecord dawn cps tape) = go1
  where
   go1 = do
     flip fmap (tapeToPayloads cps tape) $ \case
