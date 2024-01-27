@@ -136,13 +136,10 @@ initSt :: Env -> IO St
 initSt env = do
   rv <- R.relVarInit
   dom <- initDomain env
-  -- conn <- R.refEmpty
-  -- thd <- R.refEmpty
-  -- TODO figure out why reinit doesnt work
-  conn <- R.refCreate rv (acqConn env)
-  thd <- R.refCreate rv (acqThd conn dom)
+  conn <- R.refEmpty rv
+  thd <- R.refEmpty rv
   let st = St env rv dom conn thd
-  -- reinitRefs st
+  reinitRefs st
   pure st
 
 cleanRefs :: St -> IO ()
