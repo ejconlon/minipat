@@ -5,18 +5,17 @@ module Minipat.Dirt.Osc where
 import Control.Exception (Exception)
 import Control.Monad (foldM)
 import Control.Monad.Except (throwError)
-import Control.Monad.State.Strict (MonadState (..), StateT, execStateT)
-import Control.Monad.Trans (lift)
 import Dahdit.Midi.Osc (Datum (..), Msg (..), Packet (..))
 import Dahdit.Midi.OscAddr (RawAddrPat)
 import Data.Foldable (foldl')
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Sequence (Seq (..))
+import Data.Sequence qualified as Seq
 import Data.Text (Text)
 import Minipat.Base qualified as B
 import Minipat.Time qualified as T
-import Nanotime (PosixTime, TimeDelta, addTime)
+import Nanotime (PosixTime, TimeDelta, addTime, timeDeltaFromFracSecs)
 
 type OscMap = Map Text Datum
 
@@ -87,50 +86,35 @@ spanCycleM = maybe (throwError OscErrLate) (pure . (/ 1000)) . T.spanCycle
 spanDeltaM :: T.Span -> M Rational
 spanDeltaM = maybe (throwError OscErrCont) pure . T.spanDelta
 
-modSt :: (Monad m) => (s -> m s) -> StateT s m ()
-modSt f = get >>= lift . f >>= put
+data PlayEnv = PlayEnv
+  { peStart :: !PosixTime
+  , peCycle :: !Integer
+  , peCps :: !Rational
+  }
+  deriving stock (Eq, Ord, Show)
 
-datFloat :: Rational -> Datum
-datFloat = DatumFloat . fromRational
+data PlayEvent = PlayEvent
+  { peOnset :: !PosixTime
+  , peLength :: !TimeDelta
+  , peData :: !OscMap
+  }
+  deriving stock (Eq, Ord, Show)
 
-evToPayload :: Rational -> B.Ev OscMap -> M OscMap
-evToPayload _cps (B.Ev _sp dat0) = flip execStateT dat0 $ do
-  modSt $ replaceAliases playAliases
+convertEvent :: PlayEnv -> B.Ev OscMap -> M PlayEvent
+convertEvent (PlayEnv startTime startCyc cps) (B.Ev sp dat) = do
+  target <- spanCycleM sp
+  let cycOffset = target - fromInteger startCyc
+      onset = addTime startTime (timeDeltaFromFracSecs (cps * cycOffset))
+  delta <- spanDeltaM sp
+  let len = timeDeltaFromFracSecs (cps * delta)
+  dat' <- replaceAliases playAliases dat
+  pure (PlayEvent onset len dat')
 
--- modSt $ insertSafe "cps" (datFloat cps)
--- modSt $ \dat -> do
---   cyc <- spanCycleM sp
---   insertSafe "cycle" (datFloat cyc) dat
--- modSt $ \dat -> do
---   del <- spanDeltaM sp
---   insertSafe "delta" (datFloat del) dat
-
--- Each time delta is against origin
-tapeToPayloads :: Rational -> B.Tape OscMap -> M (Maybe (Rational, Seq (TimeDelta, OscMap)))
-tapeToPayloads cps tape = go1
- where
-  go1 = case B.tapeToList tape of
-    [] -> pure Nothing
-    evs@(B.Ev sp _ : _) -> do
-      origin <- spanCycleM sp
-      go2 origin Empty evs
-  go2 !origin !acc = \case
-    [] -> pure (Just (origin, acc))
-    ev@(B.Ev sp _) : evs' -> do
-      target <- spanCycleM sp
-      let td = T.relDelta cps origin target
-      pl <- evToPayload cps ev
-      go2 origin (acc :|> (td, pl)) evs'
+convertTape :: PlayEnv -> B.Tape OscMap -> M (Seq PlayEvent)
+convertTape penv = traverse (convertEvent penv) . Seq.fromList . B.tapeToList
 
 playAddr :: RawAddrPat
 playAddr = "/dirt/play"
-
-data PlayRecord = PlayRecord
-  { prDawn :: !PosixTime
-  , prCps :: !Rational
-  , prTape :: !(B.Tape OscMap)
-  }
-  deriving stock (Eq, Ord, Show)
 
 data TimedPacket = TimedPacket
   { tpTime :: !PosixTime
@@ -138,19 +122,10 @@ data TimedPacket = TimedPacket
   }
   deriving stock (Eq, Ord, Show)
 
-playPackets :: PlayRecord -> M (Seq TimedPacket)
-playPackets (PlayRecord dawn cps tape) = go1
- where
-  go1 = do
-    flip fmap (tapeToPayloads cps tape) $ \case
-      Nothing -> Empty
-      Just (originCy, pls) ->
-        let originTm = addTime dawn (T.cycleToDelta cps originCy)
-        in  fmap (go2 originTm) pls
-  go2 originTm (td, pl) =
-    let tm = addTime originTm td
-        pkt = PacketMsg (Msg playAddr (namedPayload pl))
-    in  TimedPacket tm pkt
+playPacket :: PlayEvent -> TimedPacket
+playPacket (PlayEvent time _ dat) =
+  let pkt = PacketMsg (Msg playAddr (namedPayload dat))
+  in  TimedPacket time pkt
 
 handshakeAddr :: RawAddrPat
 handshakeAddr = "/dirt/handshake"

@@ -17,6 +17,7 @@ import Data.Acquire (Acquire)
 import Data.Foldable (for_)
 import Data.Map.Strict qualified as Map
 import Data.Ratio ((%))
+import Data.Sequence (Seq)
 import Minipat.Base qualified as B
 import Minipat.Dirt.Osc qualified as O
 import Minipat.Dirt.Ref (Ref, RelVar)
@@ -111,15 +112,20 @@ setPat st x = atomically (writeTVar (domPat (stDom st)) x)
 setCycle :: St -> Integer -> IO ()
 setCycle st x = atomically (writeTVar (domCycle (stDom st)) x)
 
-advanceCycle :: Domain -> PosixTime -> STM O.PlayRecord
-advanceCycle dom now = do
+readEvents :: Domain -> PosixTime -> STM (O.PlayEnv, Either O.OscErr (Seq O.PlayEvent))
+readEvents dom now = do
+  ahead <- readTVar (domAhead dom)
   cps <- readTVar (domCps dom)
-  cyc <- fmap fromInteger (readTVar (domCycle dom))
+  cyc <- readTVar (domCycle dom)
   pat <- readTVar (domPat dom)
-  let tape = B.unPat pat (T.Arc cyc (cyc + 1))
-      dawn = addTime now (negate (timeDeltaFromFracSecs (cps * cyc)))
-  modifyTVar' (domCycle dom) (+ 1)
-  pure (O.PlayRecord dawn cps tape)
+  let tape = B.unPat pat (T.Arc (fromInteger cyc) (fromInteger cyc + 1))
+      origin = addTime now ahead
+      penv = O.PlayEnv origin cyc cps
+      mpevs = O.convertTape penv tape
+  pure (penv, mpevs)
+
+advanceCycle :: Domain -> STM ()
+advanceCycle dom = modifyTVar' (domCycle dom) (+ 1)
 
 data OscConn = OscConn
   { ocTargetAddr :: !NS.SockAddr
@@ -183,24 +189,29 @@ runGenTask dom = do
   mr <- atomically $ do
     playing <- readTVar (domPlaying dom)
     if playing
-      then fmap Just (advanceCycle dom now)
+      then fmap Just (readEvents dom now)
       else pure Nothing
   case mr of
     Nothing -> pure ()
-    Just r ->
-      case O.playPackets r of
+    Just (_, mpevs) ->
+      case mpevs of
         Left err -> throwIO err
-        Right tps -> for_ tps (atomically . writeTQueue (domQueue dom))
+        Right pevs -> atomically $ do
+          advanceCycle dom
+          for_ pevs (writeTQueue (domQueue dom) . O.playPacket)
   pure Nothing
 
 runSendTask :: Ref OscConn -> Domain -> IO ()
 runSendTask conn dom = go
  where
   go = do
-    O.TimedPacket tm pkt <- atomically (readTQueue (domQueue dom))
+    tp@(O.TimedPacket tm pkt) <- atomically (readTQueue (domQueue dom))
     now <- currentTime
-    threadDelayDelta (diffTime now tm)
+    print now
+    print tp
+    threadDelayDelta (diffTime tm now)
     sendPacket conn pkt
+    go
 
 sendPacket :: Ref OscConn -> Packet -> IO ()
 sendPacket conn pkt = R.refUse conn $ \case
@@ -224,12 +235,13 @@ recvPkt st = R.refUse (stConn st) $ \case
 sendHandshake :: Ref OscConn -> IO ()
 sendHandshake conn = sendPacket conn O.handshakePacket
 
-sendPlay :: Ref OscConn -> O.PlayRecord -> IO ()
-sendPlay conn pr =
-  case O.playPackets pr of
+sendPlay :: Ref OscConn -> Either O.OscErr (Seq O.PlayEvent) -> IO ()
+sendPlay conn mpevs =
+  case mpevs of
     Left err -> throwIO err
-    Right tps ->
-      for_ tps $ \tp@(O.TimedPacket tm pkt) -> do
+    Right pevs ->
+      for_ pevs $ \pev -> do
+        let tp@(O.TimedPacket tm pkt) = O.playPacket pev
         print tp
         now <- currentTime
         threadDelayDelta (diffTime now tm)
@@ -253,8 +265,9 @@ testPlay = do
     dawn <- currentTime
     putStrLn ("sending play @ " <> show dawn)
     let cps = 1 % 2
+        penv = O.PlayEnv dawn 0 cps
     sendPlay (stConn st) $
-      O.PlayRecord dawn cps $
+      O.convertTape penv $
         B.tapeSingleton $
           B.Ev (T.Span (T.Arc 0 1) (Just (T.Arc 0 1))) $
             Map.fromList
@@ -275,15 +288,16 @@ testLoop = do
 testRecord :: IO ()
 testRecord = do
   withSt $ \st -> do
+    let dom = stDom st
     setPat st $
       pure $
         Map.fromList
           [ ("s", DatumString "tabla")
           ]
-    let tdv = domAhead (stDom st)
+    let tdv = domAhead dom
     _ <- R.refCreate (stRel st) $ R.acquireLoop tdv $ do
       now <- currentTime
-      r <- atomically (advanceCycle (stDom st) now)
+      r <- atomically (readEvents dom now <* advanceCycle dom)
       print r
       pure Nothing
     threadDelayDelta (timeDeltaFromFracSecs @Double 3)
