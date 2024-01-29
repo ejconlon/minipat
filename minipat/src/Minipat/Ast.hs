@@ -1,9 +1,40 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Minipat.Ast where
-
--- TODO explicit exports
+-- | AST used when parsing/printing Tidal mini-notation
+module Minipat.Ast
+  ( Ident (..)
+  , QuickRatio (..)
+  , quickRatioValue
+  , quickRatioRep
+  , quickRatioUnRep
+  , RationalPres (..)
+  , Factor (..)
+  , factorFromRational
+  , factorValue
+  , factorSucc
+  , SpeedDir (..)
+  , Speed (..)
+  , Select (..)
+  , Euclid (..)
+  , Degrade (..)
+  , ModType (..)
+  , Mod (..)
+  , ShortExtent (..)
+  , LongExtent (..)
+  , Extent (..)
+  , SeqPres (..)
+  , GroupType (..)
+  -- , groupPatTypeBrace
+  -- , groupPatTypeSep
+  , Group (..)
+  , Poly (..)
+  , PatF (..)
+  , Pat (..)
+  , PatX
+  , UnPat
+  )
+where
 
 import Bowtie (Jot (..), pattern JotP)
 import Data.Bifoldable (Bifoldable (..))
@@ -102,6 +133,7 @@ instance Pretty Factor where
     FactorInteger i -> pretty i
     FactorQuickRatio qr -> pretty qr
 
+-- | Make a 'Factor' representing the given 'Rational'
 factorFromRational :: Rational -> Factor
 factorFromRational = FactorRational RationalPresDec
 
@@ -140,27 +172,6 @@ factorSucc = \case
 
 -- * Mod
 
--- | An expression modified by some control.
-data Mod s r = Mod
-  { modTarget :: !r
-  , modType :: !(ModType s)
-  }
-  deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
-
-instance (Pretty c, Pretty r) => Pretty (Mod c r) where
-  pretty (Mod tar ty) = P.hcat [pretty tar, pretty ty]
-
-instance Bifunctor Mod where
-  bimap f g (Mod r mt) = Mod (g r) (fmap f mt)
-
-instance Bifoldable Mod where
-  bifoldr f g z (Mod r mt) = g r (foldr f z mt)
-
-instance Bitraversable Mod where
-  bitraverse f g (Mod r mt) = Mod <$> g r <*> traverse f mt
-
--- * Speed
-
 -- | Speedup or slowdown
 data SpeedDir = SpeedDirFast | SpeedDirSlow
   deriving stock (Eq, Ord, Show, Enum, Bounded)
@@ -180,8 +191,6 @@ data Speed s = Speed
 instance (Pretty s) => Pretty (Speed s) where
   pretty (Speed dir facs) = P.hcat [pretty dir, pretty facs]
 
--- * Select
-
 -- | Select control
 data Select = SelectSample !Integer | SelectTransform !Ident
   deriving stock (Eq, Ord, Show)
@@ -192,40 +201,91 @@ instance Pretty Select where
       SelectSample i -> pretty i
       SelectTransform t -> pretty t
 
--- * Timing
-
--- | Shorthand for time control
-data ShortTime = ShortTimeElongate | ShortTimeReplicate
-  deriving stock (Eq, Ord, Show, Enum, Bounded)
-
-instance Pretty ShortTime where
-  pretty = \case
-    ShortTimeElongate -> "_"
-    ShortTimeReplicate -> "!"
-
--- | Longhand for time control
-data LongTime
-  = LongTimeElongate !Factor
-  | LongTimeReplicate !(Maybe Integer)
+-- | Euclidean sequences
+data Euclid = Euclid !Integer !Integer !(Maybe Integer)
   deriving stock (Eq, Ord, Show)
 
-instance Pretty LongTime where
-  pretty = \case
-    LongTimeElongate f -> P.hcat ["@", pretty f]
-    LongTimeReplicate mi -> "!" <> maybe mempty pretty mi
+instance Pretty Euclid where
+  pretty (Euclid i j mk) =
+    P.hcat $
+      ["(", pretty i, ",", pretty j] ++ maybe [")"] (\k -> [",", pretty k, ")"]) mk
 
--- | Time control that can be applied to an expression.
-data Time r
-  = TimeShort !ShortTime
-  | TimeLong !r !LongTime
+-- | Degradation (random dropout)
+newtype Degrade = Degrade {unDegrade :: Maybe Factor}
+  deriving stock (Show)
+  deriving newtype (Eq, Ord)
+
+instance Pretty Degrade where
+  pretty (Degrade mfp) = P.hcat ["?", maybe mempty pretty mfp]
+
+-- | Controls that can be applied to a given pattern
+data ModType s
+  = ModTypeSelect !Select
+  | ModTypeDegrade !Degrade
+  | ModTypeEuclid !Euclid
+  | ModTypeSpeed !(Speed s)
   deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
 
-instance (Pretty r) => Pretty (Time r) where
+instance (Pretty s) => Pretty (ModType s) where
   pretty = \case
-    TimeShort s -> pretty s
-    TimeLong r l -> pretty r <> pretty l
+    ModTypeDegrade d -> pretty d
+    ModTypeEuclid e -> pretty e
+    ModTypeSelect s -> pretty s
+    ModTypeSpeed s -> pretty s
 
--- * Generic group presentation
+-- | An expression modified by some control
+data Mod s r = Mod
+  { modTarget :: !r
+  , modType :: !(ModType s)
+  }
+  deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
+
+instance (Pretty c, Pretty r) => Pretty (Mod c r) where
+  pretty (Mod tar ty) = P.hcat [pretty tar, pretty ty]
+
+instance Bifunctor Mod where
+  bimap f g (Mod r mt) = Mod (g r) (fmap f mt)
+
+instance Bifoldable Mod where
+  bifoldr f g z (Mod r mt) = g r (foldr f z mt)
+
+instance Bitraversable Mod where
+  bitraverse f g (Mod r mt) = Mod <$> g r <*> traverse f mt
+
+-- * Extents
+
+-- | Shorthand for time control
+data ShortExtent = ShortExtentElongate | ShortExtentReplicate
+  deriving stock (Eq, Ord, Show, Enum, Bounded)
+
+instance Pretty ShortExtent where
+  pretty = \case
+    ShortExtentElongate -> "_"
+    ShortExtentReplicate -> "!"
+
+-- | Longhand for time control
+data LongExtent
+  = LongExtentElongate !Factor
+  | LongExtentReplicate !(Maybe Integer)
+  deriving stock (Eq, Ord, Show)
+
+instance Pretty LongExtent where
+  pretty = \case
+    LongExtentElongate f -> P.hcat ["@", pretty f]
+    LongExtentReplicate mi -> "!" <> maybe mempty pretty mi
+
+-- | Time control that can be applied to an expression
+data Extent r
+  = ExtentShort !ShortExtent
+  | ExtentLong !r !LongExtent
+  deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
+
+instance (Pretty r) => Pretty (Extent r) where
+  pretty = \case
+    ExtentShort s -> pretty s
+    ExtentLong r l -> pretty r <> pretty l
+
+-- * Groups
 
 -- | Presentation of a sequence - dot- or space-separated
 data SeqPres = SeqPresDot | SeqPresSpace
@@ -237,7 +297,7 @@ seqPresSep = \case
   SeqPresDot -> Just SepDot
   SeqPresSpace -> Nothing
 
--- | Renders a sequence of elements with the given punctuation and nesting.
+-- | Renders a sequence of elements with the given punctuation and nesting
 prettyGroup :: Maybe Brace -> Maybe Sep -> Int -> [Doc ann] -> Doc ann
 prettyGroup mb ms lvl ds =
   let prefix = pretty (replicate lvl '[') <> maybe mempty (pretty . braceOpenChar) mb
@@ -245,10 +305,7 @@ prettyGroup mb ms lvl ds =
       body = P.hsep (maybe ds (\s -> P.punctuate (" " <> pretty (sepChar s)) ds) ms)
   in  prefix <> body <> suffix
 
--- * Patterns
-
--- ** Groups
-
+-- | The type of group - sequential, parallel, random, or alternating
 data GroupType
   = GroupTypeSeq !SeqPres
   | GroupTypePar
@@ -270,10 +327,11 @@ groupPatTypeSep = \case
   GroupTypeRand -> Just SepPipe
   GroupTypeAlt -> Nothing
 
+-- | A group of sub-patterns
 data Group r = Group
-  { gpLevel :: !Int
-  , gpType :: !GroupType
-  , gpElems :: !(NESeq r)
+  { groupLevel :: !Int
+  , groupType :: !GroupType
+  , groupElems :: !(NESeq r)
   }
   deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
 
@@ -284,69 +342,38 @@ instance (Pretty r) => Pretty (Group r) where
         ds = fmap pretty (toList ps)
     in  prettyGroup mb ms lvl ds
 
--- ** Mods
+-- * Polymeters
 
-data Euclid = Euclid !Integer !Integer !(Maybe Integer)
-  deriving stock (Eq, Ord, Show)
-
-instance Pretty Euclid where
-  pretty (Euclid i j mk) =
-    P.hcat $
-      ["(", pretty i, ",", pretty j] ++ maybe [")"] (\k -> [",", pretty k, ")"]) mk
-
-newtype Degrade = Degrade {unDegrade :: Maybe Factor}
-  deriving stock (Show)
-  deriving newtype (Eq, Ord)
-
-instance Pretty Degrade where
-  pretty (Degrade mfp) = P.hcat ["?", maybe mempty pretty mfp]
-
-data ModType s
-  = ModTypeSelect !Select
-  | ModTypeDegrade !Degrade
-  | ModTypeEuclid !Euclid
-  | ModTypeSpeed !(Speed s)
-  deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
-
-instance (Pretty s) => Pretty (ModType s) where
-  pretty = \case
-    ModTypeDegrade d -> pretty d
-    ModTypeEuclid e -> pretty e
-    ModTypeSelect s -> pretty s
-    ModTypeSpeed s -> pretty s
-
--- ** Polymeters
-
-data PolyPat r = PolyPat
-  { ppElems :: !(NESeq r)
-  , ppSteps :: !(Maybe Integer)
+-- | A polymeter wrapping at the given number of steps
+data Poly r = Poly
+  { polyElems :: !(NESeq r)
+  , polySteps :: !(Maybe Integer)
   }
   deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
 
-instance (Pretty r) => Pretty (PolyPat r) where
-  pretty (PolyPat ps mc) =
+instance (Pretty r) => Pretty (Poly r) where
+  pretty (Poly ps mc) =
     let ds = fmap pretty (toList ps)
         body = P.hsep (P.punctuate " ," ds)
         trailer = maybe mempty (\i -> "%" <> pretty i) mc
     in  "{" <> body <> "}" <> trailer
 
--- ** Functor
+-- * Functor
 
--- TODO poly/euclid can take sig args?
 data PatF s a r
   = PatPure !a
   | PatSilence
-  | PatTime !(Time r)
+  | PatExtent !(Extent r)
   | PatGroup !(Group r)
   | PatMod !(Mod s r)
-  | PatPoly !(PolyPat r)
+  | PatPoly !(Poly r)
   deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
 
 instance Bifunctor (PatF s) where
   bimap f g = \case
     PatPure a -> PatPure (f a)
     PatSilence -> PatSilence
-    PatTime t -> PatTime (fmap g t)
+    PatExtent t -> PatExtent (fmap g t)
     PatGroup gs -> PatGroup (fmap g gs)
     PatMod m -> PatMod (fmap g m)
     PatPoly p -> PatPoly (fmap g p)
@@ -357,7 +384,7 @@ instance Bifoldable (PatF s) where
     go z = \case
       PatPure a -> f a z
       PatSilence -> z
-      PatTime t -> foldr g z t
+      PatExtent t -> foldr g z t
       PatGroup gs -> foldr g z gs
       PatMod m -> foldr g z m
       PatPoly p -> foldr g z p
@@ -366,7 +393,7 @@ instance Bitraversable (PatF s) where
   bitraverse f g = \case
     PatPure a -> fmap PatPure (f a)
     PatSilence -> pure PatSilence
-    PatTime t -> fmap PatTime (traverse g t)
+    PatExtent t -> fmap PatExtent (traverse g t)
     PatGroup gs -> fmap PatGroup (traverse g gs)
     PatMod m -> fmap PatMod (traverse g m)
     PatPoly p -> fmap PatPoly (traverse g p)
@@ -378,13 +405,14 @@ instance (Pretty s, Pretty a, Pretty r) => Pretty (PatF s a r) where
   pretty a = case a of
     PatPure x -> pretty x
     PatSilence -> "~"
-    PatTime t -> pretty t
+    PatExtent t -> pretty t
     PatGroup gp -> pretty gp
     PatMod m -> pretty m
     PatPoly p -> pretty p
 
--- ** Fixpoint
+-- * Fixpoint
 
+-- | A pattern that can be printed or rendered into a 'Stream'
 newtype Pat b a = Pat {unPat :: UnPat b a}
   deriving stock (Show)
   deriving newtype (Eq, Ord, Functor, Foldable, Pretty)
@@ -392,8 +420,6 @@ newtype Pat b a = Pat {unPat :: UnPat b a}
 type PatX b = PatF (Pat b Factor)
 
 type UnPat b = Jot (PatX b) b
-
--- type PatK b a = PatX b a (UnPat b a)
 
 instance Traversable (Pat a) where traverse f = fmap Pat . traverse f . unPat
 
@@ -404,10 +430,10 @@ instance Bifunctor Pat where
       case pf of
         PatPure a -> PatPure (g a)
         PatSilence -> PatSilence
-        PatTime t -> PatTime (fmap go t)
+        PatExtent t -> PatExtent (fmap go t)
         PatGroup gs -> PatGroup (fmap go gs)
         PatMod (Mod r m) -> PatMod (Mod (go r) (fmap (first f) m))
-        PatPoly (PolyPat rs mc) -> PatPoly (PolyPat (fmap go rs) mc)
+        PatPoly (Poly rs mc) -> PatPoly (Poly (fmap go rs) mc)
 
 instance Bifoldable Pat where
   bifoldr f g = flip (go . unPat)
@@ -416,10 +442,10 @@ instance Bifoldable Pat where
       case pf of
         PatPure a -> g a z
         PatSilence -> z
-        PatTime t -> foldr go z t
+        PatExtent t -> foldr go z t
         PatGroup gs -> foldr go z gs
         PatMod (Mod r m) -> go r (foldr (flip (bifoldr f (const id))) z m)
-        PatPoly (PolyPat rs _) -> foldr go z rs
+        PatPoly (Poly rs _) -> foldr go z rs
 
 instance Bitraversable Pat where
   bitraverse f g = fmap Pat . go . unPat
@@ -430,7 +456,7 @@ instance Bitraversable Pat where
         <*> case pf of
           PatPure a -> fmap PatPure (g a)
           PatSilence -> pure PatSilence
-          PatTime t -> fmap PatTime (traverse go t)
+          PatExtent t -> fmap PatExtent (traverse go t)
           PatGroup gs -> fmap PatGroup (traverse go gs)
           PatMod (Mod r m) -> fmap PatMod $ Mod <$> go r <*> traverse (bitraverse f pure) m
-          PatPoly (PolyPat rs mc) -> fmap (\rs' -> PatPoly (PolyPat rs' mc)) (traverse go rs)
+          PatPoly (Poly rs mc) -> fmap (\rs' -> PatPoly (Poly rs' mc)) (traverse go rs)

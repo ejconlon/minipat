@@ -18,12 +18,12 @@ import Data.Sequence.NonEmpty (NESeq)
 import Data.Sequence.NonEmpty qualified as NESeq
 import Data.Text (Text)
 import Looksee (Err, parse)
-import Minipat.Ast -- TODO qualify
-import Minipat.Base (Ev (..), patRun)
+import Minipat.Ast
 import Minipat.Interp (Sel, interpPat, noSelFn, yesSelFn)
 import Minipat.Norm (normPat)
 import Minipat.Parser (P, ParseErr, factorP, identP, identPatP)
 import Minipat.Print (render)
+import Minipat.Stream (Ev (..), streamRun)
 import Minipat.Time (Arc (..), Span (..))
 import Prettyprinter qualified as P
 import System.IO (BufferMode (..), hSetBuffering, stdout)
@@ -103,11 +103,11 @@ patParseTests =
     , mkUnitRT
         "pat short elongate"
         (expectText "_" (expectParseOk tpatP))
-        (mkTPat (PatTime (TimeShort ShortTimeElongate)))
+        (mkTPat (PatExtent (ExtentShort ShortExtentElongate)))
     , mkUnitRT
         "pat short replicate"
         (expectText "!" (expectParseOk tpatP))
-        (mkTPat (PatTime (TimeShort ShortTimeReplicate)))
+        (mkTPat (PatExtent (ExtentShort ShortExtentReplicate)))
     , mkUnitRT
         "pat var"
         (expectText "x" (expectParseOk tpatP))
@@ -146,11 +146,11 @@ patParseTests =
     , mkUnitRT
         "pat poly"
         (expectText "{x , y}" (expectParseOk tpatP))
-        (mkTPat (PatPoly (PolyPat xyPatIdents Nothing)))
+        (mkTPat (PatPoly (Poly xyPatIdents Nothing)))
     , mkUnitRT
         "pat poly div"
         (expectText "{x , y}%7" (expectParseOk tpatP))
-        (mkTPat (PatPoly (PolyPat xyPatIdents (Just 7))))
+        (mkTPat (PatPoly (Poly xyPatIdents (Just 7))))
     , mkUnitRT
         "pat speed fast"
         (expectText "x*9" (expectParseOk tpatP))
@@ -172,15 +172,15 @@ patParseTests =
     , mkUnitRT
         "pat long elongate"
         (expectText "x@(3/7)" (expectParseOk tpatP))
-        (mkTPat (PatTime (TimeLong xPatIdent (LongTimeElongate (FactorRational RationalPresFrac (3 % 7))))))
+        (mkTPat (PatExtent (ExtentLong xPatIdent (LongExtentElongate (FactorRational RationalPresFrac (3 % 7))))))
     , mkUnitRT
         "pat long replicate"
         (expectText "x!5" (expectParseOk tpatP))
-        (mkTPat (PatTime (TimeLong xPatIdent (LongTimeReplicate (Just 5)))))
+        (mkTPat (PatExtent (ExtentLong xPatIdent (LongExtentReplicate (Just 5)))))
     , mkUnitRT
         "pat long replicate implicit"
         (expectText "x!" (expectParseOk tpatP))
-        (mkTPat (PatTime (TimeLong xPatIdent (LongTimeReplicate Nothing))))
+        (mkTPat (PatExtent (ExtentLong xPatIdent (LongExtentReplicate Nothing))))
     , mkUnitRT
         "pat adj optional implicit"
         (expectText "x?" (expectParseOk tpatP))
@@ -226,7 +226,7 @@ patParseTests =
                     0
                     (GroupTypeSeq SeqPresSpace)
                     ( neseq
-                        [ mkUnTPat (PatTime (TimeLong xPatIdent (LongTimeReplicate Nothing)))
+                        [ mkUnTPat (PatExtent (ExtentLong xPatIdent (LongExtentReplicate Nothing)))
                         , yPatIdent
                         ]
                     )
@@ -243,7 +243,7 @@ patParseTests =
                     (GroupTypeSeq SeqPresSpace)
                     ( neseq
                         [ xPatIdent
-                        , mkUnTPat (PatTime (TimeShort ShortTimeReplicate))
+                        , mkUnTPat (PatExtent (ExtentShort ShortExtentReplicate))
                         ]
                     )
                 )
@@ -349,7 +349,7 @@ runPatNormCase (n, patStr, npat) = testCase n $ do
 testPatNormCases :: TestTree
 testPatNormCases =
   let patPure = JotP () . PatPure
-      patTime r l = JotP () (PatTime (TimeLong r l))
+      patTime r l = JotP () (PatExtent (ExtentLong r l))
   in  testGroup "pat norm cases" $
         fmap
           runPatNormCase
@@ -375,43 +375,43 @@ testPatNormCases =
           ,
             ( "repeat one long"
             , "x!1"
-            , Pat (patTime (patPure "x") (LongTimeReplicate (Just 1)))
+            , Pat (patTime (patPure "x") (LongExtentReplicate (Just 1)))
             )
           ,
             ( "repeat two long"
             , "x!2"
-            , Pat (patTime (patPure "x") (LongTimeReplicate (Just 2)))
+            , Pat (patTime (patPure "x") (LongExtentReplicate (Just 2)))
             )
           ,
             ( "repeat two long implicit"
             , "x!"
-            , Pat (patTime (patPure "x") (LongTimeReplicate Nothing))
+            , Pat (patTime (patPure "x") (LongExtentReplicate Nothing))
             )
           ,
             ( "repeat two short"
             , "x !"
-            , Pat (patTime (patPure "x") (LongTimeReplicate Nothing))
+            , Pat (patTime (patPure "x") (LongExtentReplicate Nothing))
             )
           ,
             ( "repeat three short"
             , "x ! !"
-            , Pat (patTime (patPure "x") (LongTimeReplicate (Just 3)))
+            , Pat (patTime (patPure "x") (LongExtentReplicate (Just 3)))
             )
           ,
             ( "repeat seq short"
             , "x ! y"
-            , let xpart = patTime (patPure "x") (LongTimeReplicate Nothing)
+            , let xpart = patTime (patPure "x") (LongExtentReplicate Nothing)
               in  Pat (JotP () (PatGroup (Group 0 (GroupTypeSeq SeqPresSpace) (neseq [xpart, patPure "y"]))))
             )
           ,
             ( "elongate two long"
             , "x@2"
-            , Pat (patTime (patPure "x") (LongTimeElongate 2))
+            , Pat (patTime (patPure "x") (LongExtentElongate 2))
             )
           ,
             ( "elongate two short"
             , "x _"
-            , Pat (patTime (patPure "x") (LongTimeElongate 2))
+            , Pat (patTime (patPure "x") (LongExtentElongate 2))
             )
           ]
 
@@ -421,7 +421,7 @@ runPatInterpCase (n, mayArc, patStr, evs) = testCase n $ do
   let pat' = normPat pat
   pat'' <- either throwIO pure (interpPat noSelFn yesSelFn pat')
   let arc = fromMaybe (Arc 0 1) mayArc
-      actualEvs = patRun pat'' arc
+      actualEvs = streamRun pat'' arc
   actualEvs @?= evs
 
 ev :: Rational -> Rational -> x -> Ev x
@@ -613,8 +613,8 @@ testPatInterpCases =
         , "[x | y | z]"
         ,
           [ ev 5 6 (sel "x")
-          , ev 6 7 (sel "y")
-          , ev 7 8 (sel "x")
+          , ev 6 7 (sel "x")
+          , ev 7 8 (sel "y")
           ] -- Arbitrary, based on rand seed
         )
       ,
@@ -670,7 +670,7 @@ testPatInterpCases =
         , "x?"
         ,
           [ ev 0 1 (sel "x")
-          , ev 2 3 (sel "x")
+          , ev 1 2 (sel "x")
           ]
         )
       ]

@@ -1,3 +1,7 @@
+-- | "Randomness" in patterns is weaker than typical pseudo-randomness:
+-- There is essentially one function from cycle time to random value that
+-- we use for everything. (This is all pretty much how Tidal does it, specifically
+-- the choice of xorshift moduli and period.)
 module Minipat.Rand
   ( Seed
   , arcSeed
@@ -11,9 +15,7 @@ import Data.Bits (Bits (..))
 import Data.Maybe (fromMaybe)
 import Data.Ratio ((%))
 import Data.Word (Word32)
-import Minipat.Time (Arc (..), Span (..), Time, timeFloor)
-
--- These random functions are more or less how Tidal does it:
+import Minipat.Time (Arc (..), Span (..), Time, arcMidpoint)
 
 -- | A random seed
 newtype Seed = Seed {unSeed :: Word32}
@@ -39,12 +41,8 @@ timeSeed time =
   in  xorshift (Seed val)
 
 -- | Associates a random seed with a given 'Arc'.
--- TODO should be floor of arc start or just mid like:
--- arcSeed = timeSeed . arcMid
--- Choosing start makes more sense to me but it's not
--- how Tidal does it IIRC
 arcSeed :: Arc -> Seed
-arcSeed = timeSeed . fromInteger . timeFloor . arcStart
+arcSeed = timeSeed . arcMidpoint
 
 -- | Associates a random seed with a given 'Span'.
 spanSeed :: Span -> Seed

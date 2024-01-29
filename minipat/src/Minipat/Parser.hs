@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE UndecidableInstances #-}
 
+-- | Textual parsing of patterns in mini-notation
 module Minipat.Parser
   ( Loc (..)
   , P
@@ -24,7 +25,7 @@ import Data.Sequence.NonEmpty (NESeq (..), (|>))
 import Data.Sequence.NonEmpty qualified as NESeq
 import Data.Text qualified as T
 import Looksee qualified as L
-import Minipat.Ast qualified as A
+import Minipat.Ast
 import Minipat.Print (Brace (..), braceCloseChar, braceOpenChar)
 
 -- Should be in Bowtie
@@ -33,11 +34,16 @@ annoJot (Anno b x) = JotP b x
 
 -- * The basics
 
+-- | Error when parsing
 data ParseErr
-  = ParseErrDotForbidden
-  | ParseErrEmpty
-  | ParseErrElongate
-  | ParseErrRatioChar !Char
+  = -- | Dot notation forbidden in the current position
+    ParseErrDotForbidden
+  | -- | Parsed an empty sequence
+    ParseErrEmpty
+  | -- | Elongation not allowed in the current position
+    ParseErrElongate
+  | -- | Invalid quick ratio char
+    ParseErrRatioChar !Char
   deriving stock (Eq, Ord, Show)
 
 instance L.HasErrMessage ParseErr where
@@ -51,6 +57,7 @@ instance Exception ParseErr
 
 type P = L.Parser ParseErr
 
+-- | The location in the source text
 newtype Loc = Loc {unLoc :: L.Span Int}
   deriving stock (Show)
   deriving newtype (Eq, Ord)
@@ -100,36 +107,36 @@ stripTokP = L.stripEndP . tokP
 tokP :: Char -> P ()
 tokP = L.charP_
 
-stripIdentP :: P A.Ident
+stripIdentP :: P Ident
 stripIdentP = L.stripEndP identP
 
-identP :: P A.Ident
-identP = fmap A.Ident (L.takeWhile1P isIdentChar)
+identP :: P Ident
+identP = fmap Ident (L.takeWhile1P isIdentChar)
 
-fracFactorP :: P A.Factor
+fracFactorP :: P Factor
 fracFactorP = do
   stripTokP '('
   num <- L.stripEndP L.decP
   stripTokP '/'
   denom <- L.stripEndP L.udecP
   tokP ')'
-  pure (A.FactorRational A.RationalPresFrac (num / denom))
+  pure (FactorRational RationalPresFrac (num / denom))
 
-numFactorP :: P A.Factor
+numFactorP :: P Factor
 numFactorP = do
   d <- L.decP
   pure $ case denominator d of
-    1 -> A.FactorInteger (numerator d)
-    _ -> A.FactorRational A.RationalPresDec d
+    1 -> FactorInteger (numerator d)
+    _ -> FactorRational RationalPresDec d
 
-quickFactorP :: P A.Factor
+quickFactorP :: P Factor
 quickFactorP = do
   c <- L.headP
-  case A.quickRatioUnRep c of
+  case quickRatioUnRep c of
     Nothing -> L.throwP (ParseErrRatioChar c)
-    Just qr -> pure (A.FactorQuickRatio qr)
+    Just qr -> pure (FactorQuickRatio qr)
 
-factorP :: P A.Factor
+factorP :: P Factor
 factorP = do
   c <- L.lookP L.headP
   if isAlpha c
@@ -141,46 +148,46 @@ factorP = do
 bracedP :: Brace -> P a -> P a
 bracedP b = L.betweenP (stripTokP (braceOpenChar b)) (tokP (braceCloseChar b))
 
-selectP :: P A.Select
+selectP :: P Select
 selectP = do
   tokP ':'
   isNum <- L.lookP (fmap isDigit L.headP)
   if isNum
-    then fmap A.SelectSample L.uintP
-    else fmap A.SelectTransform identP
+    then fmap SelectSample L.uintP
+    else fmap SelectTransform identP
 
-speedFastP :: P s -> P (A.Speed s)
+speedFastP :: P s -> P (Speed s)
 speedFastP ps = do
   tokP '*'
-  A.Speed A.SpeedDirFast <$> ps
+  Speed SpeedDirFast <$> ps
 
-speedSlowP :: P s -> P (A.Speed s)
+speedSlowP :: P s -> P (Speed s)
 speedSlowP ps = do
   tokP '/'
-  A.Speed A.SpeedDirSlow <$> ps
+  Speed SpeedDirSlow <$> ps
 
-elongateShortP :: P A.ShortTime
-elongateShortP = A.ShortTimeElongate <$ tokP '_'
+elongateShortP :: P ShortExtent
+elongateShortP = ShortExtentElongate <$ tokP '_'
 
-replicateShortP :: P A.ShortTime
-replicateShortP = A.ShortTimeReplicate <$ tokP '!'
+replicateShortP :: P ShortExtent
+replicateShortP = ShortExtentReplicate <$ tokP '!'
 
-elongateLongP :: P A.LongTime
+elongateLongP :: P LongExtent
 elongateLongP = do
   tokP '@'
-  A.LongTimeElongate <$> factorP
+  LongExtentElongate <$> factorP
 
-replicateLongP :: P A.LongTime
+replicateLongP :: P LongExtent
 replicateLongP = do
   tokP '!'
-  A.LongTimeReplicate <$> L.optP L.uintP
+  LongExtentReplicate <$> L.optP L.uintP
 
-degradeP :: P A.Degrade
+degradeP :: P Degrade
 degradeP = do
   tokP '?'
-  fmap A.Degrade (L.optP factorP)
+  fmap Degrade (L.optP factorP)
 
-euclidP :: P A.Euclid
+euclidP :: P Euclid
 euclidP = do
   stripTokP '('
   x <- L.stripEndP L.uintP
@@ -188,40 +195,40 @@ euclidP = do
   y <- L.stripEndP L.uintP
   mu <- L.optP (stripTokP ',')
   euc <- case mu of
-    Nothing -> pure (A.Euclid x y Nothing)
-    Just _ -> fmap (A.Euclid x y . Just) (L.stripEndP L.uintP)
+    Nothing -> pure (Euclid x y Nothing)
+    Just _ -> fmap (Euclid x y . Just) (L.stripEndP L.uintP)
   tokP ')'
   pure euc
 
 -- * Patterns
 
-type PPat = A.Pat Loc
+type PPat = Pat Loc
 
-type UnPPat = A.UnPat Loc
+type UnPPat = UnPat Loc
 
 silencePatP :: P (PPat a)
-silencePatP = A.Pat <$> jotP (A.PatSilence <$ tokP '~')
+silencePatP = Pat <$> jotP (PatSilence <$ tokP '~')
 
 shortElongatePatP :: P (PPat a)
-shortElongatePatP = A.Pat <$> jotP (A.PatTime . A.TimeShort <$> elongateShortP)
+shortElongatePatP = Pat <$> jotP (PatExtent . ExtentShort <$> elongateShortP)
 
 shortReplicatePatP :: P (PPat a)
-shortReplicatePatP = A.Pat <$> jotP (A.PatTime . A.TimeShort <$> replicateShortP)
+shortReplicatePatP = Pat <$> jotP (PatExtent . ExtentShort <$> replicateShortP)
 
-withPatDecosP :: P (PPat A.Factor) -> PPat a -> P (PPat a)
+withPatDecosP :: P (PPat Factor) -> PPat a -> P (PPat a)
 withPatDecosP ps = go
  where
-  go p@(A.Pat pp) = do
-    mp' <- fmap (fmap A.Pat) . mayJotP $ do
+  go p@(Pat pp) = do
+    mp' <- fmap (fmap Pat) . mayJotP $ do
       mc <- L.lookP L.unconsP
       case mc of
-        Just '@' -> fmap (Just . A.PatTime . A.TimeLong pp) elongateLongP
-        Just '!' -> fmap (Just . A.PatTime . A.TimeLong pp) replicateLongP
-        Just ':' -> fmap (Just . A.PatMod . A.Mod pp . A.ModTypeSelect) selectP
-        Just '*' -> fmap (Just . A.PatMod . A.Mod pp . A.ModTypeSpeed) (speedFastP ps)
-        Just '/' -> fmap (Just . A.PatMod . A.Mod pp . A.ModTypeSpeed) (speedSlowP ps)
-        Just '(' -> fmap (Just . A.PatMod . A.Mod pp . A.ModTypeEuclid) euclidP
-        Just '?' -> fmap (Just . A.PatMod . A.Mod pp . A.ModTypeDegrade) degradeP
+        Just '@' -> fmap (Just . PatExtent . ExtentLong pp) elongateLongP
+        Just '!' -> fmap (Just . PatExtent . ExtentLong pp) replicateLongP
+        Just ':' -> fmap (Just . PatMod . Mod pp . ModTypeSelect) selectP
+        Just '*' -> fmap (Just . PatMod . Mod pp . ModTypeSpeed) (speedFastP ps)
+        Just '/' -> fmap (Just . PatMod . Mod pp . ModTypeSpeed) (speedSlowP ps)
+        Just '(' -> fmap (Just . PatMod . Mod pp . ModTypeEuclid) euclidP
+        Just '?' -> fmap (Just . PatMod . Mod pp . ModTypeDegrade) degradeP
         _ -> pure Nothing
     case mp' of
       Just p' -> go p'
@@ -234,20 +241,20 @@ spaceSeqPatP pr = go Empty
     mcd <- L.lookP (liftA2 (,) L.unconsP L.unconsP)
     case mcd of
       (Just c, _) | not (isEndChar c) -> do
-        A.Pat r <- L.stripEndP pr
+        Pat r <- L.stripEndP pr
         go (acc :|> r)
       _ -> case NESeq.nonEmptySeq acc of
         Nothing -> L.throwP ParseErrEmpty
         Just neAcc -> pure neAcc
 
-spaceGroupP :: P (PPat a) -> P (Anno Loc (A.Group (UnPPat a)))
-spaceGroupP = annoP . fmap (A.Group 0 (A.GroupTypeSeq A.SeqPresSpace)) . spaceSeqPatP
+spaceGroupP :: P (PPat a) -> P (Anno Loc (Group (UnPPat a)))
+spaceGroupP = annoP . fmap (Group 0 (GroupTypeSeq SeqPresSpace)) . spaceSeqPatP
 
-unNestSeqPatP :: Anno Loc (A.Group (UnPPat a)) -> PPat a
-unNestSeqPatP (Anno x p@(A.Group lvl _ acc)) =
-  A.Pat $ case (acc, lvl) of
+unNestSeqPatP :: Anno Loc (Group (UnPPat a)) -> PPat a
+unNestSeqPatP (Anno x p@(Group lvl _ acc)) =
+  Pat $ case (acc, lvl) of
     (r :<|| Empty, 0) -> r
-    _ -> JotP x (A.PatGroup p)
+    _ -> JotP x (PatGroup p)
 
 nestedSeqPatP :: P (PPat a) -> P (PPat a)
 nestedSeqPatP = fmap unNestSeqPatP . spaceGroupP
@@ -257,12 +264,12 @@ squarePatP :: P (PPat a) -> P (PPat a)
 squarePatP pr =
   bracedP
     BraceSquare
-    ( A.Pat . annoJot . fmap (\g -> A.PatGroup (g {A.gpLevel = A.gpLevel g + 1}))
+    ( Pat . annoJot . fmap (\g -> PatGroup (g {groupLevel = groupLevel g + 1}))
         <$> groupPatP
           (Just ']')
-          [ (',', A.GroupTypePar)
-          , ('|', A.GroupTypeRand)
-          , ('.', A.GroupTypeSeq A.SeqPresDot)
+          [ (',', GroupTypePar)
+          , ('|', GroupTypeRand)
+          , ('.', GroupTypeSeq SeqPresDot)
           ]
           pr
           (spaceGroupP pr)
@@ -270,10 +277,10 @@ squarePatP pr =
 
 groupPatP
   :: Maybe Char
-  -> [(Char, A.GroupType)]
+  -> [(Char, GroupType)]
   -> P (PPat a)
-  -> P (Anno Loc (A.Group (UnPPat a)))
-  -> P (Anno Loc (A.Group (UnPPat a)))
+  -> P (Anno Loc (Group (UnPPat a)))
+  -> P (Anno Loc (Group (UnPPat a)))
 groupPatP delim opts pr pg = goStart
  where
   goStart = do
@@ -284,32 +291,32 @@ groupPatP delim opts pr pg = goStart
       else do
         case mc >>= \c -> fmap (c,) (lookup c opts) of
           Just (subDelim, subTy) -> do
-            let A.Pat p = unNestSeqPatP g
+            let Pat p = unNestSeqPatP g
             stripTokP subDelim
             annoP (goRest subTy subDelim (NESeq.singleton p))
           Nothing -> pure g
   goRest subTy subDelim !totalAcc = do
-    A.Pat acc <- nestedSeqPatP pr
+    Pat acc <- nestedSeqPatP pr
     let totalAcc' = totalAcc |> acc
     mc <- L.lookP L.unconsP
     if mc == delim
-      then pure (A.Group 0 subTy totalAcc')
+      then pure (Group 0 subTy totalAcc')
       else do
         when (mc == Just subDelim) (stripTokP subDelim)
         goRest subTy subDelim totalAcc'
 
 anglePatP :: P (PPat a) -> P (PPat a)
-anglePatP = bracedP BraceAngle . fmap A.Pat . jotP . fmap (A.PatGroup . A.Group 0 A.GroupTypeAlt) . spaceSeqPatP
+anglePatP = bracedP BraceAngle . fmap Pat . jotP . fmap (PatGroup . Group 0 GroupTypeAlt) . spaceSeqPatP
 
 curlyPatP :: P (PPat a) -> P (PPat a)
-curlyPatP pr = fmap A.Pat $ jotP $ do
-  ps <- bracedP BraceCurly (fmap NESeq.unsafeFromSeq (L.sepBy1P (stripTokP ',') (fmap A.unPat (nestedSeqPatP pr))))
+curlyPatP pr = fmap Pat $ jotP $ do
+  ps <- bracedP BraceCurly (fmap NESeq.unsafeFromSeq (L.sepBy1P (stripTokP ',') (fmap unPat (nestedSeqPatP pr))))
   mx <- L.lookP L.unconsP
   mc <-
     if mx == Just '%'
       then tokP '%' >> fmap Just L.uintP
       else pure Nothing
-  pure (A.PatPoly (A.PolyPat ps mc))
+  pure (PatPoly (Poly ps mc))
 
 singlePatP :: P a -> P (PPat a) -> P (PPat a)
 singlePatP pa pr = do
@@ -321,18 +328,18 @@ singlePatP pa pr = do
     Just '~' -> silencePatP
     Just '_' -> shortElongatePatP
     Just '!' -> shortReplicatePatP
-    _ -> fmap A.Pat (jotP (fmap A.PatPure pa))
+    _ -> fmap Pat (jotP (fmap PatPure pa))
 
 -- | Parses a recursive pattern (atoms and explicit braces).
-rePatP :: P a -> P (PPat A.Factor) -> P (PPat a) -> P (PPat a)
+rePatP :: P a -> P (PPat Factor) -> P (PPat a) -> P (PPat a)
 rePatP pa pf pr = singlePatP pa pr >>= withPatDecosP pf
 
 -- | Parses `x y . z w` sequence groups. Can consume the entire input.
-outerGroupP :: P (PPat a) -> P (Anno Loc (A.Group (UnPPat a)))
+outerGroupP :: P (PPat a) -> P (Anno Loc (Group (UnPPat a)))
 outerGroupP pr =
   groupPatP
     Nothing
-    [('.', A.GroupTypeSeq A.SeqPresDot)]
+    [('.', GroupTypeSeq SeqPresDot)]
     pr
     (spaceGroupP pr)
 
@@ -341,7 +348,7 @@ outerPatP :: P (PPat a) -> P (PPat a)
 outerPatP = fmap unNestSeqPatP . outerGroupP
 
 -- | Parses a top-level pattern given parsers for atoms and signals.
-patP :: P a -> P (PPat A.Factor) -> P (PPat a)
+patP :: P a -> P (PPat Factor) -> P (PPat a)
 patP pa pf = L.spaceP >> outerPatP (fix (rePatP pa pf))
 
 -- | Parses a top-level pattern of the given type.
@@ -349,5 +356,5 @@ topPatP :: P a -> P (PPat a)
 topPatP p = patP p (fix (\pf -> rePatP factorP pf pf))
 
 -- | Parses a top-level pattern of identifiers.
-identPatP :: P (PPat A.Ident)
+identPatP :: P (PPat Ident)
 identPatP = topPatP identP

@@ -12,13 +12,14 @@ st <- C.initSt C.defaultEnv
 getCps = C.getCps st
 getAhead = C.getAhead st
 getPlaying = C.getPlaying st
-getPat = C.getPat st
+getStream = C.getStream st
 getCycle = C.getCycle st
 getTempo = C.getTempo st
 
 setCps = C.setCps st
 setPlaying = C.setPlaying st
-setPat = C.setPat st
+setStream = C.setStream st
 setCycle = C.setCycle st
 setTempo = C.setTempo st
 
+setPlaying True

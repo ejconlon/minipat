@@ -13,8 +13,8 @@ import Data.Map.Strict qualified as Map
 import Data.Sequence (Seq (..))
 import Data.Sequence qualified as Seq
 import Data.Text (Text)
-import Minipat.Base qualified as B
 import Minipat.Dirt.Resources (Timed (..))
+import Minipat.Stream (Ev (..), Tape, tapeToList)
 import Minipat.Time qualified as T
 import Nanotime (PosixTime, TimeDelta (..), addTime, timeDeltaFromFracSecs, timeDeltaToNanos)
 
@@ -105,8 +105,8 @@ timeDeltaToMicros td =
   let (_, ns) = timeDeltaToNanos td
   in  fromIntegral ns / 1000
 
-convertEvent :: PlayEnv -> B.Ev OscMap -> M PlayEvent
-convertEvent (PlayEnv startTime startCyc cps) (B.Ev sp dat) = do
+convertEvent :: PlayEnv -> Ev OscMap -> M PlayEvent
+convertEvent (PlayEnv startTime startCyc cps) (Ev sp dat) = do
   targetCyc <- spanCycleM sp
   let cycOffset = targetCyc - fromInteger startCyc
       onset = addTime startTime (timeDeltaFromFracSecs (cycOffset / cps))
@@ -116,8 +116,8 @@ convertEvent (PlayEnv startTime startCyc cps) (B.Ev sp dat) = do
   dat'' <- insertSafe "delta" (DatumFloat deltaTime) dat'
   pure (PlayEvent onset dat'')
 
-convertTape :: PlayEnv -> B.Tape OscMap -> M (Seq PlayEvent)
-convertTape penv = traverse (convertEvent penv) . Seq.fromList . B.tapeToList
+convertTape :: PlayEnv -> Tape OscMap -> M (Seq PlayEvent)
+convertTape penv = traverse (convertEvent penv) . Seq.fromList . tapeToList
 
 playAddr :: RawAddrPat
 playAddr = "/dirt/play"

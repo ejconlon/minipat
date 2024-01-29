@@ -1,3 +1,4 @@
+-- | Pattern normalization (the step between parsing and interpreting)
 module Minipat.Norm
   ( normPat
   )
@@ -7,10 +8,20 @@ import Bowtie (pattern JotP)
 import Data.Sequence (Seq (..))
 import Data.Sequence.NonEmpty (NESeq (..))
 import Data.Sequence.NonEmpty qualified as NESeq
-import Minipat.Ast qualified as A
-import Minipat.Rewrite qualified as R
+import Minipat.Ast
+  ( Extent (..)
+  , Group (..)
+  , GroupType (..)
+  , LongExtent (..)
+  , Pat (..)
+  , PatF (..)
+  , PatX
+  , ShortExtent (..)
+  , UnPat
+  )
+import Minipat.Rewrite (Rw, overhaul, wrapRw)
 
-foldNorm :: (b -> b -> b) -> NESeq (A.UnPat b a) -> NESeq (A.UnPat b a)
+foldNorm :: (b -> b -> b) -> NESeq (UnPat b a) -> NESeq (UnPat b a)
 foldNorm f = goFirst
  where
   goFirst (y :<|| ys) = do
@@ -19,37 +30,39 @@ foldNorm f = goFirst
     Empty -> ws
     y@(JotP b pf) :<| ys ->
       let ws' = case pf of
-            A.PatTime (A.TimeShort s) ->
+            PatExtent (ExtentShort s) ->
               case (s, wlpf) of
-                (A.ShortTimeElongate, A.PatTime (A.TimeLong c (A.LongTimeElongate x))) ->
-                  let pf' = A.PatTime (A.TimeLong c (A.LongTimeElongate (x + 1)))
+                (ShortExtentElongate, PatExtent (ExtentLong c (LongExtentElongate x))) ->
+                  let pf' = PatExtent (ExtentLong c (LongExtentElongate (x + 1)))
                   in  winit :||> JotP (f wlb b) pf'
-                (A.ShortTimeReplicate, A.PatTime (A.TimeLong c (A.LongTimeReplicate mx))) ->
-                  let pf' = A.PatTime (A.TimeLong c (A.LongTimeReplicate (Just (maybe 3 (+ 1) mx))))
+                (ShortExtentReplicate, PatExtent (ExtentLong c (LongExtentReplicate mx))) ->
+                  let pf' = PatExtent (ExtentLong c (LongExtentReplicate (Just (maybe 3 (+ 1) mx))))
                   in  winit :||> JotP (f wlb b) pf'
                 _ ->
-                  let pf' = A.PatTime $ A.TimeLong wlast $ case s of
-                        A.ShortTimeElongate -> A.LongTimeElongate 2
-                        A.ShortTimeReplicate -> A.LongTimeReplicate Nothing
+                  let pf' = PatExtent $ ExtentLong wlast $ case s of
+                        ShortExtentElongate -> LongExtentElongate 2
+                        ShortExtentReplicate -> LongExtentReplicate Nothing
                   in  winit :||> JotP b pf'
             _ -> ws NESeq.|> y
       in  goRest ws' ys
 
-subNorm :: (b -> b -> b) -> A.PatX b a (A.UnPat b a) -> R.Rw b (A.UnPat b a)
+subNorm :: (b -> b -> b) -> PatX b a (UnPat b a) -> Rw b (UnPat b a)
 subNorm f x = case x of
-  A.PatGroup (A.Group lvl ty ss) -> do
+  PatGroup (Group lvl ty ss) -> do
     -- Fold over sequences, eliminating time shorthands
     let ss' = case ty of
-          A.GroupTypeSeq _ -> foldNorm f ss
+          GroupTypeSeq _ -> foldNorm f ss
           _ -> ss
     -- Unwrap any group singletons we find
     case ss' of
       q :<|| Empty -> pure q
-      _ -> R.wrapRw (A.PatGroup (A.Group lvl ty ss'))
-  _ -> R.wrapRw x
+      _ -> wrapRw (PatGroup (Group lvl ty ss'))
+  _ -> wrapRw x
 
-normPat' :: (b -> b -> b) -> A.Pat b a -> A.Pat b a
-normPat' f = A.Pat . R.overhaul (subNorm f) . A.unPat
+-- Someday we might want to expose this variant, which supports combining annotations
+normPat' :: (b -> b -> b) -> Pat b a -> Pat b a
+normPat' f = Pat . overhaul (subNorm f) . unPat
 
-normPat :: A.Pat b a -> A.Pat b a
+-- | Normalize the given pattern
+normPat :: Pat b a -> Pat b a
 normPat = normPat' (\_ b -> b)

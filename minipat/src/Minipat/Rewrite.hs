@@ -1,7 +1,8 @@
+-- | Utilities for rewriting patterns
 module Minipat.Rewrite
   ( RwErr (..)
-  , Rw
   , RwT
+  , Rw
   , askRw
   , asksRw
   , throwRw
@@ -34,6 +35,7 @@ import Minipat.Ast qualified as A
 -- we descend the tree
 data RwErr e b = RwErr
   { rwErrPath :: !(NESeq b)
+  -- ^ Path of all locations from the root (closest at end)
   , rwErrReason :: !e
   }
   deriving stock (Eq, Ord, Show)
@@ -42,9 +44,10 @@ instance
   (Show b, Typeable b, Show e, Typeable e)
   => Exception (RwErr b e)
 
-type Rw b = Reader (NESeq b)
-
+-- | As we rewrite, we keep track of all locations from the root (snocing)
 type RwT b = ReaderT (NESeq b)
+
+type Rw b = Reader (NESeq b)
 
 askRw :: (Monad m) => RwT b m b
 askRw = asks NESeq.last
@@ -65,6 +68,7 @@ rewrite f = runIdentity . rewriteM (f . fmap runIdentity)
 
 type PatRwM b a m x = A.PatX b a (m x) -> RwT b m x
 
+-- | Rewrite just the current pattern constructors (ignoring embedded patterns)
 rewriteM :: PatRwM b a m x -> A.UnPat b a -> m x
 rewriteM f (JotP b0 pf0) = go (NESeq.singleton b0) pf0
  where
@@ -82,7 +86,7 @@ instance Bifunctor (TapF a) where
     go = \case
       A.PatPure a -> A.PatPure a
       A.PatSilence -> A.PatSilence
-      A.PatTime t -> A.PatTime (fmap g t)
+      A.PatExtent t -> A.PatExtent (fmap g t)
       A.PatGroup gs -> A.PatGroup (fmap g gs)
       A.PatMod m -> A.PatMod (bimap f g m)
       A.PatPoly p -> A.PatPoly (fmap g p)
@@ -93,7 +97,7 @@ instance Bifoldable (TapF a) where
     go z = \case
       A.PatPure _ -> z
       A.PatSilence -> z
-      A.PatTime t -> foldr g z t
+      A.PatExtent t -> foldr g z t
       A.PatGroup gs -> foldr g z gs
       A.PatMod m -> bifoldr f g z m
       A.PatPoly p -> foldr g z p
@@ -104,7 +108,7 @@ instance Bitraversable (TapF a) where
     go = \case
       A.PatPure a -> pure (A.PatPure a)
       A.PatSilence -> pure A.PatSilence
-      A.PatTime t -> fmap A.PatTime (traverse g t)
+      A.PatExtent t -> fmap A.PatExtent (traverse g t)
       A.PatGroup gs -> fmap A.PatGroup (traverse g gs)
       A.PatMod m -> fmap A.PatMod (bitraverse f g m)
       A.PatPoly p -> fmap A.PatPoly (traverse g p)
@@ -116,6 +120,7 @@ overhaul f = runIdentity . overhaulM (f . fmap runIdentity)
 
 type PatOvhM b m = forall a. PatRwM b a m (A.UnPat b a)
 
+-- Rewrite all pattern constructors *polymorphically* (includes embedded patterns)
 overhaulM :: (Monad m) => PatOvhM b m -> A.UnPat b a -> m (A.UnPat b a)
 overhaulM f (JotP b0 pf0) = goOvhM f (NESeq.singleton b0) pf0
 

@@ -1,3 +1,4 @@
+-- | General utils for pretty-printing
 module Minipat.Print
   ( render
   , Brace (..)

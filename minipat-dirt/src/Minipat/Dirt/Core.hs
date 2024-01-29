@@ -19,9 +19,9 @@ import Data.Foldable (for_)
 import Data.Map.Strict qualified as Map
 import Data.Ratio ((%))
 import Data.Sequence (Seq)
-import Minipat.Base qualified as B
 import Minipat.Dirt.Osc qualified as O
 import Minipat.Dirt.Resources qualified as R
+import Minipat.Stream (Ev (..), Stream (..), streamFastBy, tapeSingleton)
 import Minipat.Time qualified as T
 import Nanotime
   ( PosixTime (..)
@@ -54,7 +54,7 @@ data Domain = Domain
   , domAhead :: !(TVar TimeDelta)
   , domPlaying :: !(TVar Bool)
   , domCycle :: !(TVar Integer)
-  , domPat :: !(TVar (B.Pat O.OscMap))
+  , domStream :: !(TVar (Stream O.OscMap))
   , domQueue :: !(TQueue (R.Timed Packet))
   -- TODO bound the queue
   }
@@ -80,7 +80,7 @@ reinitDomain env dom = atomically $ do
   writeTVar (domAhead dom) td
   writeTVar (domPlaying dom) False
   writeTVar (domCycle dom) 0
-  writeTVar (domPat dom) empty
+  writeTVar (domStream dom) empty
   void (flushTQueue (domQueue dom))
 
 getCps :: St -> IO Rational
@@ -92,8 +92,8 @@ getAhead = readTVarIO . domAhead . stDom
 getPlaying :: St -> IO Bool
 getPlaying = readTVarIO . domPlaying . stDom
 
-getPat :: St -> IO (B.Pat O.OscMap)
-getPat = readTVarIO . domPat . stDom
+getStream :: St -> IO (Stream O.OscMap)
+getStream = readTVarIO . domStream . stDom
 
 getCycle :: St -> IO Integer
 getCycle = readTVarIO . domCycle . stDom
@@ -113,8 +113,8 @@ setCps st cps' = atomically $ do
 setPlaying :: St -> Bool -> IO ()
 setPlaying st x = atomically (writeTVar (domPlaying (stDom st)) x)
 
-setPat :: St -> B.Pat O.OscMap -> IO ()
-setPat st x = atomically (writeTVar (domPat (stDom st)) x)
+setStream :: St -> Stream O.OscMap -> IO ()
+setStream st x = atomically (writeTVar (domStream (stDom st)) x)
 
 setCycle :: St -> Integer -> IO ()
 setCycle st x = atomically (writeTVar (domCycle (stDom st)) x)
@@ -124,8 +124,8 @@ genEvents dom now = do
   ahead <- readTVar (domAhead dom)
   cps <- readTVar (domCps dom)
   cyc <- readTVar (domCycle dom)
-  pat <- readTVar (domPat dom)
-  let tape = B.unPat pat (T.Arc (fromInteger cyc) (fromInteger cyc + 1))
+  stream <- readTVar (domStream dom)
+  let tape = unStream stream (T.Arc (fromInteger cyc) (fromInteger cyc + 1))
       origin = addTime now ahead
       penv = O.PlayEnv origin cyc cps
       mpevs = O.convertTape penv tape
@@ -261,8 +261,8 @@ testPlay = do
         penv = O.PlayEnv dawn 0 cps
         arg =
           O.convertTape penv $
-            B.tapeSingleton $
-              B.Ev (T.Span (T.Arc 0 1) (Just (T.Arc 0 1))) $
+            tapeSingleton $
+              Ev (T.Span (T.Arc 0 1) (Just (T.Arc 0 1))) $
                 Map.fromList
                   [ ("sound", DatumString "tabla")
                   , ("orbit", DatumInt32 0)
@@ -280,7 +280,7 @@ testReal = do
             [ ("sound", DatumString "cpu")
             , ("orbit", DatumInt32 0)
             ]
-    setPat st (B.patFastBy 4 (pure m))
+    setStream st (streamFastBy 4 (pure m))
     setPlaying st True
     threadDelayDelta (timeDeltaFromFracSecs @Double 6)
     setTempo st 180

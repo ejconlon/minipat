@@ -1,3 +1,4 @@
+-- | Interpreting patterns as streams
 module Minipat.Interp
   ( Sel
   , SelFn
@@ -19,97 +20,106 @@ import Data.Foldable1 (foldl1')
 import Data.Ratio ((%))
 import Data.Sequence (Seq (..))
 import Data.Sequence.NonEmpty qualified as NESeq
-import Minipat.Ast qualified as A
-import Minipat.Base qualified as B
+import Minipat.Ast
 import Minipat.Rand qualified as D
-import Minipat.Rewrite qualified as R
+import Minipat.Rewrite (RwErr, RwT, rewriteM, throwRw)
+import Minipat.Stream (Stream (..), streamConcat, streamDegradeBy, streamFast, streamFastBy, streamSlow)
 import Minipat.Time qualified as T
 
-type Sel = Anno (Seq A.Select)
+-- | A sequence of selections applied to the given value
+type Sel = Anno (Seq Select)
 
-type SelFn a c = Seq A.Select -> a -> Maybe c
+-- | A function combining selections with the given value.
+-- Returning 'Nothing' indicates an error.
+type SelFn a c = Seq Select -> a -> Maybe c
 
+-- | Accept all selections.
 yesSelFn :: SelFn a (Sel a)
 yesSelFn ss = Just . Anno ss
 
+-- | Forbit selections altogether.
 noSelFn :: SelFn a a
 noSelFn = \case
   Empty -> Just
   _ -> const Nothing
 
+-- | An error interpreting a 'Pat' as a 'Stream'
 data InterpErr
-  = InterpErrShort
-  | InterpErrSel
+  = -- | When extent shorthands have not been previously eliminated
+    InterpErrShort
+  | -- | When selections are invalid
+    InterpErrSel
   deriving stock (Eq, Ord, Show)
 
 instance Exception InterpErr
 
-type M b = ReaderT (Seq A.Select) (Except (R.RwErr InterpErr b))
+type M b = ReaderT (Seq Select) (Except (RwErr InterpErr b))
 
-runM :: M b a -> Either (R.RwErr InterpErr b) a
+runM :: M b a -> Either (RwErr InterpErr b) a
 runM = runExcept . flip runReaderT Empty
 
 lookInterp
-  :: SelFn A.Factor A.Factor
+  :: SelFn Factor Factor
   -> SelFn a c
-  -> A.PatX b a (M b (B.Pat c, Rational))
-  -> R.RwT b (M b) (B.Pat c, Rational)
+  -> PatX b a (M b (Stream c, Rational))
+  -> RwT b (M b) (Stream c, Rational)
 lookInterp g h = \case
-  A.PatPure a -> do
+  PatPure a -> do
     ss <- lift ask
-    maybe (R.throwRw InterpErrSel) (\c -> pure (pure c, 1)) (h ss a)
-  A.PatSilence -> pure (empty, 1)
-  A.PatTime t ->
+    maybe (throwRw InterpErrSel) (\c -> pure (pure c, 1)) (h ss a)
+  PatSilence -> pure (empty, 1)
+  PatExtent t ->
     case t of
-      A.TimeShort _ -> R.throwRw InterpErrShort
-      A.TimeLong melw u -> do
+      ExtentShort _ -> throwRw InterpErrShort
+      ExtentLong melw u -> do
         (el, w) <- lift melw
         case u of
-          A.LongTimeElongate f -> pure (el, A.factorValue f * w)
-          A.LongTimeReplicate mf ->
+          LongExtentElongate f -> pure (el, factorValue f * w)
+          LongExtentReplicate mf ->
             let v = maybe 2 fromInteger mf
-            in  pure (B.patConcat (NESeq.replicate v (el, 1)), fromIntegral v)
-  A.PatGroup (A.Group _ ty els) -> do
+            in  pure (streamConcat (NESeq.replicate v (el, 1)), fromIntegral v)
+  PatGroup (Group _ ty els) -> do
     els' <- lift (sequenceA els)
     case ty of
-      A.GroupTypeSeq _ -> pure (B.patConcat els', 1)
-      A.GroupTypePar -> pure (foldl1' (<|>) (fmap fst els'), 1)
-      A.GroupTypeRand ->
+      GroupTypeSeq _ -> pure (streamConcat els', 1)
+      GroupTypePar -> pure (foldl1' (<|>) (fmap fst els'), 1)
+      GroupTypeRand ->
         let l = NESeq.length els
             f arc' =
               let s = D.arcSeed arc'
                   i = D.randInt l s
                   (el, w) = NESeq.index els' i
-              in  B.unPat (B.patFastBy w el) arc'
-        in  pure (B.Pat (foldMap' (f . T.spanActive . snd) . T.spanSplit), 1)
-      A.GroupTypeAlt ->
+              in  unStream (streamFastBy w el) arc'
+        in  pure (Stream (foldMap' (f . T.spanActive . snd) . T.spanSplit), 1)
+      GroupTypeAlt ->
         let l = NESeq.length els
             f z arc' =
               let i = mod (fromInteger z) l
                   (el, w) = NESeq.index els' i
-              in  B.unPat (B.patFastBy w el) arc'
-        in  pure (B.Pat (foldMap' (\(z, sp) -> f z (T.spanActive sp)) . T.spanSplit), 1)
-  A.PatMod (A.Mod mx md) -> do
+              in  unStream (streamFastBy w el) arc'
+        in  pure (Stream (foldMap' (\(z, sp) -> f z (T.spanActive sp)) . T.spanSplit), 1)
+  PatMod (Mod mx md) -> do
     case md of
-      A.ModTypeSpeed (A.Speed dir spat) -> do
+      ModTypeSpeed (Speed dir spat) -> do
         spat' <- lift (subInterp g g spat)
         let f = case dir of
-              A.SpeedDirFast -> B.patFast
-              A.SpeedDirSlow -> B.patSlow
-            spat'' = fmap A.factorValue spat'
+              SpeedDirFast -> streamFast
+              SpeedDirSlow -> streamSlow
+            spat'' = fmap factorValue spat'
         (r', w) <- lift mx
         pure (f spat'' r', w)
-      A.ModTypeSelect s -> lift (local (:|> s) mx)
-      A.ModTypeDegrade (A.Degrade dd) -> do
-        let d = maybe (1 % 2) A.factorValue dd
+      ModTypeSelect s -> lift (local (:|> s) mx)
+      ModTypeDegrade (Degrade dd) -> do
+        let d = maybe (1 % 2) factorValue dd
         (r', w) <- lift mx
-        let r'' = B.patDegradeBy d r'
+        let r'' = streamDegradeBy d r'
         pure (r'', w)
-      A.ModTypeEuclid _ -> error "TODO"
-  A.PatPoly (A.PolyPat _ _) -> error "TODO"
+      ModTypeEuclid _ -> error "TODO"
+  PatPoly (Poly _ _) -> error "TODO"
 
-subInterp :: SelFn A.Factor A.Factor -> SelFn a c -> A.Pat b a -> M b (B.Pat c)
-subInterp g h = fmap fst . R.rewriteM (lookInterp g h) . A.unPat
+subInterp :: SelFn Factor Factor -> SelFn a c -> Pat b a -> M b (Stream c)
+subInterp g h = fmap fst . rewriteM (lookInterp g h) . unPat
 
-interpPat :: SelFn A.Factor A.Factor -> SelFn a c -> A.Pat b a -> Either (R.RwErr InterpErr b) (B.Pat c)
+-- | Interpret the given 'Pat' as a 'Stream'
+interpPat :: SelFn Factor Factor -> SelFn a c -> Pat b a -> Either (RwErr InterpErr b) (Stream c)
 interpPat g h = runM . subInterp g h
