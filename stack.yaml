@@ -11,12 +11,12 @@ extra-deps:
 - bowtie-0.2.0
 - dahdit-0.5.1
 - dahdit-network-0.5.2
-- dahdit-midi-0.5.2
+- dahdit-midi-0.5.3
 - data-sword-0.2.0.3
 - daytripper-0.3.1
 - falsify-0.2.0
 - looksee-0.5.2
-- nanotime-0.2.0
+- nanotime-0.3.1
 
 allow-newer: true
 allow-newer-deps:

@@ -74,7 +74,7 @@ library
     , heaps ==0.4.*
     , looksee ==0.5.*
     , mtl ==2.3.*
-    , nanotime ==0.2.*
+    , nanotime ==0.3.*
     , nonempty-containers ==0.3.*
     , prettyprinter ==1.7.*
     , text ==2.0.*
@@ -127,7 +127,7 @@ test-suite minipat-test
     , looksee ==0.5.*
     , minipat
     , mtl ==2.3.*
-    , nanotime ==0.2.*
+    , nanotime ==0.3.*
     , nonempty-containers ==0.3.*
     , prettyprinter ==1.7.*
     , tasty ==1.4.*

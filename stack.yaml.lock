@@ -26,12 +26,12 @@ packages:
   original:
     hackage: dahdit-network-0.5.2
 - completed:
-    hackage: dahdit-midi-0.5.2@sha256:912393c22a45a3a793c296dac216f822c6eae99fa3430d051f320c7da39821c9,3395
+    hackage: dahdit-midi-0.5.3@sha256:b2b0ed8cec4e884a34ba930c0bae31c68d2b4013bb2e7b123d0f4d45d2fc0927,3395
     pantry-tree:
-      sha256: eabbbc4d3312eb1049f09cf33389a1fe7c5f08963eec1371acefbaaf97e5171f
+      sha256: 447cbe64477fe866311afa250d546a3764999332ad1ae11ae8eca9d123c6bd97
       size: 562
   original:
-    hackage: dahdit-midi-0.5.2
+    hackage: dahdit-midi-0.5.3
 - completed:
     hackage: data-sword-0.2.0.3@sha256:953cca4b4533a388df0ef17e06ac5530652d1d73decfe8b656242ccdf4b40999,1568
     pantry-tree:
@@ -61,12 +61,12 @@ packages:
   original:
     hackage: looksee-0.5.2
 - completed:
-    hackage: nanotime-0.2.0@sha256:79aa8dd2d0776173d98dad4447e238f200d3638d6318991852a19d5357f086ed,2827
+    hackage: nanotime-0.3.1@sha256:71f977311ef21cabd557fc44204b3aee72e70bc842bae9bf3a70ca697f294630,2827
     pantry-tree:
-      sha256: 7b9aca6ec0a989e7d7862c0827c90376420fd274843d0157fc6aae0b122996c9
+      sha256: 4764a249960a2abb4c06c260aa67a25a0f0ae58b45a60cc60eb5046ff66016e9
       size: 168
   original:
-    hackage: nanotime-0.2.0
+    hackage: nanotime-0.3.1
 snapshots:
 - completed:
     sha256: 7b975b104cb3dbf0c297dfd01f936a4d2ee523241dd0b1ae960522b833fe3027

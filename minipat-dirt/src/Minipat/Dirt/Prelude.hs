@@ -24,7 +24,15 @@ import Minipat.Dirt.Osc qualified as O
 import Minipat.Dirt.Release (RelVar)
 import Minipat.Dirt.Release qualified as R
 import Minipat.Time qualified as T
-import Nanotime (PosixTime (..), TimeDelta, TimeLike (..), threadDelayDelta, timeDeltaFromFracSecs)
+import Nanotime
+  ( PosixTime (..)
+  , TimeDelta
+  , TimeLike (..)
+  , showPosixTime
+  , showTimeDelta
+  , threadDelayDelta
+  , timeDeltaFromFracSecs
+  )
 import Network.Socket qualified as NS
 
 data Env = Env
@@ -194,9 +202,12 @@ runGenTask dom = do
     Just (_, mpevs) ->
       case mpevs of
         Left err -> throwIO err
-        Right pevs -> atomically $ do
-          advanceCycle dom
-          for_ pevs (writeTQueue (domQueue dom) . O.playPacket)
+        Right pevs -> do
+          putStrLn ("*** GEN " ++ showPosixTime now)
+          putStrLn ("Writing " ++ show (length pevs) ++ " events")
+          atomically $ do
+            advanceCycle dom
+            for_ pevs (writeTQueue (domQueue dom) . O.playPacket)
   pure Nothing
 
 runSendTask :: OscConn -> Domain -> IO ()
@@ -205,8 +216,9 @@ runSendTask conn dom = go
   go = do
     tp@(O.TimedPacket tm pkt) <- atomically (readTQueue (domQueue dom))
     now <- currentTime
-    print now
-    print tp
+    putStrLn ("*** SEND " ++ showPosixTime now)
+    putStrLn (showPosixTime tm)
+    print pkt
     threadDelayDelta (diffTime tm now)
     sendPacket conn pkt
     go
@@ -282,7 +294,7 @@ testReal = do
             ]
     setPat st (B.patFastBy 4 (pure m))
     setPlaying st True
-    threadDelayDelta (timeDeltaFromFracSecs @Double 2)
+    threadDelayDelta (timeDeltaFromFracSecs @Double 6)
     setTempo st 180
-    threadDelayDelta (timeDeltaFromFracSecs @Double 3)
+    threadDelayDelta (timeDeltaFromFracSecs @Double 6)
     setPlaying st False

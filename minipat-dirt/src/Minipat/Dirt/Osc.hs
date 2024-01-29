@@ -15,7 +15,7 @@ import Data.Sequence qualified as Seq
 import Data.Text (Text)
 import Minipat.Base qualified as B
 import Minipat.Time qualified as T
-import Nanotime (PosixTime, TimeDelta, addTime, timeDeltaFromFracSecs)
+import Nanotime (PosixTime, TimeDelta (..), addTime, timeDeltaFromFracSecs, timeDeltaToNanos)
 
 type OscMap = Map Text Datum
 
@@ -81,7 +81,7 @@ playAliases =
   ]
 
 spanCycleM :: T.Span -> M Rational
-spanCycleM = maybe (throwError OscErrLate) (pure . (/ 1000)) . T.spanCycle
+spanCycleM = maybe (throwError OscErrLate) pure . T.spanCycle
 
 spanDeltaM :: T.Span -> M Rational
 spanDeltaM = maybe (throwError OscErrCont) pure . T.spanDelta
@@ -94,21 +94,26 @@ data PlayEnv = PlayEnv
   deriving stock (Eq, Ord, Show)
 
 data PlayEvent = PlayEvent
-  { peOnset :: !PosixTime
-  , peLength :: !TimeDelta
+  { peTime :: !PosixTime
   , peData :: !OscMap
   }
   deriving stock (Eq, Ord, Show)
 
+timeDeltaToMicros :: TimeDelta -> Float
+timeDeltaToMicros td =
+  let (_, ns) = timeDeltaToNanos td
+  in  fromIntegral ns / 1000
+
 convertEvent :: PlayEnv -> B.Ev OscMap -> M PlayEvent
 convertEvent (PlayEnv startTime startCyc cps) (B.Ev sp dat) = do
-  target <- spanCycleM sp
-  let cycOffset = target - fromInteger startCyc
+  targetCyc <- spanCycleM sp
+  let cycOffset = targetCyc - fromInteger startCyc
       onset = addTime startTime (timeDeltaFromFracSecs (cps * cycOffset))
-  delta <- spanDeltaM sp
-  let len = timeDeltaFromFracSecs (cps * delta)
+  deltaCyc <- spanDeltaM sp
+  let deltaTime = timeDeltaToMicros (timeDeltaFromFracSecs (cps * deltaCyc))
   dat' <- replaceAliases playAliases dat
-  pure (PlayEvent onset len dat')
+  dat'' <- insertSafe "delta" (DatumFloat deltaTime) dat'
+  pure (PlayEvent onset dat'')
 
 convertTape :: PlayEnv -> B.Tape OscMap -> M (Seq PlayEvent)
 convertTape penv = traverse (convertEvent penv) . Seq.fromList . B.tapeToList
@@ -123,7 +128,7 @@ data TimedPacket = TimedPacket
   deriving stock (Eq, Ord, Show)
 
 playPacket :: PlayEvent -> TimedPacket
-playPacket (PlayEvent time _ dat) =
+playPacket (PlayEvent time dat) =
   let pkt = PacketMsg (Msg playAddr (namedPayload dat))
   in  TimedPacket time pkt
 
