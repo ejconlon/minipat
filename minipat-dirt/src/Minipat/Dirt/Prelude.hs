@@ -159,8 +159,8 @@ acqGenTask dom = R.acquireLoop (domAhead dom) (runGenTask dom)
 acqSendTask :: OscConn -> Domain -> Acquire (Async ())
 acqSendTask conn dom = R.acquireAsync (runSendTask conn dom)
 
-initSt :: Env -> IO St
-initSt env = St env <$> initDomain env <*> newEmptyMVar
+newSt :: Env -> IO St
+newSt env = St env <$> initDomain env <*> newEmptyMVar
 
 initRes :: St -> IO ()
 initRes st = do
@@ -171,6 +171,9 @@ initRes st = do
     genTask <- R.relVarAcquire rv (acqGenTask (stDom st))
     sendTask <- R.relVarAcquire rv (acqSendTask conn (stDom st))
     putMVar (stRes st) (Resources rv conn genTask sendTask)
+
+initSt :: Env -> IO St
+initSt env = newSt env >>= \st -> st <$ initRes st
 
 disposeSt :: St -> IO ()
 disposeSt st = mask_ (tryTakeMVar (stRes st) >>= maybe (pure ()) (R.relVarDispose . resRel))

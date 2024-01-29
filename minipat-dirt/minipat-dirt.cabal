@@ -27,7 +27,6 @@ library
       Minipat.Dirt.Osc
       Minipat.Dirt.Prelude
       Minipat.Dirt.Release
-      Minipat.Dirt.Spy
   other-modules:
       Paths_minipat_dirt
   hs-source-dirs:
