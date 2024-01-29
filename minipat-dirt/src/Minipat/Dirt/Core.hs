@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Minipat.Dirt.Prelude where
+module Minipat.Dirt.Core where
 
 import Control.Applicative (empty)
 import Control.Concurrent (forkFinally)
@@ -27,7 +27,6 @@ import Nanotime
   ( PosixTime (..)
   , TimeDelta
   , TimeLike (..)
-  , showPosixTime
   , threadDelayDelta
   , timeDeltaFromFracSecs
   )
