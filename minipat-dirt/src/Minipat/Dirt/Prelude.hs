@@ -207,8 +207,8 @@ doGen dom now = do
             for_ pevs (writeTQueue (domQueue dom) . O.playPacket)
 
 doSend :: OscConn -> R.Timed Packet -> IO ()
-doSend conn (R.Timed key val) = do
-  putStrLn ("*** SEND " ++ showPosixTime key)
+doSend conn (R.Timed _key val) = do
+  -- putStrLn ("*** SEND " ++ showPosixTime key)
   sendPacket conn val
 
 sendPacket :: OscConn -> Packet -> IO ()

@@ -109,9 +109,9 @@ convertEvent :: PlayEnv -> B.Ev OscMap -> M PlayEvent
 convertEvent (PlayEnv startTime startCyc cps) (B.Ev sp dat) = do
   targetCyc <- spanCycleM sp
   let cycOffset = targetCyc - fromInteger startCyc
-      onset = addTime startTime (timeDeltaFromFracSecs (cps * cycOffset))
+      onset = addTime startTime (timeDeltaFromFracSecs (cycOffset / cps))
   deltaCyc <- spanDeltaM sp
-  let deltaTime = timeDeltaToMicros (timeDeltaFromFracSecs (cps * deltaCyc))
+  let deltaTime = timeDeltaToMicros (timeDeltaFromFracSecs (deltaCyc / cps))
   dat' <- replaceAliases playAliases dat
   dat'' <- insertSafe "delta" (DatumFloat deltaTime) dat'
   pure (PlayEvent onset dat'')
