@@ -26,12 +26,12 @@ packages:
   original:
     hackage: dahdit-network-0.5.2
 - completed:
-    hackage: dahdit-midi-0.5.3@sha256:b2b0ed8cec4e884a34ba930c0bae31c68d2b4013bb2e7b123d0f4d45d2fc0927,3395
+    hackage: dahdit-midi-0.5.5@sha256:a5914dd5e38e3df5d611b3b25ff4124e60123661825fb215552f935834147472,3395
     pantry-tree:
-      sha256: 447cbe64477fe866311afa250d546a3764999332ad1ae11ae8eca9d123c6bd97
+      sha256: 0ace41083dcfedb31dcf8a82bb74c5b12ee65ff28151c6983372017b2bba0269
       size: 562
   original:
-    hackage: dahdit-midi-0.5.3
+    hackage: dahdit-midi-0.5.5
 - completed:
     hackage: data-sword-0.2.0.3@sha256:953cca4b4533a388df0ef17e06ac5530652d1d73decfe8b656242ccdf4b40999,1568
     pantry-tree:

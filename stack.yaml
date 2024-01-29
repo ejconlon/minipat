@@ -11,7 +11,7 @@ extra-deps:
 - bowtie-0.2.0
 - dahdit-0.5.1
 - dahdit-network-0.5.2
-- dahdit-midi-0.5.3
+- dahdit-midi-0.5.5
 - data-sword-0.2.0.3
 - daytripper-0.3.1
 - falsify-0.2.0

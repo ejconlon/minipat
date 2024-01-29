@@ -6,6 +6,7 @@ module Minipat.Parser
   , P
   , ParseErr (..)
   , PPat
+  , topPatP
   , identPatP
   , factorP
   , identP
@@ -343,6 +344,10 @@ outerPatP = fmap unNestSeqPatP . outerGroupP
 patP :: P a -> P (PPat A.Factor) -> P (PPat a)
 patP pa pf = L.spaceP >> outerPatP (fix (rePatP pa pf))
 
--- | Parses a top-level pattern with variables.
+-- | Parses a top-level pattern of the given type.
+topPatP :: P a -> P (PPat a)
+topPatP p = patP p (fix (\pf -> rePatP factorP pf pf))
+
+-- | Parses a top-level pattern of identifiers.
 identPatP :: P (PPat A.Ident)
-identPatP = patP identP (fix (\pf -> rePatP factorP pf pf))
+identPatP = topPatP identP

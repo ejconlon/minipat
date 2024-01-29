@@ -1,6 +1,8 @@
 module Minipat.Interp
   ( Sel
   , SelFn
+  , yesSelFn
+  , noSelFn
   , InterpErr (..)
   , interpPat
   )
@@ -10,7 +12,7 @@ import Bowtie (Anno (..))
 import Control.Applicative (Alternative (..))
 import Control.Exception (Exception)
 import Control.Monad.Except (Except, runExcept)
-import Control.Monad.Reader (ReaderT, asks, local, runReaderT)
+import Control.Monad.Reader (MonadReader (..), ReaderT, runReaderT)
 import Control.Monad.Trans (lift)
 import Data.Foldable (foldMap')
 import Data.Foldable1 (foldl1')
@@ -25,9 +27,19 @@ import Minipat.Time qualified as T
 
 type Sel = Anno (Seq A.Select)
 
-type SelFn = Sel A.Factor -> A.Factor
+type SelFn a c = Seq A.Select -> a -> Maybe c
 
-data InterpErr = InterpErrShort
+yesSelFn :: SelFn a (Sel a)
+yesSelFn ss = Just . Anno ss
+
+noSelFn :: SelFn a a
+noSelFn = \case
+  Empty -> Just
+  _ -> const Nothing
+
+data InterpErr
+  = InterpErrShort
+  | InterpErrSel
   deriving stock (Eq, Ord, Show)
 
 instance Exception InterpErr
@@ -38,11 +50,14 @@ runM :: M b a -> Either (R.RwErr InterpErr b) a
 runM = runExcept . flip runReaderT Empty
 
 lookInterp
-  :: SelFn
-  -> A.PatX b a (M b (B.Pat (Sel a), Rational))
-  -> R.RwT b (M b) (B.Pat (Sel a), Rational)
-lookInterp g = \case
-  A.PatPure a -> lift (asks (\ss -> (pure (Anno ss a), 1)))
+  :: SelFn A.Factor A.Factor
+  -> SelFn a c
+  -> A.PatX b a (M b (B.Pat c, Rational))
+  -> R.RwT b (M b) (B.Pat c, Rational)
+lookInterp g h = \case
+  A.PatPure a -> do
+    ss <- lift ask
+    maybe (R.throwRw InterpErrSel) (\c -> pure (pure c, 1)) (h ss a)
   A.PatSilence -> pure (empty, 1)
   A.PatTime t ->
     case t of
@@ -77,11 +92,11 @@ lookInterp g = \case
   A.PatMod (A.Mod mx md) -> do
     case md of
       A.ModTypeSpeed (A.Speed dir spat) -> do
-        spat' <- lift (subInterp g spat)
+        spat' <- lift (subInterp g g spat)
         let f = case dir of
               A.SpeedDirFast -> B.patFast
               A.SpeedDirSlow -> B.patSlow
-            spat'' = fmap (A.factorValue . g) spat'
+            spat'' = fmap A.factorValue spat'
         (r', w) <- lift mx
         pure (f spat'' r', w)
       A.ModTypeSelect s -> lift (local (:|> s) mx)
@@ -93,11 +108,8 @@ lookInterp g = \case
       A.ModTypeEuclid _ -> error "TODO"
   A.PatPoly (A.PolyPat _ _) -> error "TODO"
 
-subInterp :: SelFn -> A.Pat b a -> M b (B.Pat (Sel a))
-subInterp g = fmap fst . R.rewriteM (lookInterp g) . A.unPat
+subInterp :: SelFn A.Factor A.Factor -> SelFn a c -> A.Pat b a -> M b (B.Pat c)
+subInterp g h = fmap fst . R.rewriteM (lookInterp g h) . A.unPat
 
-interpPat' :: SelFn -> A.Pat b a -> Either (R.RwErr InterpErr b) (B.Pat (Sel a))
-interpPat' g = runM . subInterp g
-
-interpPat :: A.Pat b a -> Either (R.RwErr InterpErr b) (B.Pat (Sel a))
-interpPat = interpPat' annoVal
+interpPat :: SelFn A.Factor A.Factor -> SelFn a c -> A.Pat b a -> Either (R.RwErr InterpErr b) (B.Pat c)
+interpPat g h = runM . subInterp g h

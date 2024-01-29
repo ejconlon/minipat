@@ -20,7 +20,7 @@ import Data.Text (Text)
 import Looksee (Err, parse)
 import Minipat.Ast -- TODO qualify
 import Minipat.Base (Ev (..), patRun)
-import Minipat.Interp (Sel, interpPat)
+import Minipat.Interp (Sel, interpPat, noSelFn, yesSelFn)
 import Minipat.Norm (normPat)
 import Minipat.Parser (P, ParseErr, factorP, identP, identPatP)
 import Minipat.Print (render)
@@ -419,7 +419,7 @@ runPatInterpCase :: (TestName, Maybe Arc, Text, [Ev (Sel Ident)]) -> TestTree
 runPatInterpCase (n, mayArc, patStr, evs) = testCase n $ do
   pat <- either throwIO pure (parse tpatP patStr)
   let pat' = normPat pat
-  pat'' <- either throwIO pure (interpPat pat')
+  pat'' <- either throwIO pure (interpPat noSelFn yesSelFn pat')
   let arc = fromMaybe (Arc 0 1) mayArc
       actualEvs = patRun pat'' arc
   actualEvs @?= evs

@@ -26,6 +26,7 @@ library
   exposed-modules:
       Minipat.Ast
       Minipat.Base
+      Minipat.Eval
       Minipat.Interp
       Minipat.Norm
       Minipat.Parser

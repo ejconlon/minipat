@@ -4,8 +4,8 @@
 :set prompt-cont "| "
 
 import Data.Ratio ((%))
-import Minipat.Base
 import Minipat.Dirt.Core qualified as C
+import Minipat.Dirt.Prelude
 
 st <- C.initSt C.defaultEnv
 

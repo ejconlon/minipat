@@ -25,7 +25,9 @@ source-repository head
 library
   exposed-modules:
       Minipat.Dirt.Core
+      Minipat.Dirt.Eval
       Minipat.Dirt.Osc
+      Minipat.Dirt.Prelude
       Minipat.Dirt.Resources
   other-modules:
       Paths_minipat_dirt
@@ -68,6 +70,7 @@ library
     , dahdit ==0.5.*
     , dahdit-midi ==0.5.*
     , dahdit-network ==0.5.*
+    , looksee ==0.5.*
     , minipat ==0.1.*
     , mtl ==2.3.*
     , nanotime ==0.3.*
