@@ -7,7 +7,7 @@ import Control.Concurrent (forkFinally)
 import Control.Concurrent.Async (Async, async, cancel, waitCatch)
 import Control.Concurrent.MVar (MVar, newEmptyMVar, putMVar, tryTakeMVar, withMVar)
 import Control.Concurrent.STM (STM, atomically)
-import Control.Concurrent.STM.TQueue (TQueue, flushTQueue, newTQueueIO, readTQueue, writeTQueue)
+import Control.Concurrent.STM.TQueue (TQueue, flushTQueue, newTQueueIO, writeTQueue)
 import Control.Concurrent.STM.TVar (TVar, modifyTVar', newTVarIO, readTVar, readTVarIO, writeTVar)
 import Control.Exception (SomeException, bracket, mask_, onException, throwIO)
 import Control.Monad (void)
@@ -21,15 +21,13 @@ import Data.Ratio ((%))
 import Data.Sequence (Seq)
 import Minipat.Base qualified as B
 import Minipat.Dirt.Osc qualified as O
-import Minipat.Dirt.Release (RelVar)
-import Minipat.Dirt.Release qualified as R
+import Minipat.Dirt.Resources qualified as R
 import Minipat.Time qualified as T
 import Nanotime
   ( PosixTime (..)
   , TimeDelta
   , TimeLike (..)
   , showPosixTime
-  , showTimeDelta
   , threadDelayDelta
   , timeDeltaFromFracSecs
   )
@@ -58,7 +56,7 @@ data Domain = Domain
   , domPlaying :: !(TVar Bool)
   , domCycle :: !(TVar Integer)
   , domPat :: !(TVar (B.Pat O.OscMap))
-  , domQueue :: !(TQueue O.TimedPacket)
+  , domQueue :: !(TQueue (R.Timed Packet))
   -- TODO bound the queue
   }
 
@@ -122,8 +120,8 @@ setPat st x = atomically (writeTVar (domPat (stDom st)) x)
 setCycle :: St -> Integer -> IO ()
 setCycle st x = atomically (writeTVar (domCycle (stDom st)) x)
 
-readEvents :: Domain -> PosixTime -> STM (O.PlayEnv, Either O.OscErr (Seq O.PlayEvent))
-readEvents dom now = do
+genEvents :: Domain -> PosixTime -> STM (O.PlayEnv, Either O.OscErr (Seq O.PlayEvent))
+genEvents dom now = do
   ahead <- readTVar (domAhead dom)
   cps <- readTVar (domCps dom)
   cyc <- readTVar (domCycle dom)
@@ -143,7 +141,7 @@ data OscConn = OscConn
   }
 
 data Resources = Resources
-  { resRel :: !RelVar
+  { resRel :: !R.RelVar
   , resConn :: !OscConn
   , resGenTask :: !(Async ())
   , resSendTask :: !(Async ())
@@ -162,10 +160,10 @@ acqConn (Env targetHp listenHp _ _) = do
   pure (OscConn targetAddr conn)
 
 acqGenTask :: Domain -> Acquire (Async ())
-acqGenTask dom = R.acquireLoop (domAhead dom) (runGenTask dom)
+acqGenTask dom = R.acquireLoop (domAhead dom) (doGen dom)
 
 acqSendTask :: OscConn -> Domain -> Acquire (Async ())
-acqSendTask conn dom = R.acquireAsync (runSendTask conn dom)
+acqSendTask conn dom = R.acquireAwait (domPlaying dom) (domQueue dom) (doSend conn)
 
 newSt :: Env -> IO St
 newSt env = St env <$> initDomain env <*> newEmptyMVar
@@ -189,13 +187,12 @@ disposeSt st = mask_ (tryTakeMVar (stRes st) >>= maybe (pure ()) (R.relVarDispos
 withSt :: (St -> IO a) -> IO a
 withSt = bracket (initSt defaultEnv) disposeSt
 
-runGenTask :: Domain -> IO (Maybe ())
-runGenTask dom = do
-  now <- currentTime @PosixTime
+doGen :: Domain -> PosixTime -> IO ()
+doGen dom now = do
   mr <- atomically $ do
     playing <- readTVar (domPlaying dom)
     if playing
-      then fmap Just (readEvents dom now)
+      then fmap Just (genEvents dom now)
       else pure Nothing
   case mr of
     Nothing -> pure ()
@@ -208,20 +205,11 @@ runGenTask dom = do
           atomically $ do
             advanceCycle dom
             for_ pevs (writeTQueue (domQueue dom) . O.playPacket)
-  pure Nothing
 
-runSendTask :: OscConn -> Domain -> IO ()
-runSendTask conn dom = go
- where
-  go = do
-    tp@(O.TimedPacket tm pkt) <- atomically (readTQueue (domQueue dom))
-    now <- currentTime
-    putStrLn ("*** SEND " ++ showPosixTime now)
-    putStrLn (showPosixTime tm)
-    print pkt
-    threadDelayDelta (diffTime tm now)
-    sendPacket conn pkt
-    go
+doSend :: OscConn -> R.Timed Packet -> IO ()
+doSend conn (R.Timed key val) = do
+  putStrLn ("*** SEND " ++ showPosixTime key)
+  sendPacket conn val
 
 sendPacket :: OscConn -> Packet -> IO ()
 sendPacket (OscConn targetAddr (Conn _ enc)) = runEncoder enc targetAddr
@@ -247,7 +235,7 @@ sendPlay conn mpevs =
     Left err -> throwIO err
     Right pevs ->
       for_ pevs $ \pev -> do
-        let tp@(O.TimedPacket tm pkt) = O.playPacket pev
+        let tp@(R.Timed tm pkt) = O.playPacket pev
         print tp
         now <- currentTime
         threadDelayDelta (diffTime now tm)
@@ -287,6 +275,7 @@ testReal :: IO ()
 testReal = do
   putStrLn "real - initializing"
   withSt $ \st -> do
+    withMVar (stRes st) (sendHandshake . resConn)
     let m =
           Map.fromList
             [ ("sound", DatumString "cpu")

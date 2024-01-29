@@ -14,6 +14,7 @@ import Data.Sequence (Seq (..))
 import Data.Sequence qualified as Seq
 import Data.Text (Text)
 import Minipat.Base qualified as B
+import Minipat.Dirt.Resources (Timed (..))
 import Minipat.Time qualified as T
 import Nanotime (PosixTime, TimeDelta (..), addTime, timeDeltaFromFracSecs, timeDeltaToNanos)
 
@@ -121,16 +122,10 @@ convertTape penv = traverse (convertEvent penv) . Seq.fromList . B.tapeToList
 playAddr :: RawAddrPat
 playAddr = "/dirt/play"
 
-data TimedPacket = TimedPacket
-  { tpTime :: !PosixTime
-  , tpPacket :: !Packet
-  }
-  deriving stock (Eq, Ord, Show)
-
-playPacket :: PlayEvent -> TimedPacket
+playPacket :: PlayEvent -> Timed Packet
 playPacket (PlayEvent time dat) =
   let pkt = PacketMsg (Msg playAddr (namedPayload dat))
-  in  TimedPacket time pkt
+  in  Timed time pkt
 
 handshakeAddr :: RawAddrPat
 handshakeAddr = "/dirt/handshake"
