@@ -200,8 +200,8 @@ doGen dom now = do
       case mpevs of
         Left err -> throwIO err
         Right pevs -> do
-          putStrLn ("*** GEN " ++ showPosixTime now)
-          putStrLn ("Writing " ++ show (length pevs) ++ " events")
+          -- putStrLn ("*** GEN " ++ showPosixTime now)
+          -- putStrLn ("Writing " ++ show (length pevs) ++ " events")
           atomically $ do
             advanceCycle dom
             for_ pevs (writeTQueue (domQueue dom) . O.playPacket)
