@@ -5,10 +5,11 @@ module Minipat.Dirt.Prelude where
 import Control.Applicative (empty)
 import Control.Concurrent (forkFinally)
 import Control.Concurrent.Async (Async, async, cancel, waitCatch)
+import Control.Concurrent.MVar (MVar, newEmptyMVar, putMVar, tryTakeMVar, withMVar)
 import Control.Concurrent.STM (STM, atomically)
-import Control.Concurrent.STM.TQueue (TQueue, newTQueueIO, readTQueue, writeTQueue)
+import Control.Concurrent.STM.TQueue (TQueue, flushTQueue, newTQueueIO, readTQueue, writeTQueue)
 import Control.Concurrent.STM.TVar (TVar, modifyTVar', newTVarIO, readTVar, readTVarIO, writeTVar)
-import Control.Exception (SomeException, bracket, throwIO)
+import Control.Exception (SomeException, bracket, mask_, onException, throwIO)
 import Control.Monad (void)
 import Control.Monad.IO.Class (liftIO)
 import Dahdit.Midi.Osc (Datum (..), Packet)
@@ -20,8 +21,8 @@ import Data.Ratio ((%))
 import Data.Sequence (Seq)
 import Minipat.Base qualified as B
 import Minipat.Dirt.Osc qualified as O
-import Minipat.Dirt.Ref (Ref, RelVar)
-import Minipat.Dirt.Ref qualified as R
+import Minipat.Dirt.Release (RelVar)
+import Minipat.Dirt.Release qualified as R
 import Minipat.Time qualified as T
 import Nanotime (PosixTime (..), TimeDelta, TimeLike (..), threadDelayDelta, timeDeltaFromFracSecs)
 import Network.Socket qualified as NS
@@ -75,6 +76,7 @@ reinitDomain env dom = atomically $ do
   writeTVar (domPlaying dom) False
   writeTVar (domCycle dom) 0
   writeTVar (domPat dom) empty
+  void (flushTQueue (domQueue dom))
 
 getCps :: St -> IO Rational
 getCps = readTVarIO . domCps . stDom
@@ -132,13 +134,17 @@ data OscConn = OscConn
   , ocListenConn :: !(Conn NS.SockAddr)
   }
 
+data Resources = Resources
+  { resRel :: !RelVar
+  , resConn :: !OscConn
+  , resGenTask :: !(Async ())
+  , resSendTask :: !(Async ())
+  }
+
 data St = St
   { stEnv :: !Env
-  , stRel :: !RelVar
   , stDom :: !Domain
-  , stConn :: !(Ref OscConn)
-  , stGenTask :: !(Ref (Async ()))
-  , stSendTask :: !(Ref (Async ()))
+  , stRes :: !(MVar Resources)
   }
 
 acqConn :: Env -> Acquire OscConn
@@ -150,35 +156,24 @@ acqConn (Env targetHp listenHp _ _) = do
 acqGenTask :: Domain -> Acquire (Async ())
 acqGenTask dom = R.acquireLoop (domAhead dom) (runGenTask dom)
 
-acqSendTask :: Ref OscConn -> Domain -> Acquire (Async ())
+acqSendTask :: OscConn -> Domain -> Acquire (Async ())
 acqSendTask conn dom = R.acquireAsync (runSendTask conn dom)
 
 initSt :: Env -> IO St
-initSt env = do
+initSt env = St env <$> initDomain env <*> newEmptyMVar
+
+initRes :: St -> IO ()
+initRes st = do
+  disposeSt st
   rv <- R.relVarInit
-  dom <- initDomain env
-  conn <- R.refEmpty rv
-  genTask <- R.refEmpty rv
-  sendTask <- R.refEmpty rv
-  let st = St env rv dom conn genTask sendTask
-  reinitRefs st
-  pure st
-
-cleanRefs :: St -> IO ()
-cleanRefs st = do
-  void (R.refCleanup (stSendTask st))
-  void (R.refCleanup (stGenTask st))
-  void (R.refCleanup (stConn st))
-
-reinitRefs :: St -> IO ()
-reinitRefs st = do
-  cleanRefs st
-  R.refReplace (stConn st) (acqConn (stEnv st))
-  R.refReplace (stGenTask st) (acqGenTask (stDom st))
-  R.refReplace (stSendTask st) (acqSendTask (stConn st) (stDom st))
+  flip onException (R.relVarDispose rv) $ do
+    conn <- R.relVarAcquire rv (acqConn (stEnv st))
+    genTask <- R.relVarAcquire rv (acqGenTask (stDom st))
+    sendTask <- R.relVarAcquire rv (acqSendTask conn (stDom st))
+    putMVar (stRes st) (Resources rv conn genTask sendTask)
 
 disposeSt :: St -> IO ()
-disposeSt = R.relVarDispose . stRel
+disposeSt st = mask_ (tryTakeMVar (stRes st) >>= maybe (pure ()) (R.relVarDispose . resRel))
 
 withSt :: (St -> IO a) -> IO a
 withSt = bracket (initSt defaultEnv) disposeSt
@@ -201,7 +196,7 @@ runGenTask dom = do
           for_ pevs (writeTQueue (domQueue dom) . O.playPacket)
   pure Nothing
 
-runSendTask :: Ref OscConn -> Domain -> IO ()
+runSendTask :: OscConn -> Domain -> IO ()
 runSendTask conn dom = go
  where
   go = do
@@ -213,11 +208,8 @@ runSendTask conn dom = go
     sendPacket conn pkt
     go
 
-sendPacket :: Ref OscConn -> Packet -> IO ()
-sendPacket conn pkt = R.refUse conn $ \case
-  Nothing -> error "Not connected"
-  Just (OscConn targetAddr (Conn _ enc)) -> do
-    runEncoder enc targetAddr pkt
+sendPacket :: OscConn -> Packet -> IO ()
+sendPacket (OscConn targetAddr (Conn _ enc)) = runEncoder enc targetAddr
 
 withTimeout :: TimeDelta -> IO a -> IO (Either SomeException a)
 withTimeout td act = do
@@ -226,16 +218,15 @@ withTimeout td act = do
   waitCatch thread
 
 recvPkt :: St -> IO (Either SomeException Packet)
-recvPkt st = R.refUse (stConn st) $ \case
-  Nothing -> error "Not connected"
-  Just (OscConn _ (Conn dec _)) ->
-    withTimeout (envOscTimeout (stEnv st)) $
-      runDecoder dec >>= either throwIO pure . snd
+recvPkt st = withMVar (stRes st) $ \res -> do
+  let OscConn _ (Conn dec _) = resConn res
+  withTimeout (envOscTimeout (stEnv st)) $
+    runDecoder dec >>= either throwIO pure . snd
 
-sendHandshake :: Ref OscConn -> IO ()
+sendHandshake :: OscConn -> IO ()
 sendHandshake conn = sendPacket conn O.handshakePacket
 
-sendPlay :: Ref OscConn -> Either O.OscErr (Seq O.PlayEvent) -> IO ()
+sendPlay :: OscConn -> Either O.OscErr (Seq O.PlayEvent) -> IO ()
 sendPlay conn mpevs =
   case mpevs of
     Left err -> throwIO err
@@ -252,7 +243,7 @@ testHandshake = do
   putStrLn "handshake - initializing"
   withSt $ \st -> do
     putStrLn "sending handshake"
-    sendHandshake (stConn st)
+    withMVar (stRes st) (sendHandshake . resConn)
     putStrLn "listening"
     resp <- recvPkt st
     putStrLn "received"
@@ -266,41 +257,16 @@ testPlay = do
     putStrLn ("sending play @ " <> show dawn)
     let cps = 1 % 2
         penv = O.PlayEnv dawn 0 cps
-    sendPlay (stConn st) $
-      O.convertTape penv $
-        B.tapeSingleton $
-          B.Ev (T.Span (T.Arc 0 1) (Just (T.Arc 0 1))) $
-            Map.fromList
-              [ ("sound", DatumString "tabla")
-              , ("orbit", DatumInt32 0)
-              ]
+        arg =
+          O.convertTape penv $
+            B.tapeSingleton $
+              B.Ev (T.Span (T.Arc 0 1) (Just (T.Arc 0 1))) $
+                Map.fromList
+                  [ ("sound", DatumString "tabla")
+                  , ("orbit", DatumInt32 0)
+                  ]
+    withMVar (stRes st) (\res -> sendPlay (resConn res) arg)
     putStrLn "done"
-
-testLoop :: IO ()
-testLoop = do
-  withSt $ \st -> do
-    let tdv = domAhead (stDom st)
-    _ <- R.refCreate (stRel st) $ R.acquireLoop tdv $ do
-      putStrLn "hello"
-      pure Nothing
-    threadDelayDelta (timeDeltaFromFracSecs @Double 2)
-
-testRecord :: IO ()
-testRecord = do
-  withSt $ \st -> do
-    let dom = stDom st
-    setPat st $
-      pure $
-        Map.fromList
-          [ ("s", DatumString "tabla")
-          ]
-    let tdv = domAhead dom
-    _ <- R.refCreate (stRel st) $ R.acquireLoop tdv $ do
-      now <- currentTime
-      r <- atomically (readEvents dom now <* advanceCycle dom)
-      print r
-      pure Nothing
-    threadDelayDelta (timeDeltaFromFracSecs @Double 3)
 
 testReal :: IO ()
 testReal = do
