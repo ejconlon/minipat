@@ -25,8 +25,6 @@ module Minipat.Ast
   , Extent (..)
   , SeqPres (..)
   , GroupType (..)
-  -- , groupPatTypeBrace
-  -- , groupPatTypeSep
   , Group (..)
   , Poly (..)
   , PatF (..)

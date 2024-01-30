@@ -24,6 +24,7 @@ module Minipat.Stream
   , streamRun
   , streamAdjust
   , streamConcat
+  , streamReplicate
   , streamFastBy
   , streamSlowBy
   , streamFast
@@ -46,12 +47,15 @@ import Data.Heap (Entry (..), Heap)
 import Data.Heap qualified as H
 import Data.Semigroup (Sum (..))
 import Data.Sequence.NonEmpty (NESeq)
+import Data.Sequence.NonEmpty qualified as NESeq
 import Data.String (IsString (..))
 import Minipat.Rand (randFrac, spanSeed)
 import Minipat.Time
   ( Arc (..)
+  , Cycle (..)
+  , CycleDelta (..)
+  , CycleTime (..)
   , Span (..)
-  , Time
   , arcIntersect
   , arcTimeMapMono
   , spanSplit
@@ -65,7 +69,7 @@ data Ev a = Ev
   }
   deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
 
-evCont :: (Time -> a) -> Arc -> Ev a
+evCont :: (CycleTime -> a) -> Arc -> Ev a
 evCont f arc = Ev (Span arc Nothing) (f (arcStart arc))
 
 newtype Tape a = Tape {unTape :: Heap (Entry Span a)}
@@ -78,28 +82,28 @@ instance Functor Tape where
 tapeFilter :: (a -> Bool) -> Tape a -> Tape a
 tapeFilter f = Tape . H.filter (\(Entry _ a) -> f a) . unTape
 
-tapeFastBy :: Integer -> Rational -> Tape a -> Tape a
+tapeFastBy :: Cycle -> Rational -> Tape a -> Tape a
 tapeFastBy o r =
-  let o' = fromInteger o
-  in  tapeTimeMapMono (\t -> (t - o') / r + o')
+  let o' = fromInteger (unCycle o)
+  in  tapeTimeMapMono (\(CycleTime t) -> CycleTime ((t - o') / r + o'))
 
-tapeSlowBy :: Integer -> Rational -> Tape a -> Tape a
+tapeSlowBy :: Cycle -> Rational -> Tape a -> Tape a
 tapeSlowBy o r =
-  let o' = fromInteger o
-  in  tapeTimeMapMono (\t -> (t - o') * r + o')
+  let o' = fromInteger (unCycle o)
+  in  tapeTimeMapMono (\(CycleTime t) -> CycleTime ((t - o') * r + o'))
 
-tapeLateBy :: Time -> Tape a -> Tape a
-tapeLateBy t = tapeTimeMapMono (+ t)
+tapeLateBy :: CycleDelta -> Tape a -> Tape a
+tapeLateBy (CycleDelta t) = tapeTimeMapMono (CycleTime . (+ t) . unCycleTime)
 
-tapeEarlyBy :: Time -> Tape a -> Tape a
-tapeEarlyBy t = tapeTimeMapMono (subtract t)
+tapeEarlyBy :: CycleDelta -> Tape a -> Tape a
+tapeEarlyBy (CycleDelta t) = tapeTimeMapMono (CycleTime . subtract t . unCycleTime)
 
 tapeDegradeBy :: Rational -> Tape a -> Tape a
 tapeDegradeBy r = Tape . H.filter f . unTape
  where
   f (Entry sp _) = randFrac (spanSeed sp) < r
 
-tapeTimeMapMono :: (Time -> Time) -> Tape a -> Tape a
+tapeTimeMapMono :: (CycleTime -> CycleTime) -> Tape a -> Tape a
 tapeTimeMapMono f = Tape . H.mapMonotonic (\(Entry s a) -> Entry (spanTimeMapMono f s) a) . unTape
 
 tapeWholeMapMono :: (Maybe Arc -> Maybe Arc) -> Tape a -> Tape a
@@ -170,25 +174,25 @@ streamMixBind = streamBindWith (liftA2 arcIntersect)
 streamRun :: Stream a -> Arc -> [Ev a]
 streamRun pa arc = tapeToList (unStream pa arc)
 
-streamTimeMapInv :: (Time -> Time) -> (Time -> Time) -> Stream a -> Stream a
+streamTimeMapInv :: (CycleTime -> CycleTime) -> (CycleTime -> CycleTime) -> Stream a -> Stream a
 streamTimeMapInv onTape onArc (Stream k) = Stream (tapeTimeMapMono onTape . k . arcTimeMapMono onArc)
 
 streamAdjust :: (a -> Stream b -> Stream c) -> Stream a -> Stream b -> Stream c
 streamAdjust f pa pb = streamInnerBind pa (`f` pb)
 
 streamFastBy, streamSlowBy :: Rational -> Stream a -> Stream a
-streamFastBy t = streamTimeMapInv (/ t) (* t)
-streamSlowBy t = streamTimeMapInv (* t) (/ t)
+streamFastBy t = streamTimeMapInv (CycleTime . (/ t) . unCycleTime) (CycleTime . (* t) . unCycleTime)
+streamSlowBy t = streamTimeMapInv (CycleTime . (* t) . unCycleTime) (CycleTime . (/ t) . unCycleTime)
 
 streamFast, streamSlow :: Stream Rational -> Stream a -> Stream a
 streamFast = streamAdjust streamFastBy
 streamSlow = streamAdjust streamSlowBy
 
-streamEarlyBy, streamLateBy :: Time -> Stream a -> Stream a
+streamEarlyBy, streamLateBy :: CycleTime -> Stream a -> Stream a
 streamEarlyBy t = streamTimeMapInv id (subtract t)
 streamLateBy t = streamTimeMapInv id (+ t)
 
-streamEarly, streamLate :: Stream Time -> Stream a -> Stream a
+streamEarly, streamLate :: Stream CycleTime -> Stream a -> Stream a
 streamEarly = streamAdjust streamEarlyBy
 streamLate = streamAdjust streamLateBy
 
@@ -200,22 +204,24 @@ streamDegrade = streamAdjust streamDegradeBy
 
 -- Sketch: split arc into cycles, for each render the streamtern over the cycle, slowing by length, then speed everything
 -- up by whole amount to fit all into one cycle
-goC :: Rational -> NESeq (Stream a, Rational) -> Arc -> Tape a
+goC :: CycleDelta -> NESeq (Stream a, CycleDelta) -> Arc -> Tape a
 goC w streams arc = foldl' go1 mempty (spanSplit arc)
  where
-  go1 t (i, Span subArc _) = t <> tapeFastBy i w (snd (go2 i subArc))
+  go1 t (i, Span subArc _) = t <> tapeFastBy i (unCycleDelta w) (snd (go2 i subArc))
   go2 i subArc = foldl' (go3 i subArc) (0, mempty) streams
   go3 i subArc (o, t) (p, v) =
-    (o + v, t <> tapeLateBy o (tapeSlowBy i v (unStream p subArc)))
+    (o + v, t <> tapeLateBy o (tapeSlowBy i (unCycleDelta v) (unStream p subArc)))
 
-streamConcat :: NESeq (Stream a, Rational) -> Stream a
+streamConcat :: NESeq (Stream a, CycleDelta) -> Stream a
 streamConcat streams =
   let w = getSum (foldMap1' (Sum . snd) streams)
   in  Stream (goC w streams)
 
 -- TODO implement stream repeat more efficiently than just using streamConcat
+streamReplicate :: Int -> Stream a -> CycleDelta -> Stream a
+streamReplicate n p v = streamConcat (NESeq.replicate n (p, v))
 
-streamCont :: (Time -> a) -> Stream a
+streamCont :: (CycleTime -> a) -> Stream a
 streamCont f = Stream (tapeSingleton . evCont f)
 
 -- TODO move to module with continuous primitives

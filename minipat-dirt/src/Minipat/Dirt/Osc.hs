@@ -15,7 +15,7 @@ import Data.Sequence qualified as Seq
 import Data.Text (Text)
 import Minipat.Dirt.Resources (Timed (..))
 import Minipat.Stream (Ev (..), Tape, tapeToList)
-import Minipat.Time qualified as T
+import Minipat.Time (CycleDelta (..), CycleTime (..), Span, spanCycle, spanDelta)
 import Nanotime (PosixTime, TimeDelta (..), addTime, timeDeltaFromFracSecs, timeDeltaToNanos)
 
 type OscMap = Map Text Datum
@@ -81,11 +81,11 @@ playAliases =
   , ("s", "sound")
   ]
 
-spanCycleM :: T.Span -> M Rational
-spanCycleM = maybe (throwError OscErrLate) pure . T.spanCycle
+spanCycleM :: Span -> M CycleTime
+spanCycleM = maybe (throwError OscErrLate) pure . spanCycle
 
-spanDeltaM :: T.Span -> M Rational
-spanDeltaM = maybe (throwError OscErrCont) pure . T.spanDelta
+spanDeltaM :: Span -> M CycleDelta
+spanDeltaM = maybe (throwError OscErrCont) pure . spanDelta
 
 data PlayEnv = PlayEnv
   { peStart :: !PosixTime
@@ -107,10 +107,10 @@ timeDeltaToMicros td =
 
 convertEvent :: PlayEnv -> Ev OscMap -> M PlayEvent
 convertEvent (PlayEnv startTime startCyc cps) (Ev sp dat) = do
-  targetCyc <- spanCycleM sp
+  targetCyc <- fmap unCycleTime (spanCycleM sp)
   let cycOffset = targetCyc - fromInteger startCyc
       onset = addTime startTime (timeDeltaFromFracSecs (cycOffset / cps))
-  deltaCyc <- spanDeltaM sp
+  deltaCyc <- fmap unCycleDelta (spanDeltaM sp)
   let deltaTime = timeDeltaToMicros (timeDeltaFromFracSecs (deltaCyc / cps))
   dat' <- replaceAliases playAliases dat
   dat'' <- insertSafe "delta" (DatumFloat deltaTime) dat'

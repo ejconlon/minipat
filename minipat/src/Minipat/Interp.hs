@@ -23,8 +23,16 @@ import Data.Sequence.NonEmpty qualified as NESeq
 import Minipat.Ast
 import Minipat.Rand qualified as D
 import Minipat.Rewrite (RwErr, RwT, rewriteM, throwRw)
-import Minipat.Stream (Stream (..), streamConcat, streamDegradeBy, streamFast, streamFastBy, streamSlow)
-import Minipat.Time qualified as T
+import Minipat.Stream
+  ( Stream (..)
+  , streamConcat
+  , streamDegradeBy
+  , streamFast
+  , streamFastBy
+  , streamReplicate
+  , streamSlow
+  )
+import Minipat.Time (Cycle (..), CycleDelta (..), spanActive, spanSplit)
 
 -- | A sequence of selections applied to the given value
 type Sel = Anno (Seq Select)
@@ -61,8 +69,8 @@ runM = runExcept . flip runReaderT Empty
 lookInterp
   :: SelFn Factor Factor
   -> SelFn a c
-  -> PatX b a (M b (Stream c, Rational))
-  -> RwT b (M b) (Stream c, Rational)
+  -> PatX b a (M b (Stream c, CycleDelta))
+  -> RwT b (M b) (Stream c, CycleDelta)
 lookInterp g h = \case
   PatPure a -> do
     ss <- lift ask
@@ -74,10 +82,10 @@ lookInterp g h = \case
       ExtentLong melw u -> do
         (el, w) <- lift melw
         case u of
-          LongExtentElongate f -> pure (el, factorValue f * w)
+          LongExtentElongate f -> pure (el, CycleDelta (factorValue f * unCycleDelta w))
           LongExtentReplicate mf ->
             let v = maybe 2 fromInteger mf
-            in  pure (streamConcat (NESeq.replicate v (el, 1)), fromIntegral v)
+            in  pure (streamReplicate v el 1, fromIntegral v)
   PatGroup (Group _ ty els) -> do
     els' <- lift (sequenceA els)
     case ty of
@@ -89,15 +97,15 @@ lookInterp g h = \case
               let s = D.arcSeed arc'
                   i = D.randInt l s
                   (el, w) = NESeq.index els' i
-              in  unStream (streamFastBy w el) arc'
-        in  pure (Stream (foldMap' (f . T.spanActive . snd) . T.spanSplit), 1)
+              in  unStream (streamFastBy (unCycleDelta w) el) arc'
+        in  pure (Stream (foldMap' (f . spanActive . snd) . spanSplit), 1)
       GroupTypeAlt ->
         let l = NESeq.length els
             f z arc' =
-              let i = mod (fromInteger z) l
+              let i = mod (fromInteger (unCycle z)) l
                   (el, w) = NESeq.index els' i
-              in  unStream (streamFastBy w el) arc'
-        in  pure (Stream (foldMap' (\(z, sp) -> f z (T.spanActive sp)) . T.spanSplit), 1)
+              in  unStream (streamFastBy (unCycleDelta w) el) arc'
+        in  pure (Stream (foldMap' (\(z, sp) -> f z (spanActive sp)) . spanSplit), 1)
   PatMod (Mod mx md) -> do
     case md of
       ModTypeSpeed (Speed dir spat) -> do

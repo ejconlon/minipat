@@ -15,7 +15,7 @@ import Data.Bits (Bits (..))
 import Data.Maybe (fromMaybe)
 import Data.Ratio ((%))
 import Data.Word (Word32)
-import Minipat.Time (Arc (..), Span (..), Time, arcMidpoint)
+import Minipat.Time (Arc (..), CycleTime, Span (..), arcMid)
 
 -- | A random seed
 newtype Seed = Seed {unSeed :: Word32}
@@ -34,7 +34,7 @@ xorshift (Seed x0) =
   in  Seed (xor x2 (shiftL x2 5))
 
 -- | Associates a random seed with a given 'Time'.
-timeSeed :: Time -> Seed
+timeSeed :: CycleTime -> Seed
 timeSeed time =
   let (_, frac) = properFraction @_ @Word32 (time / 300)
       val = truncate (frac * seedConst)
@@ -42,7 +42,7 @@ timeSeed time =
 
 -- | Associates a random seed with a given 'Arc'.
 arcSeed :: Arc -> Seed
-arcSeed = timeSeed . arcMidpoint
+arcSeed = timeSeed . arcMid
 
 -- | Associates a random seed with a given 'Span'.
 spanSeed :: Span -> Seed

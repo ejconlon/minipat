@@ -24,7 +24,7 @@ import Minipat.Norm (normPat)
 import Minipat.Parser (P, ParseErr, factorP, identP, identPatP)
 import Minipat.Print (render)
 import Minipat.Stream (Ev (..), streamRun)
-import Minipat.Time (Arc (..), Span (..))
+import Minipat.Time (Arc (..), CycleTime (..), Span (..))
 import Prettyprinter qualified as P
 import System.IO (BufferMode (..), hSetBuffering, stdout)
 import Test.Daytripper
@@ -426,7 +426,7 @@ runPatInterpCase (n, mayArc, patStr, evs) = testCase n $ do
 
 ev :: Rational -> Rational -> x -> Ev x
 ev start end val =
-  let arc = Arc start end
+  let arc = Arc (CycleTime start) (CycleTime end)
   in  Ev (Span arc (Just arc)) val
 
 sel :: a -> Sel a
@@ -456,11 +456,11 @@ testPatInterpCases =
         )
       ,
         ( "pure shift"
-        , Just (Arc (1 % 2) (3 % 2))
+        , Just (Arc (CycleTime (1 % 2)) (CycleTime (3 % 2)))
         , "x"
         ,
-          [ Ev (Span (Arc (1 % 2) 1) (Just (Arc 0 1))) (sel "x")
-          , Ev (Span (Arc 1 (3 % 2)) (Just (Arc 1 2))) (sel "x")
+          [ Ev (Span (Arc (CycleTime (1 % 2)) 1) (Just (Arc 0 1))) (sel "x")
+          , Ev (Span (Arc 1 (CycleTime (3 % 2))) (Just (Arc 1 2))) (sel "x")
           ]
         )
       ,

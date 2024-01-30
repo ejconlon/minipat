@@ -1,20 +1,59 @@
-module Minipat.Time where
+{-# OPTIONS_GHC -fno-warn-identities #-}
 
+-- | Time is a cube with four corners
+module Minipat.Time
+  ( CycleTime (..)
+  , CycleDelta (..)
+  , Cycle (..)
+  , cycTimeFloor
+  , cycTimeCeil
+  , cycTimeMid
+  , Arc (..)
+  , arcUnion
+  , arcIntersect
+  , arcMid
+  , arcTimeMapMono
+  , Span (..)
+  , spanCover
+  , spanSplit
+  , spanCycle
+  , spanDelta
+  , spanTimeMapMono
+  , spanWholeMapMono
+  , spanIsStart
+  , bpmToCps
+  , cpsToBpm
+  , deltaToCycle
+  , cycleToDelta
+  , relDelta
+  )
+where
+
+import Data.Maybe (fromMaybe)
 import Nanotime (TimeDelta, timeDeltaFromFracSecs, timeDeltaToFracSecs)
 
--- TODO newtype this CycleTime
-type Time = Rational
+newtype CycleTime = CycleTime {unCycleTime :: Rational}
+  deriving stock (Show)
+  deriving newtype (Eq, Ord, Num, Fractional, Real, RealFrac)
 
-timeFloor :: Time -> Integer
-timeFloor = floor
+newtype CycleDelta = CycleDelta {unCycleDelta :: Rational}
+  deriving stock (Show)
+  deriving newtype (Eq, Ord, Num, Fractional, Real, RealFrac)
 
-timeCeil :: Time -> Integer
-timeCeil = (+ 1) . timeFloor
+newtype Cycle = Cycle {unCycle :: Integer}
+  deriving stock (Show)
+  deriving newtype (Eq, Ord, Num)
 
-timeMidpoint :: Time -> Time -> Time
-timeMidpoint s e = s + (e - s) / 2
+cycTimeFloor :: CycleTime -> Cycle
+cycTimeFloor = Cycle . floor . unCycleTime
 
-data Arc = Arc {arcStart :: !Time, arcEnd :: !Time}
+cycTimeCeil :: CycleTime -> Cycle
+cycTimeCeil = (+ 1) . cycTimeFloor
+
+cycTimeMid :: CycleTime -> CycleTime -> CycleTime
+cycTimeMid s e = s + (e - s) / 2
+
+data Arc = Arc {arcStart :: !CycleTime, arcEnd :: !CycleTime}
   deriving stock (Eq, Ord, Show)
 
 arcUnion :: Arc -> Arc -> Arc
@@ -26,24 +65,12 @@ arcIntersect (Arc s1 e1) (Arc s2 e2) =
       e3 = min e1 e2
   in  Arc s3 (max s3 e3)
 
-arcWiden :: Arc -> Arc
-arcWiden (Arc s e) = Arc (fromInteger (timeFloor s)) (fromInteger (timeCeil e))
+arcMid :: Arc -> CycleTime
+arcMid (Arc s e) = cycTimeMid s e
 
-arcMidpoint :: Arc -> Time
-arcMidpoint (Arc s e) = timeMidpoint s e
-
-arcTimeMapMono :: (Time -> Time) -> Arc -> Arc
+-- | Map a monotonic function over cycle times
+arcTimeMapMono :: (CycleTime -> CycleTime) -> Arc -> Arc
 arcTimeMapMono f (Arc s e) = Arc (f s) (f e)
-
-arcWrap :: Arc -> Rational -> (Time, Time, Time)
-arcWrap (Arc s e) w =
-  if s >= w
-    then
-      let d = e - s
-          k = w * fromInteger (floor (s / w))
-          c = s - k
-      in  (k, c, d)
-    else (0, s, e - s)
 
 data Span = Span
   { spanActive :: !Arc
@@ -51,40 +78,43 @@ data Span = Span
   }
   deriving stock (Eq, Ord, Show)
 
-spanTimeMapMono :: (Time -> Time) -> Span -> Span
+-- | Map a monotonic function over all cycle times
+spanTimeMapMono :: (CycleTime -> CycleTime) -> Span -> Span
 spanTimeMapMono f (Span ac wh) = Span (arcTimeMapMono f ac) (fmap (arcTimeMapMono f) wh)
 
+-- | Map a monotonic function over whole cycle times
 spanWholeMapMono :: (Maybe Arc -> Maybe Arc) -> Span -> Span
 spanWholeMapMono f (Span ac wh) = Span ac (f wh)
 
--- | Expands the active arc to cover the whole event
-spanExtent :: Span -> Span
-spanExtent sp@(Span _ wh) = maybe sp (`Span` wh) wh
+-- | Returns the 'Arc' covering the whole event
+-- (or just the active arc if non-discrete)
+spanCover :: Span -> Arc
+spanCover (Span ac wh) = fromMaybe ac wh
 
--- | Splits an Arc into single-cycle spans
-spanSplit :: Arc -> [(Integer, Span)]
+-- | Splits an 'Arc' into single-cycle spans
+spanSplit :: Arc -> [(Cycle, Span)]
 spanSplit (Arc s0 e) =
-  let ef = fromInteger (timeFloor e)
+  let ef = cycTimeFloor e
       go s =
-        let si = timeFloor s
-            sf = fromInteger si
-            sc = fromInteger (timeCeil s)
-            wh = Just (Arc sf sc)
+        let sf = cycTimeFloor s
+            si = fromInteger (unCycle sf)
+            sc = fromInteger (unCycle (cycTimeCeil s))
+            wh = Just (Arc si sc)
         in  if sf == ef || sc == e
-              then [(si, Span (Arc s e) wh)]
-              else (si, Span (Arc s sc) wh) : go sc
+              then [(sf, Span (Arc s e) wh)]
+              else (sf, Span (Arc s sc) wh) : go sc
   in  go s0
 
--- | The start of the span in cycle time, if active
-spanCycle :: Span -> Maybe Rational
+-- | The start of the 'Span' in cycle time, if active
+spanCycle :: Span -> Maybe CycleTime
 spanCycle = \case
   sp@(Span _ (Just (Arc sw _))) | spanIsStart sp -> Just sw
   _ -> Nothing
 
 -- | The length of the whole event in cycle time, if discrete
-spanDelta :: Span -> Maybe Rational
+spanDelta :: Span -> Maybe CycleDelta
 spanDelta = \case
-  Span _ (Just (Arc sw ew)) -> Just (ew - sw)
+  Span _ (Just (Arc sw ew)) -> Just (CycleDelta (unCycleTime (ew - sw)))
   _ -> Nothing
 
 -- | True if active start aligns with whole start
@@ -94,23 +124,23 @@ spanIsStart (Span (Arc sa _) mwh) =
     Nothing -> True
     Just (Arc sw _) -> sa == sw
 
--- | Convert BPM to CPS, given BPC (beats per cycle)
+-- | Convert BPM to CPS, given BPC (beats per cycle/bar)
 -- (often 4 beats/bar, 1 bar/cycle, so 4 bpc)
 bpmToCps :: Integer -> Rational -> Rational
 bpmToCps bpc bpm = (bpm / 60) / fromInteger bpc
 
--- | Convert CPS to BPM, given BPC (beats per cycle)
+-- | Convert CPS to BPM, given BPC (beats per cycle/bar)
 cpsToBpm :: Integer -> Rational -> Rational
 cpsToBpm bpc cps = (cps * fromInteger bpc) * 60
 
 -- | Given CPS convert absolute time diff from start to cycle time
-deltaToCycle :: Rational -> TimeDelta -> Time
-deltaToCycle cps = (cps *) . timeDeltaToFracSecs
+deltaToCycle :: Rational -> TimeDelta -> CycleTime
+deltaToCycle cps = CycleTime . (cps *) . timeDeltaToFracSecs
 
 -- | Given CPS convert cycle time to absolute time diff from start
-cycleToDelta :: Rational -> Time -> TimeDelta
-cycleToDelta cps = timeDeltaFromFracSecs . (/ cps)
+cycleToDelta :: Rational -> CycleTime -> TimeDelta
+cycleToDelta cps = timeDeltaFromFracSecs . (/ cps) . unCycleTime
 
 -- | Given CPS return relative time from origin to target
-relDelta :: Rational -> Rational -> Rational -> TimeDelta
-relDelta cps origin target = timeDeltaFromFracSecs (cps * (target - origin))
+relDelta :: Rational -> CycleTime -> CycleTime -> TimeDelta
+relDelta cps origin target = timeDeltaFromFracSecs (unCycleTime (target - origin) / cps)
