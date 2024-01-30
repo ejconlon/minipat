@@ -14,7 +14,7 @@ where
 
 import Control.Concurrent.Async (Async, async, cancel)
 import Control.Concurrent.STM (atomically, retry)
-import Control.Concurrent.STM.TQueue (TQueue, peekTQueue, tryReadTQueue)
+import Control.Concurrent.STM.TQueue (TQueue, peekTQueue, tryPeekTQueue, readTQueue)
 import Control.Concurrent.STM.TVar (TVar, readTVar, readTVarIO)
 import Control.Exception (Exception, bracket, mask, throwIO)
 import Control.Monad (unless)
@@ -89,7 +89,16 @@ acquireAwait runVar queue act =
         now <- currentTime @PosixTime
         threadDelayDelta (diffTime time now)
         -- If it's still there (not cleared), act on it
-        mtimed <- atomically (tryReadTQueue queue)
+        mtimed <- atomically $ do
+          run <- readTVar runVar
+          if run
+            then do
+              mtimed <- tryPeekTQueue queue
+              case mtimed of
+                Just timed | timedKey timed == time ->
+                  mtimed <$ readTQueue queue
+                _ -> pure Nothing
+            else pure Nothing
         maybe (pure ()) act mtimed
         act'
   in  acquireAsync act'
