@@ -10,7 +10,6 @@ module Minipat.Interp
 where
 
 import Bowtie (Anno (..))
-import Control.Applicative (Alternative (..))
 import Control.Exception (Exception)
 import Control.Monad.Except (Except, runExcept)
 import Control.Monad.Reader (MonadReader (..), ReaderT, runReaderT)
@@ -75,7 +74,7 @@ lookInterp g h = \case
   PatPure a -> do
     ss <- lift ask
     maybe (throwRw InterpErrSel) (\c -> pure (pure c, 1)) (h ss a)
-  PatSilence -> pure (empty, 1)
+  PatSilence -> pure (mempty, 1)
   PatExtent t ->
     case t of
       ExtentShort _ -> throwRw InterpErrShort
@@ -90,7 +89,7 @@ lookInterp g h = \case
     els' <- lift (sequenceA els)
     case ty of
       GroupTypeSeq _ -> pure (streamConcat els', 1)
-      GroupTypePar -> pure (foldl1' (<|>) (fmap fst els'), 1)
+      GroupTypePar -> pure (foldl1' (<>) (fmap fst els'), 1)
       GroupTypeRand ->
         let l = NESeq.length els
             f arc' =

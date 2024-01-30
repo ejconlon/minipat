@@ -2,20 +2,20 @@
 
 module Minipat.Dirt.Core where
 
-import Control.Applicative (empty)
 import Control.Concurrent (forkFinally)
 import Control.Concurrent.Async (Async, async, cancel, waitCatch)
 import Control.Concurrent.MVar (MVar, newEmptyMVar, putMVar, tryTakeMVar, withMVar)
 import Control.Concurrent.STM (STM, atomically)
 import Control.Concurrent.STM.TQueue (TQueue, flushTQueue, newTQueueIO, writeTQueue)
-import Control.Concurrent.STM.TVar (TVar, modifyTVar', newTVarIO, readTVar, readTVarIO, writeTVar)
+import Control.Concurrent.STM.TVar (TVar, modifyTVar', newTVarIO, readTVar, readTVarIO, stateTVar, writeTVar)
 import Control.Exception (SomeException, bracket, mask_, onException, throwIO)
 import Control.Monad (void)
 import Control.Monad.IO.Class (liftIO)
 import Dahdit.Midi.Osc (Datum (..), Packet)
 import Dahdit.Network (Conn (..), HostPort (..), resolveAddr, runDecoder, runEncoder, udpServerConn)
 import Data.Acquire (Acquire)
-import Data.Foldable (for_)
+import Data.Foldable (foldl', for_)
+import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Ratio ((%))
 import Data.Sequence (Seq)
@@ -54,6 +54,7 @@ data Domain = Domain
   , domAhead :: !(TVar TimeDelta)
   , domPlaying :: !(TVar Bool)
   , domCycle :: !(TVar Integer)
+  , domOrbits :: !(TVar (Map Int (Stream O.OscMap)))
   , domStream :: !(TVar (Stream O.OscMap))
   , domQueue :: !(TQueue (R.Timed Packet))
   -- TODO bound the queue
@@ -66,7 +67,8 @@ newDomain =
     <*> newTVarIO 0
     <*> newTVarIO False
     <*> newTVarIO 0
-    <*> newTVarIO empty
+    <*> newTVarIO mempty
+    <*> newTVarIO mempty
     <*> newTQueueIO
 
 initDomain :: Env -> IO Domain
@@ -80,7 +82,8 @@ reinitDomain env dom = atomically $ do
   writeTVar (domAhead dom) td
   writeTVar (domPlaying dom) False
   writeTVar (domCycle dom) 0
-  writeTVar (domStream dom) empty
+  writeTVar (domOrbits dom) mempty
+  writeTVar (domStream dom) mempty
   void (flushTQueue (domQueue dom))
 
 getCps :: St -> IO Rational
@@ -113,11 +116,34 @@ setCps st cps' = atomically $ do
 setPlaying :: St -> Bool -> IO ()
 setPlaying st x = atomically (writeTVar (domPlaying (stDom st)) x)
 
-setStream :: St -> Stream O.OscMap -> IO ()
-setStream st x = atomically (writeTVar (domStream (stDom st)) x)
-
 setCycle :: St -> Integer -> IO ()
 setCycle st x = atomically (writeTVar (domCycle (stDom st)) x)
+
+updateOrbits :: St -> (Map Int (Stream O.OscMap) -> Map Int (Stream O.OscMap)) -> IO ()
+updateOrbits st f = atomically $ do
+  let dom = stDom st
+  m' <- stateTVar (domOrbits dom) (\m -> let m' = f m in (m', m'))
+  let z = foldl' (\x (o, y) -> x <> fmap (Map.insert "orbit" (DatumInt32 (fromIntegral o))) y) mempty (Map.toList m')
+  writeTVar (domStream dom) z
+
+setOrbit :: St -> Int -> Stream O.OscMap -> IO ()
+setOrbit st o s = updateOrbits st (Map.insert o s)
+
+clearOrbit :: St -> Int -> IO ()
+clearOrbit st o = updateOrbits st (Map.delete o)
+
+clearAllOrbits :: St -> IO ()
+clearAllOrbits st = atomically $ do
+  let dom = stDom st
+  writeTVar (domOrbits dom) mempty
+  writeTVar (domStream dom) mempty
+
+hush :: St -> IO ()
+hush st = atomically $ do
+  let dom = stDom st
+  writeTVar (domOrbits dom) mempty
+  writeTVar (domStream dom) mempty
+  void (flushTQueue (domQueue dom))
 
 genEvents :: Domain -> PosixTime -> STM (O.PlayEnv, Either O.OscErr (Seq O.PlayEvent))
 genEvents dom now = do
@@ -280,7 +306,7 @@ testReal = do
             [ ("sound", DatumString "cpu")
             , ("orbit", DatumInt32 0)
             ]
-    setStream st (streamFastBy 4 (pure m))
+    setOrbit st 0 (streamFastBy 4 (pure m))
     setPlaying st True
     threadDelayDelta (timeDeltaFromFracSecs @Double 6)
     setTempo st 180

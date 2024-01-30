@@ -14,7 +14,7 @@ where
 
 import Control.Concurrent.Async (Async, async, cancel)
 import Control.Concurrent.STM (atomically, retry)
-import Control.Concurrent.STM.TQueue (TQueue, readTQueue)
+import Control.Concurrent.STM.TQueue (TQueue, peekTQueue, tryReadTQueue)
 import Control.Concurrent.STM.TVar (TVar, readTVar, readTVarIO)
 import Control.Exception (Exception, bracket, mask, throwIO)
 import Control.Monad (unless)
@@ -80,13 +80,16 @@ data Timed a = Timed
 acquireAwait :: TVar Bool -> TQueue (Timed a) -> (Timed a -> IO ()) -> Acquire (Async ())
 acquireAwait runVar queue act =
   let act' = do
-        timed <- atomically $ do
+        -- Peek at the first entry and await it
+        time <- atomically $ do
           run <- readTVar runVar
           if run
-            then readTQueue queue
+            then fmap timedKey (peekTQueue queue)
             else retry
         now <- currentTime @PosixTime
-        threadDelayDelta (diffTime (timedKey timed) now)
-        act timed
+        threadDelayDelta (diffTime time now)
+        -- If it's still there (not cleared), act on it
+        mtimed <- atomically (tryReadTQueue queue)
+        maybe (pure ()) act mtimed
         act'
   in  acquireAsync act'

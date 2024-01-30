@@ -39,7 +39,6 @@ module Minipat.Stream
   )
 where
 
-import Control.Applicative (Alternative (..))
 import Control.Monad (ap)
 import Data.Foldable (foldl', toList)
 import Data.Foldable1 (foldMap1')
@@ -136,15 +135,17 @@ instance Applicative Stream where
 instance Monad Stream where
   (>>=) = streamMixBind
 
-instance Alternative Stream where
-  empty = Stream (const (Tape H.empty))
-  Stream k1 <|> Stream k2 = Stream (\arc -> k1 arc <> k2 arc)
-
 instance Semigroup (Stream a) where
-  (<>) = (<|>)
+  Stream k1 <> Stream k2 = Stream (\arc -> k1 arc <> k2 arc)
 
 instance Monoid (Stream a) where
-  mempty = empty
+  mempty = Stream (const (Tape H.empty))
+
+-- TODO Is there a useful instance here?
+-- Maybe split into cycles and check emptiness L->R
+-- instance Alternative Stream where
+--   empty = mempty
+--   (<|>) = (<>)
 
 instance (IsString s) => IsString (Stream s) where
   fromString = pure . fromString

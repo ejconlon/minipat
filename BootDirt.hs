@@ -18,8 +18,20 @@ getTempo = C.getTempo st
 
 setCps = C.setCps st
 setPlaying = C.setPlaying st
-setStream = C.setStream st
 setCycle = C.setCycle st
 setTempo = C.setTempo st
+setOrbit = C.setOrbit st
+clearOrbit = C.setOrbit st
+clearAllOrbits = C.clearAllOrbits st
+hush = C.hush st
+
+d0 = setOrbit 0
+d1 = setOrbit 1
+d2 = setOrbit 2
+d3 = setOrbit 3
+d4 = setOrbit 4
+d5 = setOrbit 5
+d6 = setOrbit 6
+d7 = setOrbit 7
 
 setPlaying True
