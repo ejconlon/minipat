@@ -20,6 +20,7 @@ dependencies:
 - dahdit >= 0.5 && < 0.6
 - dahdit-midi >= 0.5 && < 0.6
 - dahdit-network >= 0.5 && < 0.6
+- little-logger >= 1.0 && < 1.1
 - looksee >= 0.5 && < 0.6
 - minipat >= 0.1 && < 0.2
 - mtl >= 2.3 && < 2.4

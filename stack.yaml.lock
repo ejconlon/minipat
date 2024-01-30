@@ -47,6 +47,13 @@ packages:
   original:
     hackage: daytripper-0.3.1
 - completed:
+    hackage: little-logger-1.0.2@sha256:2d6d58195bffc687a4ced58aff4773acc2929147fa6ace54821ed6eb1c0331fc,2223
+    pantry-tree:
+      sha256: 04234f2351a37f0931885c1b7771370024c3b148f18f9efd4876f0cf2a110dc5
+      size: 272
+  original:
+    hackage: little-logger-1.0.2
+- completed:
     hackage: falsify-0.2.0@sha256:a9ec175cfb20dc5afeedac69f424c77589729fce23733030abf22dc2053abc41,5265
     pantry-tree:
       sha256: c798208320e84b3d05564d73a63c6686499a68d667e33e2b8873035f15eaf81b

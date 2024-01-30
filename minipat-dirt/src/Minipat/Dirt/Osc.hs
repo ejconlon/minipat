@@ -1,6 +1,16 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Minipat.Dirt.Osc where
+module Minipat.Dirt.Osc
+  ( Timed (..)
+  , Attrs
+  , PlayErr (..)
+  , PlayEnv (..)
+  , convertEvent
+  , convertTape
+  , playPacket
+  , handshakePacket
+  )
+where
 
 import Control.Exception (Exception)
 import Control.Monad (foldM)
@@ -13,35 +23,40 @@ import Data.Map.Strict qualified as Map
 import Data.Sequence (Seq (..))
 import Data.Sequence qualified as Seq
 import Data.Text (Text)
-import Minipat.Dirt.Resources (Timed (..))
 import Minipat.Stream (Ev (..), Tape, tapeToList)
 import Minipat.Time (CycleDelta (..), CycleTime (..), Span, spanCycle, spanDelta)
 import Nanotime (PosixTime, TimeDelta (..), addTime, timeDeltaFromFracSecs, timeDeltaToNanos)
 
-type OscMap = Map Text Datum
+data Timed a = Timed
+  { timedKey :: !PosixTime
+  , timedVal :: !a
+  }
+  deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
 
-namedPayload :: OscMap -> Seq Datum
+type Attrs = Map Text Datum
+
+namedPayload :: Attrs -> Seq Datum
 namedPayload = foldl' go Empty . Map.toList
  where
   go !acc (k, v) = acc :|> DatumString k :|> v
 
-data OscErr
-  = OscErrDupe !Text
-  | OscErrLate
-  | OscErrCont
+data PlayErr
+  = PlayErrDupe !Text
+  | PlayErrLate
+  | PlayErrCont
   deriving stock (Eq, Ord, Show)
 
-instance Exception OscErr
+instance Exception PlayErr
 
-type M = Either OscErr
+type M = Either PlayErr
 
-insertSafe :: Text -> Datum -> OscMap -> M OscMap
+insertSafe :: Text -> Datum -> Attrs -> M Attrs
 insertSafe k v m =
   case Map.lookup k m of
     Nothing -> pure (Map.insert k v m)
-    Just _ -> throwError (OscErrDupe k)
+    Just _ -> throwError (PlayErrDupe k)
 
-replaceAliases :: [(Text, Text)] -> OscMap -> M OscMap
+replaceAliases :: [(Text, Text)] -> Attrs -> M Attrs
 replaceAliases as m0 = foldM go m0 as
  where
   go !m (x, y) = do
@@ -82,10 +97,10 @@ playAliases =
   ]
 
 spanCycleM :: Span -> M CycleTime
-spanCycleM = maybe (throwError OscErrLate) pure . spanCycle
+spanCycleM = maybe (throwError PlayErrLate) pure . spanCycle
 
 spanDeltaM :: Span -> M CycleDelta
-spanDeltaM = maybe (throwError OscErrCont) pure . spanDelta
+spanDeltaM = maybe (throwError PlayErrCont) pure . spanDelta
 
 data PlayEnv = PlayEnv
   { peStart :: !PosixTime
@@ -94,18 +109,12 @@ data PlayEnv = PlayEnv
   }
   deriving stock (Eq, Ord, Show)
 
-data PlayEvent = PlayEvent
-  { peTime :: !PosixTime
-  , peData :: !OscMap
-  }
-  deriving stock (Eq, Ord, Show)
-
 timeDeltaToMicros :: TimeDelta -> Float
 timeDeltaToMicros td =
   let (_, ns) = timeDeltaToNanos td
   in  fromIntegral ns / 1000
 
-convertEvent :: PlayEnv -> Ev OscMap -> M PlayEvent
+convertEvent :: PlayEnv -> Ev Attrs -> M (Timed Attrs)
 convertEvent (PlayEnv startTime startCyc cps) (Ev sp dat) = do
   targetCyc <- fmap unCycleTime (spanCycleM sp)
   let cycOffset = targetCyc - fromInteger startCyc
@@ -114,18 +123,16 @@ convertEvent (PlayEnv startTime startCyc cps) (Ev sp dat) = do
   let deltaTime = timeDeltaToMicros (timeDeltaFromFracSecs (deltaCyc / cps))
   dat' <- replaceAliases playAliases dat
   dat'' <- insertSafe "delta" (DatumFloat deltaTime) dat'
-  pure (PlayEvent onset dat'')
+  pure (Timed onset dat'')
 
-convertTape :: PlayEnv -> Tape OscMap -> M (Seq PlayEvent)
+convertTape :: PlayEnv -> Tape Attrs -> M (Seq (Timed Attrs))
 convertTape penv = traverse (convertEvent penv) . Seq.fromList . tapeToList
 
 playAddr :: RawAddrPat
 playAddr = "/dirt/play"
 
-playPacket :: PlayEvent -> Timed Packet
-playPacket (PlayEvent time dat) =
-  let pkt = PacketMsg (Msg playAddr (namedPayload dat))
-  in  Timed time pkt
+playPacket :: Attrs -> Packet
+playPacket attrs = PacketMsg (Msg playAddr (namedPayload attrs))
 
 handshakeAddr :: RawAddrPat
 handshakeAddr = "/dirt/handshake"

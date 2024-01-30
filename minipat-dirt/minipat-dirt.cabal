@@ -29,6 +29,7 @@ library
       Minipat.Dirt.Osc
       Minipat.Dirt.Prelude
       Minipat.Dirt.Resources
+      Minipat.Dirt.Test
   other-modules:
       Paths_minipat_dirt
   hs-source-dirs:
@@ -70,6 +71,7 @@ library
     , dahdit ==0.5.*
     , dahdit-midi ==0.5.*
     , dahdit-network ==0.5.*
+    , little-logger ==1.0.*
     , looksee ==0.5.*
     , minipat ==0.1.*
     , mtl ==2.3.*
