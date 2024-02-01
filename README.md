@@ -4,7 +4,22 @@ A mini pattern language extracted from Tidal
 
 ## TODO
 
-* Don't push selects down the tree
+* Don't push `Select` down the `Pat` tree
 * Implement polymeters + Euclidean pats
 * Handle errors gracefully
-* Impement Alternative for Stream
+* Impement `Alternative` for `Stream`
+* Midi notes
+* Additional combinators
+  * `sustain`
+  * `room`
+  * `sz`
+  * `sustain`
+  * `legato`
+  * `off`
+  * `jux`
+  * `|+` etc
+  * `every`
+  * `squiz`
+  * `range`
+* Strongly typed `Attrs`
+

@@ -27,6 +27,7 @@ library
       Minipat.Dirt.Core
       Minipat.Dirt.Eval
       Minipat.Dirt.Logger
+      Minipat.Dirt.Notes
       Minipat.Dirt.Osc
       Minipat.Dirt.Prelude
       Minipat.Dirt.Resources
@@ -79,6 +80,7 @@ library
     , nanotime ==0.3.*
     , network ==3.1.*
     , optics ==0.4.*
+    , prettyprinter ==1.7.*
     , resourcet ==1.3.*
     , stm ==2.5.*
     , text ==2.0.*
