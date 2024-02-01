@@ -6,7 +6,6 @@ module Minipat.Dirt.Eval
   )
 where
 
-import Control.Exception (throw)
 import Dahdit.Midi.Osc (Datum (..), DatumType (..))
 import Data.Map.Strict qualified as Map
 import Data.Sequence (Seq (..))
@@ -29,10 +28,10 @@ datumP = \case
   dt -> fail ("Datum type is not parseable: " <> show dt)
 
 liveEvalPat :: DatumType -> Text -> Stream Datum
-liveEvalPat dt t = either throw id (evalPat noSelFn noSelFn (datumP dt) t)
+liveEvalPat dt t = either (pure mempty) id (evalPat noSelFn noSelFn (datumP dt) t)
 
 liveEvalSoundPat :: Text -> Stream Attrs
-liveEvalSoundPat t = either throw id (evalPat noSelFn selFn identP t)
+liveEvalSoundPat t = either (pure mempty) id (evalPat noSelFn selFn identP t)
  where
   selFn sels (Ident s) =
     case sels of

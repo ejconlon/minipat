@@ -26,6 +26,7 @@ library
   exposed-modules:
       Minipat.Dirt.Core
       Minipat.Dirt.Eval
+      Minipat.Dirt.Logger
       Minipat.Dirt.Osc
       Minipat.Dirt.Prelude
       Minipat.Dirt.Resources

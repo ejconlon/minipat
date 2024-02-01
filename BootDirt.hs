@@ -5,9 +5,14 @@
 
 import Data.Ratio ((%))
 import Minipat.Dirt.Core qualified as C
+import Minipat.Dirt.Logger qualified as L
 import Minipat.Dirt.Prelude
 
-st <- C.initSt C.defaultEnv
+logger <- L.newLogger
+
+L.logInfo logger "Initializing"
+
+st <- C.initSt logger C.defaultEnv
 
 getCps = C.getCps st
 getAhead = C.getAhead st
@@ -35,3 +40,5 @@ d6 = setOrbit 6
 d7 = setOrbit 7
 
 setPlaying True
+
+L.logInfo logger "Ready!"

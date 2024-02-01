@@ -4,7 +4,7 @@ module Minipat.Dirt.Core where
 
 import Control.Concurrent (forkFinally)
 import Control.Concurrent.Async (Async, async, cancel, waitCatch)
-import Control.Concurrent.MVar (MVar, newEmptyMVar, newMVar, putMVar, tryTakeMVar, withMVar)
+import Control.Concurrent.MVar (MVar, newEmptyMVar, putMVar, tryTakeMVar, withMVar)
 import Control.Concurrent.STM (STM, atomically, retry)
 import Control.Concurrent.STM.TQueue
   ( TQueue
@@ -28,7 +28,8 @@ import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Ratio ((%))
 import Data.Sequence (Seq)
-import LittleLogger (LogAction (..), defaultLogAction)
+import Data.Text qualified as T
+import Minipat.Dirt.Logger (LogAction, logError, newLogger)
 import Minipat.Dirt.Osc (Attrs, PlayEnv (..), PlayErr, Timed (..), convertTape, playPacket)
 import Minipat.Dirt.Resources (RelVar, acquireAsync, relVarAcquire, relVarDispose, relVarInit)
 import Minipat.Stream (Stream (..))
@@ -248,8 +249,8 @@ acqConn (Env targetHp listenHp _ _) = do
   conn <- udpServerConn Nothing listenHp
   pure (OscConn targetAddr conn)
 
-acqGenTask :: Domain -> Acquire (Async ())
-acqGenTask dom = acquireLoop (domAhead dom) (doGen dom)
+acqGenTask :: LogAction -> Domain -> Acquire (Async ())
+acqGenTask logger dom = acquireLoop (domAhead dom) (doGen logger dom)
 
 acqSendTask :: OscConn -> Domain -> Acquire (Async ())
 acqSendTask conn dom = acquireAwait (domPlaying dom) (domQueue dom) (doSend conn)
@@ -257,33 +258,29 @@ acqSendTask conn dom = acquireAwait (domPlaying dom) (domQueue dom) (doSend conn
 newSt :: Env -> IO St
 newSt env = St env <$> initDomain env <*> newEmptyMVar
 
-mkLogger :: IO LogAction
-mkLogger = do
-  let logger = defaultLogAction
-  lock <- newMVar ()
-  pure (LogAction (\loc src lvl msg -> withMVar lock (\_ -> unLogAction logger loc src lvl msg)))
-
-initRes :: St -> IO ()
-initRes st = do
+initRes :: LogAction -> St -> IO ()
+initRes logger st = do
   disposeSt st
   rv <- relVarInit
   flip onException (relVarDispose rv) $ do
     conn <- relVarAcquire rv (acqConn (stEnv st))
-    genTask <- relVarAcquire rv (acqGenTask (stDom st))
+    genTask <- relVarAcquire rv (acqGenTask logger (stDom st))
     sendTask <- relVarAcquire rv (acqSendTask conn (stDom st))
     putMVar (stRes st) (Resources rv conn genTask sendTask)
 
-initSt :: Env -> IO St
-initSt env = newSt env >>= \st -> st <$ initRes st
+initSt :: LogAction -> Env -> IO St
+initSt logger env = newSt env >>= \st -> st <$ initRes logger st
 
 disposeSt :: St -> IO ()
 disposeSt st = mask_ (tryTakeMVar (stRes st) >>= maybe (pure ()) (relVarDispose . resRel))
 
 withSt :: (St -> IO a) -> IO a
-withSt = bracket (initSt defaultEnv) disposeSt
+withSt f = do
+  logger <- newLogger
+  bracket (initSt logger defaultEnv) disposeSt f
 
-doGen :: Domain -> PosixTime -> IO ()
-doGen dom now = do
+doGen :: LogAction -> Domain -> PosixTime -> IO ()
+doGen logger dom now = do
   mr <- atomically $ do
     playing <- readTVar (domPlaying dom)
     if playing
@@ -293,7 +290,7 @@ doGen dom now = do
     Nothing -> pure ()
     Just (_, mpevs) ->
       case mpevs of
-        Left err -> throwIO err
+        Left err -> logError logger (T.pack ("Gen failed: " ++ show err))
         Right pevs -> do
           -- putStrLn ("*** GEN " ++ showPosixTime now)
           -- putStrLn ("Writing " ++ show (length pevs) ++ " events")
