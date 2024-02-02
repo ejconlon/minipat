@@ -200,7 +200,11 @@ instance Pretty Select where
       SelectTransform t -> pretty t
 
 -- | Euclidean sequences
-data Euclid = Euclid !Integer !Integer !(Maybe Integer)
+data Euclid = Euclid
+  { eucFilled :: !Integer
+  , eucSteps :: !Integer
+  , eucShift :: !(Maybe Integer)
+  }
   deriving stock (Eq, Ord, Show)
 
 instance Pretty Euclid where

@@ -673,6 +673,46 @@ testPatInterpCases =
           , ev 1 2 (sel "x")
           ]
         )
+      ,
+        ( "euclid (3,8)"
+        , Nothing
+        , "x(3,8)"
+        ,
+          [ ev 0 (1 % 8) (sel "x")
+          , ev (3 % 8) (4 % 8) (sel "x")
+          , ev (6 % 8) (7 % 8) (sel "x")
+          ]
+        )
+      ,
+        ( "euclid (3,8,1)"
+        , Nothing
+        , "x(3,8,1)"
+        ,
+          [ ev (2 % 8) (3 % 8) (sel "x")
+          , ev (5 % 8) (6 % 8) (sel "x")
+          , ev (7 % 8) (8 % 8) (sel "x")
+          ]
+        )
+      ,
+        ( "euclid (3,8,2)"
+        , Nothing
+        , "x(3,8,2)"
+        ,
+          [ ev (1 % 8) (2 % 8) (sel "x")
+          , ev (4 % 8) (5 % 8) (sel "x")
+          , ev (6 % 8) (7 % 8) (sel "x")
+          ]
+        )
+      ,
+        ( "euclid (3,8,3)"
+        , Nothing
+        , "x(3,8,3)"
+        ,
+          [ ev 0 (1 % 8) (sel "x")
+          , ev (3 % 8) (4 % 8) (sel "x")
+          , ev (5 % 8) (6 % 8) (sel "x")
+          ]
+        )
       ]
 
 main :: IO ()

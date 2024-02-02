@@ -18,6 +18,7 @@ import Data.Foldable (foldMap')
 import Data.Foldable1 (foldl1')
 import Data.Ratio ((%))
 import Data.Sequence (Seq (..))
+import Data.Sequence.NonEmpty (NESeq)
 import Data.Sequence.NonEmpty qualified as NESeq
 import Minipat.Ast
 import Minipat.Rand qualified as D
@@ -105,7 +106,7 @@ lookInterp g h = \case
                   (el, w) = NESeq.index els' i
               in  unStream (streamFastBy (unCycleDelta w) el) arc'
         in  pure (Stream (foldMap' (\(z, sp) -> f z (spanActive sp)) . spanSplit), 1)
-  PatMod (Mod mx md) -> do
+  PatMod (Mod mx md) ->
     case md of
       ModTypeSpeed (Speed dir spat) -> do
         spat' <- lift (subInterp g g spat)
@@ -121,8 +122,20 @@ lookInterp g h = \case
         (r', w) <- lift mx
         let r'' = streamDegradeBy d r'
         pure (r'', w)
-      ModTypeEuclid _ -> error "TODO"
+      ModTypeEuclid euc -> do
+        (r', _) <- lift mx
+        let s = streamConcat (eucSeq euc (r', 1) (mempty, 1))
+            d = eucSteps euc
+        pure (s, fromInteger d)
   PatPoly (Poly _ _) -> error "TODO"
+
+eucSeq :: Euclid -> r -> r -> NESeq r
+eucSeq (Euclid (fromInteger -> filled) (fromInteger -> steps) (maybe 0 fromInteger -> shift)) activeEl passiveEl =
+  NESeq.fromFunction steps $ \ix0 ->
+    let ix1 = ix0 + shift
+        ix = if ix1 >= steps then ix1 - steps else ix1
+        active = mod ix filled == 0
+    in  if active then activeEl else passiveEl
 
 subInterp :: SelFn Factor Factor -> SelFn a c -> Pat b a -> M b (Stream c)
 subInterp g h = fmap fst . rewriteM (lookInterp g h) . unPat
