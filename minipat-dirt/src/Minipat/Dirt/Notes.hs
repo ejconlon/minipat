@@ -240,6 +240,52 @@ data ChordName
   | ChordName9Sus4
   deriving stock (Eq, Ord, Show, Enum, Bounded)
 
+instance Pretty ChordName where
+  pretty = \case
+    ChordNameMaj -> "maj"
+    ChordNameAug -> "aug"
+    ChordName6 -> "6"
+    ChordName69 -> "69"
+    ChordNameMaj7 -> "maj7"
+    ChordNameMaj9 -> "maj9"
+    ChordNameAdd9 -> "add9"
+    ChordNameMaj11 -> "maj11"
+    ChordNameAdd11 -> "add11"
+    ChordNameMaj13 -> "maj13"
+    ChordNameAdd13 -> "add13"
+    ChordNameDom7 -> "dom7"
+    ChordNameDom9 -> "dom9"
+    ChordNameDom11 -> "dom11"
+    ChordNameDom13 -> "dom13"
+    ChordName7Flat5 -> "7f5"
+    ChordName7Sharp5 -> "7s5"
+    ChordName7Flat9 -> "7f9"
+    ChordName9 -> "9"
+    ChordName11 -> "11"
+    ChordName13 -> "13"
+    ChordNameMin -> "min"
+    ChordNameDim -> "dim"
+    ChordNameMinSharp5 -> "s5"
+    ChordNameMin6 -> "min6"
+    ChordNameMin69 -> "min69"
+    ChordNameMin7Flat5 -> "min7f5"
+    ChordNameMin7 -> "min7"
+    ChordNameMin7Sharp5 -> "min7s5"
+    ChordNameMin7Flat9 -> "min7f9"
+    ChordNameMin7Sharp9 -> "min7s9"
+    ChordNameDim7 -> "dim7"
+    ChordNameMin9 -> "min9"
+    ChordNameMin11 -> "min11"
+    ChordNameMin13 -> "min13"
+    ChordNameMinMaj7 -> "mmaj7"
+    ChordName1 -> "1"
+    ChordName5 -> "5"
+    ChordNameSus2 -> "sus2"
+    ChordNameSus4 -> "sus4"
+    ChordName7Sus2 -> "7sus2"
+    ChordName7Sus4 -> "7sus4"
+    ChordName9Sus4 -> "9sus4"
+
 -- Chord mapping a la Tidal
 convChordName :: Text -> Maybe ChordName
 convChordName = \case
