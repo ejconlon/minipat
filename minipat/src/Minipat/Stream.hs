@@ -44,7 +44,7 @@ import Data.Foldable (foldl', toList)
 import Data.Foldable1 (foldMap1')
 import Data.Heap (Entry (..), Heap)
 import Data.Heap qualified as H
-import Data.Semigroup (Sum (..))
+import Data.Semigroup (Sum (..), Semigroup (..))
 import Data.Sequence.NonEmpty (NESeq)
 import Data.Sequence.NonEmpty qualified as NESeq
 import Data.String (IsString (..))
@@ -137,9 +137,11 @@ instance Monad Stream where
 
 instance Semigroup (Stream a) where
   Stream k1 <> Stream k2 = Stream (\arc -> k1 arc <> k2 arc)
+  sconcat ss = Stream (\arc -> sconcat (fmap (`unStream` arc) ss))
 
 instance Monoid (Stream a) where
-  mempty = Stream (const (Tape H.empty))
+  mempty = Stream (const mempty)
+  mconcat ss = Stream (\arc -> mconcat (fmap (`unStream` arc) ss))
 
 -- TODO Is there a useful instance here?
 -- Maybe split into cycles and check emptiness L->R
@@ -205,8 +207,8 @@ streamDegrade = streamAdjust streamDegradeBy
 
 -- Sketch: split arc into cycles, for each render the streamtern over the cycle, slowing by length, then speed everything
 -- up by whole amount to fit all into one cycle
-goC :: CycleDelta -> NESeq (Stream a, CycleDelta) -> Arc -> Tape a
-goC w streams arc = foldl' go1 mempty (spanSplit arc)
+goConcat :: CycleDelta -> NESeq (Stream a, CycleDelta) -> Arc -> Tape a
+goConcat w streams arc = foldl' go1 mempty (spanSplit arc)
  where
   go1 t (i, Span subArc _) = t <> tapeFastBy i (unCycleDelta w) (snd (go2 i subArc))
   go2 i subArc = foldl' (go3 i subArc) (0, mempty) streams
@@ -216,7 +218,7 @@ goC w streams arc = foldl' go1 mempty (spanSplit arc)
 streamConcat :: NESeq (Stream a, CycleDelta) -> Stream a
 streamConcat streams =
   let w = getSum (foldMap1' (Sum . snd) streams)
-  in  Stream (goC w streams)
+  in  Stream (goConcat w streams)
 
 -- TODO implement stream repeat more efficiently than just using streamConcat
 streamReplicate :: Int -> Stream a -> CycleDelta -> Stream a
