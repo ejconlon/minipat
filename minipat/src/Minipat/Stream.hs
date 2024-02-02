@@ -44,7 +44,7 @@ import Data.Foldable (foldl', toList)
 import Data.Foldable1 (foldMap1')
 import Data.Heap (Entry (..), Heap)
 import Data.Heap qualified as H
-import Data.Semigroup (Sum (..), Semigroup (..))
+import Data.Semigroup (Semigroup (..), Sum (..))
 import Data.Sequence.NonEmpty (NESeq)
 import Data.Sequence.NonEmpty qualified as NESeq
 import Data.String (IsString (..))

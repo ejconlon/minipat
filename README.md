@@ -4,11 +4,10 @@ A mini pattern language extracted from Tidal
 
 ## TODO
 
-* Don't push `Select` down the `Pat` tree
-* Implement polymeters
-* Handle errors gracefully
 * Impement `Alternative` for `Stream`
-* Midi notes
+* Finish Midi notes/chords/arps
+* Implement polymeters
+* Handle errors gracefully in `minipat-dirt` loops
 * Additional combinators
   * `arp`
   * `sustain`

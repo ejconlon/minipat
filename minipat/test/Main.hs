@@ -19,7 +19,7 @@ import Data.Sequence.NonEmpty qualified as NESeq
 import Data.Text (Text)
 import Looksee (Err, parse)
 import Minipat.Ast
-import Minipat.Interp (Sel, interpPat, noSelFn, yesSelFn)
+import Minipat.Interp (SelAcc, accSelProj, interpPatAccSel)
 import Minipat.Norm (normPat)
 import Minipat.Parser (P, ParseErr, factorP, identP, identPatP)
 import Minipat.Print (render)
@@ -415,11 +415,11 @@ testPatNormCases =
             )
           ]
 
-runPatInterpCase :: (TestName, Maybe Arc, Text, [Ev (Sel Ident)]) -> TestTree
+runPatInterpCase :: (TestName, Maybe Arc, Text, [Ev (SelAcc Ident)]) -> TestTree
 runPatInterpCase (n, mayArc, patStr, evs) = testCase n $ do
   pat <- either throwIO pure (parse tpatP patStr)
   let pat' = normPat pat
-  pat'' <- either throwIO pure (interpPat noSelFn yesSelFn pat')
+  pat'' <- either throwIO pure (interpPatAccSel pat')
   let arc = fromMaybe (Arc 0 1) mayArc
       actualEvs = streamRun pat'' arc
   actualEvs @?= evs
@@ -429,8 +429,8 @@ ev start end val =
   let arc = Arc (CycleTime start) (CycleTime end)
   in  Ev (Span arc (Just arc)) val
 
-sel :: a -> Sel a
-sel = Anno Empty
+sel :: a -> SelAcc a
+sel = accSelProj
 
 testPatInterpCases :: TestTree
 testPatInterpCases =

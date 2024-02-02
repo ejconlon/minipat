@@ -1,18 +1,22 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 -- | Interpreting patterns as streams
 module Minipat.Interp
-  ( Sel
-  , SelFn
-  , yesSelFn
+  ( SelFn
   , noSelFn
+  , SelAcc
+  , accSelFn
+  , accSelProj
   , InterpErr (..)
   , interpPat
+  , interpPatAccSel
+  , interpPatNoSel
   )
 where
 
 import Bowtie (Anno (..))
 import Control.Exception (Exception)
 import Control.Monad.Except (Except, runExcept)
-import Control.Monad.Reader (MonadReader (..), ReaderT, runReaderT)
 import Control.Monad.Trans (lift)
 import Data.Foldable (foldMap')
 import Data.Foldable1 (foldl1')
@@ -20,7 +24,26 @@ import Data.Ratio ((%))
 import Data.Sequence (Seq (..))
 import Data.Sequence.NonEmpty (NESeq)
 import Data.Sequence.NonEmpty qualified as NESeq
+import Data.Typeable (Typeable)
+import Data.Void (Void)
 import Minipat.Ast
+  ( Degrade (..)
+  , Euclid (..)
+  , Extent (..)
+  , Group (..)
+  , GroupType (..)
+  , LongExtent (..)
+  , Mod (..)
+  , ModType (..)
+  , Pat (..)
+  , PatF (..)
+  , PatX
+  , Poly (..)
+  , Select (..)
+  , Speed (..)
+  , SpeedDir (..)
+  , factorValue
+  )
 import Minipat.Rand qualified as D
 import Minipat.Rewrite (RwErr, RwT, rewriteM, throwRw)
 import Minipat.Stream
@@ -34,47 +57,54 @@ import Minipat.Stream
   )
 import Minipat.Time (Cycle (..), CycleDelta (..), spanActive, spanSplit)
 
--- | A sequence of selections applied to the given value
-type Sel = Anno (Seq Select)
+-- | A function that processes a 'Select'
+type SelFn e a = Select -> Stream a -> Either (InterpErr e) (Stream a)
 
--- | A function combining selections with the given value.
--- Returning 'Nothing' indicates an error.
-type SelFn a c = Seq Select -> a -> Maybe c
-
--- | Accept all selections.
-yesSelFn :: SelFn a (Sel a)
-yesSelFn ss = Just . Anno ss
-
--- | Forbit selections altogether.
-noSelFn :: SelFn a a
-noSelFn = \case
-  Empty -> Just
-  _ -> const Nothing
-
--- | An error interpreting a 'Pat' as a 'Stream'
-data InterpErr
-  = -- | When extent shorthands have not been previously eliminated
-    InterpErrShort
-  | -- | When selections are invalid
-    InterpErrSel
+-- | Error for when we encounter selects when forbidden
+data NoSelectErr = NoSelectErr
   deriving stock (Eq, Ord, Show)
 
-instance Exception InterpErr
+instance Exception NoSelectErr
 
-type M b = ReaderT (Seq Select) (Except (RwErr InterpErr b))
+-- | A function forbidding any selects
+noSelFn :: SelFn e a
+noSelFn _ _ = Left InterpErrForbidden
 
-runM :: M b a -> Either (RwErr InterpErr b) a
-runM = runExcept . flip runReaderT Empty
+-- | An accumulation of selects (higher on tree in the front)
+type SelAcc = Anno (Seq Select)
+
+-- | A function accumulating selects
+accSelFn :: SelFn e (SelAcc a)
+accSelFn sel = Right . fmap (\(Anno sels a) -> Anno (sel :<| sels) a)
+
+-- | Projection into select accumulator
+accSelProj :: a -> SelAcc a
+accSelProj = Anno Empty
+
+-- | An error interpreting a 'Pat' as a 'Stream'
+data InterpErr e
+  = -- | When extent shorthands have not been previously eliminated
+    InterpErrShort
+  | -- | When selects are forbidden
+    InterpErrForbidden
+  | -- | Custom select errors
+    InterpErrEmbed !e
+  deriving stock (Eq, Ord, Show)
+
+instance (Show e, Typeable e) => Exception (InterpErr e)
+
+type M b e = Except (RwErr (InterpErr e) b)
+
+runM :: M b e a -> Either (RwErr (InterpErr e) b) a
+runM = runExcept
 
 lookInterp
-  :: SelFn Factor Factor
-  -> SelFn a c
-  -> PatX b a (M b (Stream c, CycleDelta))
-  -> RwT b (M b) (Stream c, CycleDelta)
-lookInterp g h = \case
-  PatPure a -> do
-    ss <- lift ask
-    maybe (throwRw InterpErrSel) (\c -> pure (pure c, 1)) (h ss a)
+  :: SelFn e c
+  -> (a -> c)
+  -> PatX b a (M b e (Stream c, CycleDelta))
+  -> RwT b (M b e) (Stream c, CycleDelta)
+lookInterp selFn projFn = \case
+  PatPure a -> pure (pure (projFn a), 1)
   PatSilence -> pure (mempty, 1)
   PatExtent t ->
     case t of
@@ -106,25 +136,29 @@ lookInterp g h = \case
                   (el, w) = NESeq.index els' i
               in  unStream (streamFastBy (unCycleDelta w) el) arc'
         in  pure (Stream (foldMap' (\(z, sp) -> f z (spanActive sp)) . spanSplit), 1)
-  PatMod (Mod mx md) ->
+  PatMod (Mod melw md) ->
     case md of
       ModTypeSpeed (Speed dir spat) -> do
-        spat' <- lift (subInterp g g spat)
+        spat' <- lift (subInterp noSelFn id spat)
         let f = case dir of
               SpeedDirFast -> streamFast
               SpeedDirSlow -> streamSlow
             spat'' = fmap factorValue spat'
-        (r', w) <- lift mx
-        pure (f spat'' r', w)
-      ModTypeSelect s -> lift (local (:|> s) mx)
+        (el, w) <- lift melw
+        pure (f spat'' el, w)
+      ModTypeSelect s -> do
+        (el, w) <- lift melw
+        case selFn s el of
+          Left err -> throwRw err
+          Right el' -> pure (el', w)
       ModTypeDegrade (Degrade dd) -> do
         let d = maybe (1 % 2) factorValue dd
-        (r', w) <- lift mx
-        let r'' = streamDegradeBy d r'
-        pure (r'', w)
+        (el, w) <- lift melw
+        let el' = streamDegradeBy d el
+        pure (el', w)
       ModTypeEuclid euc -> do
-        (r', _) <- lift mx
-        let s = streamConcat (eucSeq euc (r', 1) (mempty, 1))
+        (el, _) <- lift melw
+        let s = streamConcat (eucSeq euc (el, 1) (mempty, 1))
             d = eucSteps euc
         pure (s, fromInteger d)
   PatPoly (Poly _ _) -> error "TODO"
@@ -137,9 +171,17 @@ eucSeq (Euclid (fromInteger -> filled) (fromInteger -> steps) (maybe 0 fromInteg
         active = mod ix filled == 0
     in  if active then activeEl else passiveEl
 
-subInterp :: SelFn Factor Factor -> SelFn a c -> Pat b a -> M b (Stream c)
-subInterp g h = fmap fst . rewriteM (lookInterp g h) . unPat
+subInterp :: SelFn e c -> (a -> c) -> Pat b a -> M b e (Stream c)
+subInterp selC projAC = fmap fst . rewriteM (lookInterp selC projAC) . unPat
 
 -- | Interpret the given 'Pat' as a 'Stream'
-interpPat :: SelFn Factor Factor -> SelFn a c -> Pat b a -> Either (RwErr InterpErr b) (Stream c)
-interpPat g h = runM . subInterp g h
+interpPat :: SelFn e c -> (a -> c) -> Pat b a -> Either (RwErr (InterpErr e) b) (Stream c)
+interpPat selC projAC = runM . subInterp selC projAC
+
+-- | 'interpPat' acumulating selects
+interpPatAccSel :: Pat b a -> Either (RwErr (InterpErr Void) b) (Stream (SelAcc a))
+interpPatAccSel = interpPat accSelFn accSelProj
+
+-- | 'interpPat' forbidding selects
+interpPatNoSel :: Pat b a -> Either (RwErr (InterpErr Void) b) (Stream a)
+interpPatNoSel = interpPat noSelFn id
