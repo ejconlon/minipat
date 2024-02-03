@@ -12,7 +12,7 @@ import Data.Text (Text)
 import Looksee (intP, sciP)
 import Minipat.Ast (Ident (..), Select (..))
 import Minipat.Dirt.Osc (Attrs)
-import Minipat.Eval (evalPat, evalPatNoSel)
+import Minipat.Eval (evalPat, evalPatForbid)
 import Minipat.Interp (InterpErr (..))
 import Minipat.Parser (P, identP)
 import Minipat.Stream (Stream)
@@ -27,7 +27,7 @@ datumP = \case
   dt -> fail ("Datum type is not parseable: " <> show dt)
 
 liveEvalPat :: DatumType -> Text -> Stream Datum
-liveEvalPat dt t = either (pure mempty) id (evalPatNoSel (datumP dt) t)
+liveEvalPat dt txt = either (pure mempty) id (evalPatForbid (datumP dt) txt)
 
 data SoundSelectErr = SoundSelectErr
   deriving stock (Eq, Ord, Show)
@@ -42,4 +42,4 @@ soundProjFn :: Ident -> Attrs
 soundProjFn = Map.singleton "sound" . DatumString . unIdent
 
 liveEvalSoundPat :: Text -> Stream Attrs
-liveEvalSoundPat t = either (pure mempty) id (evalPat soundSelFn soundProjFn identP t)
+liveEvalSoundPat txt = either (pure mempty) id (evalPat soundSelFn soundProjFn identP txt)

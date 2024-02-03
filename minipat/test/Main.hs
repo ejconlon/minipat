@@ -19,7 +19,7 @@ import Data.Sequence.NonEmpty qualified as NESeq
 import Data.Text (Text)
 import Looksee (Err, parse)
 import Minipat.Ast
-import Minipat.Interp (SelAcc, accSelProj, interpPatAccSel)
+import Minipat.Interp (SelAcc, accProj, interpPatAcc)
 import Minipat.Norm (normPat)
 import Minipat.Parser (P, ParseErr, factorP, identP, identPatP)
 import Minipat.Print (render)
@@ -419,7 +419,7 @@ runPatInterpCase :: (TestName, Maybe Arc, Text, [Ev (SelAcc Ident)]) -> TestTree
 runPatInterpCase (n, mayArc, patStr, evs) = testCase n $ do
   pat <- either throwIO pure (parse tpatP patStr)
   let pat' = normPat pat
-  pat'' <- either throwIO pure (interpPatAccSel pat')
+  pat'' <- either throwIO pure (interpPatAcc pat')
   let arc = fromMaybe (Arc 0 1) mayArc
       actualEvs = streamRun pat'' arc
   actualEvs @?= evs
@@ -429,8 +429,8 @@ ev start end val =
   let arc = Arc (CycleTime start) (CycleTime end)
   in  Ev (Span arc (Just arc)) val
 
-sel :: a -> SelAcc a
-sel = accSelProj
+proj :: a -> SelAcc a
+proj = accProj
 
 testPatInterpCases :: TestTree
 testPatInterpCases =
@@ -442,7 +442,7 @@ testPatInterpCases =
         , Nothing
         , "x"
         ,
-          [ ev 0 1 (sel "x")
+          [ ev 0 1 (proj "x")
           ]
         )
       ,
@@ -450,8 +450,8 @@ testPatInterpCases =
         , Just (Arc 0 2)
         , "x"
         ,
-          [ ev 0 1 (sel "x")
-          , ev 1 2 (sel "x")
+          [ ev 0 1 (proj "x")
+          , ev 1 2 (proj "x")
           ]
         )
       ,
@@ -459,8 +459,8 @@ testPatInterpCases =
         , Just (Arc (CycleTime (1 % 2)) (CycleTime (3 % 2)))
         , "x"
         ,
-          [ Ev (Span (Arc (CycleTime (1 % 2)) 1) (Just (Arc 0 1))) (sel "x")
-          , Ev (Span (Arc 1 (CycleTime (3 % 2))) (Just (Arc 1 2))) (sel "x")
+          [ Ev (Span (Arc (CycleTime (1 % 2)) 1) (Just (Arc 0 1))) (proj "x")
+          , Ev (Span (Arc 1 (CycleTime (3 % 2))) (Just (Arc 1 2))) (proj "x")
           ]
         )
       ,
@@ -468,7 +468,7 @@ testPatInterpCases =
         , Nothing
         , "[x]"
         ,
-          [ ev 0 1 (sel "x")
+          [ ev 0 1 (proj "x")
           ]
         )
       ,
@@ -476,8 +476,8 @@ testPatInterpCases =
         , Nothing
         , "x*2"
         ,
-          [ ev 0 (1 % 2) (sel "x")
-          , ev (1 % 2) 1 (sel "x")
+          [ ev 0 (1 % 2) (proj "x")
+          , ev (1 % 2) 1 (proj "x")
           ]
         )
       ,
@@ -485,7 +485,7 @@ testPatInterpCases =
         , Nothing
         , "x/2"
         ,
-          [ Ev (Span (Arc 0 1) (Just (Arc 0 2))) (sel "x")
+          [ Ev (Span (Arc 0 1) (Just (Arc 0 2))) (proj "x")
           ]
         )
       ,
@@ -493,8 +493,8 @@ testPatInterpCases =
         , Nothing
         , "[x y]"
         ,
-          [ ev 0 (1 % 2) (sel "x")
-          , ev (1 % 2) 1 (sel "y")
+          [ ev 0 (1 % 2) (proj "x")
+          , ev (1 % 2) 1 (proj "y")
           ]
         )
       ,
@@ -502,10 +502,10 @@ testPatInterpCases =
         , Just (Arc 0 2)
         , "[x y]"
         ,
-          [ ev 0 (1 % 2) (sel "x")
-          , ev (1 % 2) 1 (sel "y")
-          , ev 1 (3 % 2) (sel "x")
-          , ev (3 % 2) 2 (sel "y")
+          [ ev 0 (1 % 2) (proj "x")
+          , ev (1 % 2) 1 (proj "y")
+          , ev 1 (3 % 2) (proj "x")
+          , ev (3 % 2) 2 (proj "y")
           ]
         )
       ,
@@ -513,7 +513,7 @@ testPatInterpCases =
         , Nothing
         , "x!1"
         ,
-          [ ev 0 1 (sel "x")
+          [ ev 0 1 (proj "x")
           ]
         )
       ,
@@ -521,8 +521,8 @@ testPatInterpCases =
         , Nothing
         , "x!2"
         ,
-          [ ev 0 (1 % 2) (sel "x")
-          , ev (1 % 2) 1 (sel "x")
+          [ ev 0 (1 % 2) (proj "x")
+          , ev (1 % 2) 1 (proj "x")
           ]
         )
       ,
@@ -530,8 +530,8 @@ testPatInterpCases =
         , Nothing
         , "x!"
         ,
-          [ ev 0 (1 % 2) (sel "x")
-          , ev (1 % 2) 1 (sel "x")
+          [ ev 0 (1 % 2) (proj "x")
+          , ev (1 % 2) 1 (proj "x")
           ]
         )
       ,
@@ -539,8 +539,8 @@ testPatInterpCases =
         , Nothing
         , "x !"
         ,
-          [ ev 0 (1 % 2) (sel "x")
-          , ev (1 % 2) 1 (sel "x")
+          [ ev 0 (1 % 2) (proj "x")
+          , ev (1 % 2) 1 (proj "x")
           ]
         )
       ,
@@ -548,9 +548,9 @@ testPatInterpCases =
         , Nothing
         , "x!3"
         ,
-          [ ev 0 (1 % 3) (sel "x")
-          , ev (1 % 3) (2 % 3) (sel "x")
-          , ev (2 % 3) 1 (sel "x")
+          [ ev 0 (1 % 3) (proj "x")
+          , ev (1 % 3) (2 % 3) (proj "x")
+          , ev (2 % 3) 1 (proj "x")
           ]
         )
       ,
@@ -558,9 +558,9 @@ testPatInterpCases =
         , Nothing
         , "x ! !"
         ,
-          [ ev 0 (1 % 3) (sel "x")
-          , ev (1 % 3) (2 % 3) (sel "x")
-          , ev (2 % 3) 1 (sel "x")
+          [ ev 0 (1 % 3) (proj "x")
+          , ev (1 % 3) (2 % 3) (proj "x")
+          , ev (2 % 3) 1 (proj "x")
           ]
         )
       ,
@@ -568,9 +568,9 @@ testPatInterpCases =
         , Nothing
         , "x ! y"
         ,
-          [ ev 0 (1 % 3) (sel "x")
-          , ev (1 % 3) (2 % 3) (sel "x")
-          , ev (2 % 3) 1 (sel "y")
+          [ ev 0 (1 % 3) (proj "x")
+          , ev (1 % 3) (2 % 3) (proj "x")
+          , ev (2 % 3) 1 (proj "y")
           ]
         )
       ,
@@ -578,7 +578,7 @@ testPatInterpCases =
         , Nothing
         , "x@2"
         ,
-          [ ev 0 1 (sel "x")
+          [ ev 0 1 (proj "x")
           ]
         )
       ,
@@ -586,8 +586,8 @@ testPatInterpCases =
         , Nothing
         , "x@2 y"
         ,
-          [ ev 0 (2 % 3) (sel "x")
-          , ev (2 % 3) 1 (sel "y")
+          [ ev 0 (2 % 3) (proj "x")
+          , ev (2 % 3) 1 (proj "y")
           ]
         )
       ,
@@ -595,8 +595,8 @@ testPatInterpCases =
         , Nothing
         , "x _ y"
         ,
-          [ ev 0 (2 % 3) (sel "x")
-          , ev (2 % 3) 1 (sel "y")
+          [ ev 0 (2 % 3) (proj "x")
+          , ev (2 % 3) 1 (proj "y")
           ]
         )
       ,
@@ -604,7 +604,7 @@ testPatInterpCases =
         , Nothing
         , "[x | y]"
         ,
-          [ ev 0 1 (sel "x")
+          [ ev 0 1 (proj "x")
           ]
         )
       ,
@@ -612,9 +612,9 @@ testPatInterpCases =
         , Just (Arc 5 8)
         , "[x | y | z]"
         ,
-          [ ev 5 6 (sel "x")
-          , ev 6 7 (sel "x")
-          , ev 7 8 (sel "y")
+          [ ev 5 6 (proj "x")
+          , ev 6 7 (proj "x")
+          , ev 7 8 (proj "y")
           ] -- Arbitrary, based on rand seed
         )
       ,
@@ -622,7 +622,7 @@ testPatInterpCases =
         , Nothing
         , "<x>"
         ,
-          [ ev 0 1 (sel "x")
+          [ ev 0 1 (proj "x")
           ]
         )
       ,
@@ -630,7 +630,7 @@ testPatInterpCases =
         , Nothing
         , "<x y>"
         ,
-          [ ev 0 1 (sel "x")
+          [ ev 0 1 (proj "x")
           ]
         )
       ,
@@ -638,9 +638,9 @@ testPatInterpCases =
         , Just (Arc 5 8)
         , "<x y z>"
         ,
-          [ ev 5 6 (sel "z")
-          , ev 6 7 (sel "x")
-          , ev 7 8 (sel "y")
+          [ ev 5 6 (proj "z")
+          , ev 6 7 (proj "x")
+          , ev 7 8 (proj "y")
           ]
         )
       ,
@@ -648,9 +648,9 @@ testPatInterpCases =
         , Nothing
         , "[x , y , z]"
         ,
-          [ ev 0 1 (sel "x")
-          , ev 0 1 (sel "z")
-          , ev 0 1 (sel "y")
+          [ ev 0 1 (proj "x")
+          , ev 0 1 (proj "z")
+          , ev 0 1 (proj "y")
           ] -- Note this order is arbitrary, just comes from heap behavior
         )
       ,
@@ -669,8 +669,8 @@ testPatInterpCases =
         , Just (Arc 0 4)
         , "x?"
         ,
-          [ ev 0 1 (sel "x")
-          , ev 1 2 (sel "x")
+          [ ev 0 1 (proj "x")
+          , ev 1 2 (proj "x")
           ]
         )
       ,
@@ -678,9 +678,9 @@ testPatInterpCases =
         , Nothing
         , "x(3,8)"
         ,
-          [ ev 0 (1 % 8) (sel "x")
-          , ev (3 % 8) (4 % 8) (sel "x")
-          , ev (6 % 8) (7 % 8) (sel "x")
+          [ ev 0 (1 % 8) (proj "x")
+          , ev (3 % 8) (4 % 8) (proj "x")
+          , ev (6 % 8) (7 % 8) (proj "x")
           ]
         )
       ,
@@ -688,9 +688,9 @@ testPatInterpCases =
         , Nothing
         , "x(3,8,1)"
         ,
-          [ ev (2 % 8) (3 % 8) (sel "x")
-          , ev (5 % 8) (6 % 8) (sel "x")
-          , ev (7 % 8) (8 % 8) (sel "x")
+          [ ev (2 % 8) (3 % 8) (proj "x")
+          , ev (5 % 8) (6 % 8) (proj "x")
+          , ev (7 % 8) (8 % 8) (proj "x")
           ]
         )
       ,
@@ -698,9 +698,9 @@ testPatInterpCases =
         , Nothing
         , "x(3,8,2)"
         ,
-          [ ev (1 % 8) (2 % 8) (sel "x")
-          , ev (4 % 8) (5 % 8) (sel "x")
-          , ev (6 % 8) (7 % 8) (sel "x")
+          [ ev (1 % 8) (2 % 8) (proj "x")
+          , ev (4 % 8) (5 % 8) (proj "x")
+          , ev (6 % 8) (7 % 8) (proj "x")
           ]
         )
       ,
@@ -708,9 +708,9 @@ testPatInterpCases =
         , Nothing
         , "x(3,8,3)"
         ,
-          [ ev 0 (1 % 8) (sel "x")
-          , ev (3 % 8) (4 % 8) (sel "x")
-          , ev (5 % 8) (6 % 8) (sel "x")
+          [ ev 0 (1 % 8) (proj "x")
+          , ev (3 % 8) (4 % 8) (proj "x")
+          , ev (5 % 8) (6 % 8) (proj "x")
           ]
         )
       ]

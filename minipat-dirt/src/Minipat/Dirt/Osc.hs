@@ -75,9 +75,9 @@ playAliases =
   [ ("lpf", "cutoff")
   , ("lpq", "resonance")
   , ("hpf", "hcutoff")
-  , ("lpq", "resonance")
+  , ("hpq", "hresonance")
   , ("bpf", "bandf")
-  , ("bpq", "resonance")
+  , ("bpq", "bandq")
   , ("res", "resonance")
   , ("midi", "midinote")
   , ("n", "midinote")
@@ -87,9 +87,9 @@ playAliases =
   , ("delayt", "delaytime")
   , ("delayfb", "delayfeedback")
   , ("phasr", "phaserrate")
-  , ("phasd", "phaserdepth")
-  , ("tremrate", "tremolorate")
-  , ("tremd", "tremolodepth")
+  , ("phasdp", "phaserdepth")
+  , ("tremr", "tremolorate")
+  , ("tremdp", "tremolodepth")
   , ("dist", "distort")
   , ("o", "orbit")
   , ("ts", "timescale")
@@ -123,7 +123,8 @@ convertEvent (PlayEnv startTime startCyc cps) (Ev sp dat) = do
   let deltaTime = timeDeltaToMicros (timeDeltaFromFracSecs (deltaCyc / cps))
   dat' <- replaceAliases playAliases dat
   dat'' <- insertSafe "delta" (DatumFloat deltaTime) dat'
-  pure (Timed onset dat'')
+  dat''' <- insertSafe "cps" (DatumFloat (realToFrac cps)) dat''
+  pure (Timed onset dat''')
 
 convertTape :: PlayEnv -> Tape Attrs -> M (Seq (Timed Attrs))
 convertTape penv = traverse (convertEvent penv) . Seq.fromList . tapeToList

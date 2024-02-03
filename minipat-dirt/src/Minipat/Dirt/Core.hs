@@ -184,6 +184,7 @@ setPlaying st x = atomically (writeTVar (domPlaying (stDom st)) x)
 setCycle :: St -> Integer -> IO ()
 setCycle st x = atomically (writeTVar (domCycle (stDom st)) x)
 
+-- TODO only set orbit if not present
 updateOrbits :: St -> (Map Int (Stream Attrs) -> Map Int (Stream Attrs)) -> IO ()
 updateOrbits st f = atomically $ do
   let dom = stDom st

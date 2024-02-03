@@ -1,8 +1,8 @@
 -- | Taking textual patterns all the way to streams
 module Minipat.Eval
   ( evalPat
-  , evalPatAccSel
-  , evalPatNoSel
+  , evalPatAcc
+  , evalPatForbid
   )
 where
 
@@ -11,22 +11,22 @@ import Data.Text (Text)
 import Data.Typeable (Typeable)
 import Data.Void (Void)
 import Looksee (parse)
-import Minipat.Interp (SelAcc, SelFn, accSelFn, accSelProj, interpPat, noSelFn)
+import Minipat.Interp (Sel, SelAcc, accProj, accSel, forbidSel, interpPat)
 import Minipat.Norm (normPat)
 import Minipat.Parser (P, topPatP)
 import Minipat.Stream (Stream)
 
 -- | The canonical way to parse, normalize, and interpret patterns as streams
-evalPat :: (Show e, Typeable e) => SelFn e c -> (a -> c) -> P a -> Text -> Either SomeException (Stream c)
-evalPat selFn projFn p t = do
+evalPat :: (Show e, Typeable e) => Sel e c -> (a -> c) -> P a -> Text -> Either SomeException (Stream c)
+evalPat sel proj p t = do
   pat <- either (Left . SomeException) Right (parse (topPatP p) t)
   let pat' = normPat pat
-  either (Left . SomeException) Right (interpPat selFn projFn pat')
+  either (Left . SomeException) Right (interpPat sel proj pat')
 
 -- | 'interpPat' acumulating selects
-evalPatAccSel :: P a -> Text -> Either SomeException (Stream (SelAcc a))
-evalPatAccSel = evalPat @Void accSelFn accSelProj
+evalPatAcc :: P a -> Text -> Either SomeException (Stream (SelAcc a))
+evalPatAcc = evalPat @Void accSel accProj
 
 -- | 'interpPat' forbidding selects
-evalPatNoSel :: P a -> Text -> Either SomeException (Stream a)
-evalPatNoSel = evalPat @Void noSelFn id
+evalPatForbid :: P a -> Text -> Either SomeException (Stream a)
+evalPatForbid = evalPat @Void forbidSel id

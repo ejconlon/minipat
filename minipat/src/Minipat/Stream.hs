@@ -5,6 +5,7 @@ module Minipat.Stream
   ( Ev (..)
   , evCont
   , Tape
+  , tapeNull
   , tapeFilter
   , tapeFastBy
   , tapeSlowBy
@@ -78,6 +79,9 @@ newtype Tape a = Tape {unTape :: Heap (Entry Span a)}
 instance Functor Tape where
   fmap f = Tape . H.mapMonotonic (\(Entry s a) -> Entry s (f a)) . unTape
 
+tapeNull :: Tape a -> Bool
+tapeNull = H.null . unTape
+
 tapeFilter :: (a -> Bool) -> Tape a -> Tape a
 tapeFilter f = Tape . H.filter (\(Entry _ a) -> f a) . unTape
 
@@ -135,19 +139,25 @@ instance Applicative Stream where
 instance Monad Stream where
   (>>=) = streamMixBind
 
+-- | '(<>)' is parallel composition of streams
 instance Semigroup (Stream a) where
   Stream k1 <> Stream k2 = Stream (\arc -> k1 arc <> k2 arc)
   sconcat ss = Stream (\arc -> sconcat (fmap (`unStream` arc) ss))
 
+-- | 'mempty' is the empty stream
 instance Monoid (Stream a) where
   mempty = Stream (const mempty)
   mconcat ss = Stream (\arc -> mconcat (fmap (`unStream` arc) ss))
 
--- TODO Is there a useful instance here?
--- Maybe split into cycles and check emptiness L->R
+-- TODO alt should be invariant under shifts, but that is expensive
+-- -- | 'empty', like 'mempty', is the empty stream
 -- instance Alternative Stream where
 --   empty = mempty
---   (<|>) = (<>)
+--   Stream k1 <|> Stream k2 = Stream (foldl' merge mempty . spanSplit) where
+--     merge t0 (_, Span arc _) =
+--       let t1 = k1 arc
+--           t2 = if tapeNull t1 then k2 arc else t1
+--       in t0 <> t2
 
 instance (IsString s) => IsString (Stream s) where
   fromString = pure . fromString
@@ -221,8 +231,8 @@ streamConcat streams =
   in  Stream (goConcat w streams)
 
 -- TODO implement stream repeat more efficiently than just using streamConcat
-streamReplicate :: Int -> Stream a -> CycleDelta -> Stream a
-streamReplicate n p v = streamConcat (NESeq.replicate n (p, v))
+streamReplicate :: Int -> Stream a -> Stream a
+streamReplicate n p = streamConcat (NESeq.replicate n (p, 1))
 
 streamCont :: (CycleTime -> a) -> Stream a
 streamCont f = Stream (tapeSingleton . evCont f)
