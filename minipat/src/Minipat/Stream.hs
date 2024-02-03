@@ -37,19 +37,23 @@ module Minipat.Stream
   , streamDegradeBy
   , streamDegrade
   , streamCont
+  , streamEuclid
+  , streamRand
+  , streamAlt
   )
 where
 
 import Control.Monad (ap)
-import Data.Foldable (foldl', toList)
+import Data.Foldable (foldMap', foldl', toList)
 import Data.Foldable1 (foldMap1')
 import Data.Heap (Entry (..), Heap)
 import Data.Heap qualified as H
+import Data.Maybe (fromMaybe)
 import Data.Semigroup (Semigroup (..), Sum (..))
 import Data.Sequence.NonEmpty (NESeq)
 import Data.Sequence.NonEmpty qualified as NESeq
 import Data.String (IsString (..))
-import Minipat.Rand (randFrac, spanSeed)
+import Minipat.Rand (arcSeed, randFrac, randInt, spanSeed)
 import Minipat.Time
   ( Arc (..)
   , Cycle (..)
@@ -215,27 +219,58 @@ streamDegradeBy r (Stream k) = Stream (tapeDegradeBy r . k)
 streamDegrade :: Stream Rational -> Stream a -> Stream a
 streamDegrade = streamAdjust streamDegradeBy
 
--- Sketch: split arc into cycles, for each render the streamtern over the cycle, slowing by length, then speed everything
--- up by whole amount to fit all into one cycle
+-- Sketch: split arc into cycles, for each render the stream over the cycle, slowing
+-- by length, then speed everything up by whole amount to fit all into one cycle
 goConcat :: CycleDelta -> NESeq (Stream a, CycleDelta) -> Arc -> Tape a
-goConcat w streams arc = foldl' go1 mempty (spanSplit arc)
+goConcat w ss arc = foldl' go1 mempty (spanSplit arc)
  where
   go1 t (i, Span subArc _) = t <> tapeFastBy i (unCycleDelta w) (snd (go2 i subArc))
-  go2 i subArc = foldl' (go3 i subArc) (0, mempty) streams
+  go2 i subArc = foldl' (go3 i subArc) (0, mempty) ss
   go3 i subArc (o, t) (p, v) =
     (o + v, t <> tapeLateBy o (tapeSlowBy i (unCycleDelta v) (unStream p subArc)))
 
 streamConcat :: NESeq (Stream a, CycleDelta) -> Stream a
-streamConcat streams =
-  let w = getSum (foldMap1' (Sum . snd) streams)
-  in  Stream (goConcat w streams)
+streamConcat ss =
+  let w = getSum (foldMap1' (Sum . snd) ss)
+  in  Stream (goConcat w ss)
 
 -- TODO implement stream repeat more efficiently than just using streamConcat
 streamReplicate :: Int -> Stream a -> Stream a
-streamReplicate n p = streamConcat (NESeq.replicate n (p, 1))
+streamReplicate n s = streamConcat (NESeq.replicate n (s, 1))
 
 streamCont :: (CycleTime -> a) -> Stream a
 streamCont f = Stream (tapeSingleton . evCont f)
+
+goEuclid :: Int -> Int -> Maybe Int -> r -> r -> NESeq r
+goEuclid filled steps (fromMaybe 0 -> shift) activeEl passiveEl =
+  NESeq.fromFunction steps $ \ix0 ->
+    let ix1 = ix0 + shift
+        ix = if ix1 >= steps then ix1 - steps else ix1
+        active = mod ix filled == 0
+    in  if active then activeEl else passiveEl
+
+streamEuclid :: Int -> Int -> Maybe Int -> Stream a -> Stream a
+streamEuclid filled steps mshift s =
+  streamConcat (goEuclid filled steps mshift (s, 1) (mempty, 1))
+
+streamRand :: NESeq (Stream a) -> Stream a
+streamRand ss =
+  let l = NESeq.length ss
+      f arc =
+        let s = arcSeed arc
+            i = randInt l s
+            t = NESeq.index ss i
+        in  unStream t arc
+  in  Stream (foldMap' (f . spanActive . snd) . spanSplit)
+
+streamAlt :: NESeq (Stream a) -> Stream a
+streamAlt ss =
+  let l = NESeq.length ss
+      f z arc =
+        let i = mod (fromInteger (unCycle z)) l
+            t = NESeq.index ss i
+        in  unStream t arc
+  in  Stream (foldMap' (\(z, sp) -> f z (spanActive sp)) . spanSplit)
 
 -- TODO move to module with continuous primitives
 -- fnSine :: Rational -> Time -> Double

@@ -18,7 +18,6 @@ import Bowtie (Anno (..))
 import Control.Exception (Exception)
 import Control.Monad.Except (Except, runExcept)
 import Control.Monad.Trans (lift)
-import Data.Foldable (foldMap')
 import Data.Foldable1 (foldl1')
 import Data.Ratio ((%))
 import Data.Sequence (Seq (..))
@@ -44,18 +43,20 @@ import Minipat.Ast
   , SpeedDir (..)
   , factorValue
   )
-import Minipat.Rand qualified as D
 import Minipat.Rewrite (RwErr, RwT, rewriteM, throwRw)
 import Minipat.Stream
   ( Stream (..)
+  , streamAlt
   , streamConcat
   , streamDegradeBy
+  , streamEuclid
   , streamFast
   , streamFastBy
+  , streamRand
   , streamReplicate
   , streamSlow
   )
-import Minipat.Time (Cycle (..), CycleDelta (..), spanActive, spanSplit)
+import Minipat.Time (CycleDelta (..))
 
 -- | A function that processes a 'Select'
 type Sel e a = Select -> Stream a -> Either (InterpErr e) (Stream a)
@@ -122,22 +123,13 @@ lookInterp sel proj = \case
       GroupTypeSeq _ -> pure (streamConcat els', 1)
       GroupTypePar -> pure (foldl1' (<>) (fmap fst els'), 1)
       GroupTypeRand ->
-        -- TODO pull this out as a stream fn - but fmap to speed up first
-        let l = NESeq.length els
-            f arc' =
-              let s = D.arcSeed arc'
-                  i = D.randInt l s
-                  (el, w) = NESeq.index els' i
-              in  unStream (streamFastBy (unCycleDelta w) el) arc'
-        in  pure (Stream (foldMap' (f . spanActive . snd) . spanSplit), 1)
+        let els'' = fmap (\(el, w) -> streamFastBy (unCycleDelta w) el) els'
+            s = streamRand els''
+        in  pure (s, 1)
       GroupTypeAlt ->
-        -- TODO pull this out as a stream fn - but fmap to speed up first
-        let l = NESeq.length els
-            f z arc' =
-              let i = mod (fromInteger (unCycle z)) l
-                  (el, w) = NESeq.index els' i
-              in  unStream (streamFastBy (unCycleDelta w) el) arc'
-        in  pure (Stream (foldMap' (\(z, sp) -> f z (spanActive sp)) . spanSplit), 1)
+        let els'' = fmap (\(el, w) -> streamFastBy (unCycleDelta w) el) els'
+            s = streamAlt els''
+        in  pure (s, 1)
   PatMod (Mod melw md) ->
     case md of
       ModTypeSpeed (Speed dir spat) -> do
@@ -159,11 +151,10 @@ lookInterp sel proj = \case
         let el' = streamDegradeBy d el
         pure (el', w)
       ModTypeEuclid euc -> do
-        -- TODO pull this out as a stream fn
+        let (Euclid (fromInteger -> filled) (fromInteger -> steps) (fmap fromInteger -> mshift)) = euc
         (el, _) <- lift melw
-        let s = streamConcat (eucSeq euc (el, 1) (mempty, 1))
-            d = eucSteps euc
-        pure (s, fromInteger d)
+        let s = streamEuclid filled steps mshift el
+        pure (s, fromIntegral steps)
   PatPoly (Poly _ _) -> error "TODO"
 
 eucSeq :: Euclid -> r -> r -> NESeq r
