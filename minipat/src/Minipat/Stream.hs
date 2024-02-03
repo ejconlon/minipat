@@ -45,11 +45,10 @@ where
 
 import Control.Monad (ap)
 import Data.Foldable (foldMap', foldl', toList)
-import Data.Foldable1 (foldMap1')
 import Data.Heap (Entry (..), Heap)
 import Data.Heap qualified as H
 import Data.Maybe (fromMaybe)
-import Data.Semigroup (Semigroup (..), Sum (..))
+import Data.Semigroup (Semigroup (..))
 import Data.Sequence.NonEmpty (NESeq)
 import Data.Sequence.NonEmpty qualified as NESeq
 import Data.String (IsString (..))
@@ -219,39 +218,41 @@ streamDegradeBy r (Stream k) = Stream (tapeDegradeBy r . k)
 streamDegrade :: Stream Rational -> Stream a -> Stream a
 streamDegrade = streamAdjust streamDegradeBy
 
--- Sketch: split arc into cycles, for each render the stream over the cycle, slowing
--- by length, then speed everything up by whole amount to fit all into one cycle
-goConcat :: CycleDelta -> NESeq (Stream a, CycleDelta) -> Arc -> Tape a
-goConcat w ss arc = foldl' go1 mempty (spanSplit arc)
- where
-  go1 t (i, Span subArc _) = t <> tapeFastBy i (unCycleDelta w) (snd (go2 i subArc))
-  go2 i subArc = foldl' (go3 i subArc) (0, mempty) ss
-  go3 i subArc (o, t) (p, v) =
-    (o + v, t <> tapeLateBy o (tapeSlowBy i (unCycleDelta v) (unStream p subArc)))
-
 streamConcat :: NESeq (Stream a, CycleDelta) -> Stream a
-streamConcat ss =
-  let w = getSum (foldMap1' (Sum . snd) ss)
-  in  Stream (goConcat w ss)
+streamConcat ss = Stream $ \arc ->
+  -- Sketch: split arc into cycles, for each render each stream over the cycle, slowing
+  -- by length, then speed everything up by whole amount to fit all into one cycle
+  let w = sum (fmap snd ss)
+      go1 (i, Span subArc _) = tapeFastBy i (unCycleDelta w) (snd (go2 i subArc))
+      go2 i subArc = foldl' (go3 i subArc) (0, mempty) ss
+      go3 i subArc (!o, !t) (p, v) =
+        (o + v, t <> tapeLateBy o (tapeSlowBy i (unCycleDelta v) (unStream p subArc)))
+  in  mconcat (fmap go1 (spanSplit arc))
 
--- TODO implement stream repeat more efficiently than just using streamConcat
 streamReplicate :: Int -> Stream a -> Stream a
-streamReplicate n s = streamConcat (NESeq.replicate n (s, 1))
+streamReplicate n s = Stream $ \arc ->
+  -- Sketch: split arc into cycles, for each render the stream over the cycle,
+  -- shift and concatenate n times, then speed everything up to fit into one cycle
+  let go1 (i, Span subArc _) = tapeFastBy i (fromIntegral n) (go2 subArc)
+      go2 subArc =
+        let t = unStream s subArc
+        in  mconcat (fmap (\k -> tapeLateBy (fromIntegral k) t) [0 .. n - 1])
+  in  mconcat (fmap go1 (spanSplit arc))
 
 streamCont :: (CycleTime -> a) -> Stream a
 streamCont f = Stream (tapeSingleton . evCont f)
 
-goEuclid :: Int -> Int -> Maybe Int -> r -> r -> NESeq r
-goEuclid filled steps (fromMaybe 0 -> shift) activeEl passiveEl =
-  NESeq.fromFunction steps $ \ix0 ->
-    let ix1 = ix0 + shift
-        ix = if ix1 >= steps then ix1 - steps else ix1
-        active = mod ix filled == 0
-    in  if active then activeEl else passiveEl
-
 streamEuclid :: Int -> Int -> Maybe Int -> Stream a -> Stream a
-streamEuclid filled steps mshift s =
-  streamConcat (goEuclid filled steps mshift (s, 1) (mempty, 1))
+streamEuclid filled steps (fromMaybe 0 -> shift) s =
+  let activeEl = (s, 1)
+      passiveEl = (mempty, 1)
+      eucSeq =
+        NESeq.fromFunction steps $ \ix0 ->
+          let ix1 = ix0 + shift
+              ix = if ix1 >= steps then ix1 - steps else ix1
+              active = mod ix filled == 0
+          in  if active then activeEl else passiveEl
+  in  streamConcat eucSeq
 
 streamRand :: NESeq (Stream a) -> Stream a
 streamRand ss =
