@@ -13,3 +13,7 @@ class (Functor f) => Pattern f where
   patSeq :: NESeq (f a, CycleDelta) -> f a
   patEuc :: Int -> Int -> Maybe Int -> f a -> f a
   patRep :: Int -> f a -> f a
+  patFastBy, patSlowBy :: Rational -> f a -> f a
+  patFast, patSlow :: f Rational -> f a -> f a
+  patDegBy :: Rational -> f a -> f a
+  patDeg :: f Rational -> f a -> f a

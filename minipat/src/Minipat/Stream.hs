@@ -34,8 +34,8 @@ module Minipat.Stream
   , streamLateBy
   , streamEarly
   , streamLate
-  , streamDegradeBy
-  , streamDegrade
+  , streamDegBy
+  , streamDeg
   , streamCont
   , streamEuc
   , streamRand
@@ -215,11 +215,11 @@ streamEarly, streamLate :: Stream CycleTime -> Stream a -> Stream a
 streamEarly = streamAdjust streamEarlyBy
 streamLate = streamAdjust streamLateBy
 
-streamDegradeBy :: Rational -> Stream a -> Stream a
-streamDegradeBy r (Stream k) = Stream (tapeDegradeBy r . k)
+streamDegBy :: Rational -> Stream a -> Stream a
+streamDegBy r (Stream k) = Stream (tapeDegradeBy r . k)
 
-streamDegrade :: Stream Rational -> Stream a -> Stream a
-streamDegrade = streamAdjust streamDegradeBy
+streamDeg :: Stream Rational -> Stream a -> Stream a
+streamDeg = streamAdjust streamDegBy
 
 streamSeq :: NESeq (Stream a, CycleDelta) -> Stream a
 streamSeq ss = Stream $ \arc ->
@@ -302,3 +302,9 @@ instance Pattern Stream where
   patSeq = streamSeq
   patEuc = streamEuc
   patRep = streamRep
+  patFastBy = streamFastBy
+  patSlowBy = streamSlowBy
+  patFast = streamFast
+  patSlow = streamSlow
+  patDegBy = streamDegBy
+  patDeg = streamDeg

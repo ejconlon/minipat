@@ -24,7 +24,7 @@ import Minipat.Interp (SelAcc, accInterpEnv, accProj, interpPat)
 import Minipat.Norm (normPat)
 import Minipat.Parser (P, ParseErr, factorP, identP, identPatP)
 import Minipat.Print (render)
-import Minipat.Stream (Ev (..), streamRun)
+import Minipat.Stream (Ev (..), Stream, streamRun)
 import Minipat.Time (Arc (..), CycleTime (..), Span (..))
 import Prettyprinter qualified as P
 import System.IO (BufferMode (..), hSetBuffering, stdout)
@@ -420,7 +420,7 @@ runPatInterpCase :: (TestName, Maybe Arc, Text, [Ev (SelAcc Ident)]) -> TestTree
 runPatInterpCase (n, mayArc, patStr, evs) = testCase n $ do
   pat <- either throwIO pure (parse tpatP patStr)
   let pat' = normPat pat
-  pat'' <- either throwIO pure (interpPat @Void accInterpEnv pat')
+  pat'' <- either throwIO pure (interpPat @Stream @Void accInterpEnv pat')
   let arc = fromMaybe (Arc 0 1) mayArc
       actualEvs = streamRun pat'' arc
   actualEvs @?= evs

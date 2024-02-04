@@ -42,17 +42,10 @@ import Minipat.Ast
   )
 import Minipat.Class (Pattern (..))
 import Minipat.Rewrite (RwErr, RwT, rewriteM, throwRw)
-import Minipat.Stream
-  ( Stream (..)
-  , streamDegradeBy
-  , streamFast
-  , streamFastBy
-  , streamSlow
-  )
 import Minipat.Time (CycleDelta (..))
 
 -- | A function that processes a 'Select'
-type Sel e a = Select -> Stream a -> Either (InterpErr e) (Stream a)
+type Sel e a = forall f. (Pattern f) => Select -> f a -> Either (InterpErr e) (f a)
 
 data InterpEnv e a c = InterpEnv
   { ieSel :: !(Sel e c)
@@ -98,9 +91,10 @@ runM :: M b e a -> Either (RwErr (InterpErr e) b) a
 runM = runExcept
 
 lookInterp
-  :: InterpEnv e a c
-  -> PatX b a (M b e (Stream c, CycleDelta))
-  -> RwT b (M b e) (Stream c, CycleDelta)
+  :: (Pattern f)
+  => InterpEnv e a c
+  -> PatX b a (M b e (f c, CycleDelta))
+  -> RwT b (M b e) (f c, CycleDelta)
 lookInterp (InterpEnv sel proj) = \case
   PatPure a -> pure (patPure (proj a), 1)
   PatSilence -> pure (patEmpty, 1)
@@ -120,11 +114,11 @@ lookInterp (InterpEnv sel proj) = \case
       GroupTypeSeq _ -> pure (patSeq els', 1)
       GroupTypePar -> pure (patPar (fmap fst els'), 1)
       GroupTypeRand ->
-        let els'' = fmap (\(el, w) -> streamFastBy (unCycleDelta w) el) els'
+        let els'' = fmap (\(el, w) -> patFastBy (unCycleDelta w) el) els'
             s = patRand els''
         in  pure (s, 1)
       GroupTypeAlt ->
-        let els'' = fmap (\(el, w) -> streamFastBy (unCycleDelta w) el) els'
+        let els'' = fmap (\(el, w) -> patFastBy (unCycleDelta w) el) els'
             s = patAlt els''
         in  pure (s, 1)
   PatMod (Mod melw md) ->
@@ -132,8 +126,8 @@ lookInterp (InterpEnv sel proj) = \case
       ModTypeSpeed (Speed dir spat) -> do
         spat' <- lift (subInterp forbidInterpEnv spat)
         let f = case dir of
-              SpeedDirFast -> streamFast
-              SpeedDirSlow -> streamSlow
+              SpeedDirFast -> patFast
+              SpeedDirSlow -> patSlow
             spat'' = fmap factorValue spat'
         (el, w) <- lift melw
         pure (f spat'' el, w)
@@ -145,7 +139,7 @@ lookInterp (InterpEnv sel proj) = \case
       ModTypeDegrade (Degrade dd) -> do
         let d = maybe (1 % 2) factorValue dd
         (el, w) <- lift melw
-        let el' = streamDegradeBy d el
+        let el' = patDegBy d el
         pure (el', w)
       ModTypeEuclid euc -> do
         let (Euclid (fromInteger -> filled) (fromInteger -> steps) (fmap fromInteger -> mshift)) = euc
@@ -154,9 +148,9 @@ lookInterp (InterpEnv sel proj) = \case
         pure (s, fromIntegral steps)
   PatPoly (Poly _ _) -> error "TODO"
 
-subInterp :: InterpEnv e a c -> Pat b a -> M b e (Stream c)
+subInterp :: (Pattern f) => InterpEnv e a c -> Pat b a -> M b e (f c)
 subInterp env = fmap fst . rewriteM (lookInterp env) . unPat
 
--- | Interpret the given 'Pat' as a 'Stream'
-interpPat :: InterpEnv e a c -> Pat b a -> Either (RwErr (InterpErr e) b) (Stream c)
+-- | Interpret the given 'Pat' as any 'Pattern'
+interpPat :: (Pattern f) => InterpEnv e a c -> Pat b a -> Either (RwErr (InterpErr e) b) (f c)
 interpPat env = runM . subInterp env

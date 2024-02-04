@@ -12,11 +12,11 @@ import Data.Text (Text)
 import Data.Void (Void)
 import Looksee (intP, sciP)
 import Minipat.Ast (Ident (..), Select (..))
+import Minipat.Class (Pattern (..))
 import Minipat.Dirt.Osc (Attrs)
 import Minipat.Eval (EvalEnv (..), evalPat)
 import Minipat.Interp (InterpEnv (..), InterpErr (..), forbidInterpEnv)
 import Minipat.Parser (P, identP)
-import Minipat.Stream (Stream)
 
 datumP :: DatumType -> P Datum
 datumP = \case
@@ -30,13 +30,13 @@ datumP = \case
 forbidEvalEnv :: DatumType -> EvalEnv e Datum
 forbidEvalEnv dt = EvalEnv forbidInterpEnv (datumP dt)
 
-liveEvalPat :: DatumType -> Text -> Stream Datum
-liveEvalPat dt txt = either (pure mempty) id (evalPat @Void (forbidEvalEnv dt) txt)
+liveEvalPat :: (Pattern f) => DatumType -> Text -> f Datum
+liveEvalPat dt txt = either (pure patEmpty) id (evalPat @_ @Void (forbidEvalEnv dt) txt)
 
 data SoundSelectErr = SoundSelectErr
   deriving stock (Eq, Ord, Show)
 
-soundSelFn :: Select -> Stream Attrs -> Either (InterpErr SoundSelectErr) (Stream Attrs)
+soundSelFn :: (Pattern f) => Select -> f Attrs -> Either (InterpErr SoundSelectErr) (f Attrs)
 soundSelFn sel attrs =
   case sel of
     SelectSample n -> Right (fmap (Map.insert "note" (DatumInt32 (fromIntegral n))) attrs)
@@ -51,5 +51,5 @@ soundInterpEnv = InterpEnv soundSelFn soundProjFn
 soundEvalEnv :: EvalEnv SoundSelectErr Attrs
 soundEvalEnv = EvalEnv soundInterpEnv identP
 
-liveEvalSoundPat :: Text -> Stream Attrs
-liveEvalSoundPat txt = either (pure mempty) id (evalPat soundEvalEnv txt)
+liveEvalSoundPat :: (Pattern f) => Text -> f Attrs
+liveEvalSoundPat txt = either (pure patEmpty) id (evalPat soundEvalEnv txt)
