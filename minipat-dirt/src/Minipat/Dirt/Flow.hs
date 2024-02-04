@@ -1,26 +1,26 @@
 {-# LANGUAGE RoleAnnotations #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Minipat.Dirt.Flow where
 
 import Control.Exception (Exception, SomeException (..))
 import Data.Kind (Type)
+import Data.Proxy (Proxy (..))
 import Data.Semigroup (Semigroup (..))
 import Data.String (IsString (..))
 import Data.Text (Text)
 import Data.Typeable (Typeable)
-import Minipat.Eval (evalPat, evalPatForbid)
-import Minipat.Interp (Sel)
-import Minipat.Parser (P)
+import Minipat.Eval (EvalEnv, evalPat)
 import Minipat.Stream (Stream)
 import Minipat.Stream qualified as S
 
 -- Attempting to add a few things to Streams
 -- 1) Tracking errors for later logging
 -- 2) IsString instance for seamless parsing
-type role Flow phantom nominal
-
 newtype Flow (k :: k1) (a :: Type) = Flow {unFlow :: Either SomeException (Stream a)}
   deriving stock (Functor)
+
+type role Flow phantom nominal
 
 instance Applicative (Flow k) where
   pure = Flow . Right . pure
@@ -46,14 +46,12 @@ flowThrow = Flow . Left . SomeException
 flowFilter :: (a -> Bool) -> Flow k a -> Flow j a
 flowFilter = flowMap . S.streamFilter
 
-class FlowDecode k a | k -> a where
-  flowDecode :: Text -> Flow k a
+class (Show (FlowEvalErr k), Typeable (FlowEvalErr k)) => FlowEval k a | k -> a where
+  type FlowEvalErr k :: Type
+  flowEvalEnv :: Proxy k -> EvalEnv (FlowEvalErr k) a
 
-instance (FlowDecode k a) => IsString (Flow k a) where
-  fromString = flowDecode . fromString
+instance (FlowEval k a) => IsString (Flow k a) where
+  fromString = flowEval (flowEvalEnv (Proxy :: Proxy k)) . fromString
 
-flowEval :: (Show e, Typeable e) => Sel e c -> (a -> c) -> P a -> Text -> Flow k c
-flowEval sel proj parser txt = Flow (evalPat sel proj parser txt)
-
-flowEvalForbid :: P a -> Text -> Flow k a
-flowEvalForbid parser txt = Flow (evalPatForbid parser txt)
+flowEval :: (Show e, Typeable e) => EvalEnv e a -> Text -> Flow k a
+flowEval ee txt = Flow (evalPat ee txt)

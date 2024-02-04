@@ -9,11 +9,12 @@ where
 import Dahdit.Midi.Osc (Datum (..), DatumType (..))
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
+import Data.Void (Void)
 import Looksee (intP, sciP)
 import Minipat.Ast (Ident (..), Select (..))
 import Minipat.Dirt.Osc (Attrs)
-import Minipat.Eval (evalPat, evalPatForbid)
-import Minipat.Interp (InterpErr (..))
+import Minipat.Eval (EvalEnv (..), evalPat)
+import Minipat.Interp (InterpEnv (..), InterpErr (..), forbidInterpEnv)
 import Minipat.Parser (P, identP)
 import Minipat.Stream (Stream)
 
@@ -26,8 +27,11 @@ datumP = \case
   DatumTypeString -> fmap (DatumString . unIdent) identP
   dt -> fail ("Datum type is not parseable: " <> show dt)
 
+forbidEvalEnv :: DatumType -> EvalEnv e Datum
+forbidEvalEnv dt = EvalEnv forbidInterpEnv (datumP dt)
+
 liveEvalPat :: DatumType -> Text -> Stream Datum
-liveEvalPat dt txt = either (pure mempty) id (evalPatForbid (datumP dt) txt)
+liveEvalPat dt txt = either (pure mempty) id (evalPat @Void (forbidEvalEnv dt) txt)
 
 data SoundSelectErr = SoundSelectErr
   deriving stock (Eq, Ord, Show)
@@ -41,5 +45,11 @@ soundSelFn sel attrs =
 soundProjFn :: Ident -> Attrs
 soundProjFn = Map.singleton "sound" . DatumString . unIdent
 
+soundInterpEnv :: InterpEnv SoundSelectErr Ident Attrs
+soundInterpEnv = InterpEnv soundSelFn soundProjFn
+
+soundEvalEnv :: EvalEnv SoundSelectErr Attrs
+soundEvalEnv = EvalEnv soundInterpEnv identP
+
 liveEvalSoundPat :: Text -> Stream Attrs
-liveEvalSoundPat txt = either (pure mempty) id (evalPat soundSelFn soundProjFn identP txt)
+liveEvalSoundPat txt = either (pure mempty) id (evalPat soundEvalEnv txt)
