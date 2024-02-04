@@ -46,12 +46,11 @@ flowThrow = Flow . Left . SomeException
 flowFilter :: (a -> Bool) -> Flow k a -> Flow j a
 flowFilter = flowMap . S.streamFilter
 
-class (Show (FlowEvalErr k), Typeable (FlowEvalErr k)) => FlowEval k a | k -> a where
-  type FlowEvalErr k :: Type
-  flowEvalEnv :: Proxy k -> EvalEnv (FlowEvalErr k) a
+class FlowEval k e a | k -> e a where
+  flowEvalEnv :: Proxy k -> EvalEnv e a
 
-instance (FlowEval k a) => IsString (Flow k a) where
-  fromString = flowEval (flowEvalEnv (Proxy :: Proxy k)) . fromString
+instance (FlowEval k e a, Show e, Typeable e) => IsString (Flow k a) where
+  fromString = flowEval @e (flowEvalEnv (Proxy :: Proxy k)) . fromString
 
 flowEval :: (Show e, Typeable e) => EvalEnv e a -> Text -> Flow k a
 flowEval ee txt = Flow (evalPat ee txt)
