@@ -24,8 +24,8 @@ module Minipat.Stream
   , streamMixBind
   , streamRun
   , streamAdjust
-  , streamConcat
-  , streamReplicate
+  , streamSeq
+  , streamRep
   , streamFastBy
   , streamSlowBy
   , streamFast
@@ -37,7 +37,7 @@ module Minipat.Stream
   , streamDegradeBy
   , streamDegrade
   , streamCont
-  , streamEuclid
+  , streamEuc
   , streamRand
   , streamAlt
   , streamPar
@@ -46,13 +46,15 @@ where
 
 import Control.Monad (ap)
 import Data.Foldable (foldMap', foldl', toList)
+import Data.Foldable1 (foldl1')
 import Data.Heap (Entry (..), Heap)
 import Data.Heap qualified as H
 import Data.Maybe (fromMaybe)
 import Data.Semigroup (Semigroup (..))
-import Data.Sequence (Seq)
-import Data.Sequence qualified as Seq
+import Data.Sequence.NonEmpty (NESeq)
+import Data.Sequence.NonEmpty qualified as NESeq
 import Data.String (IsString (..))
+import Minipat.Class (Pattern (..))
 import Minipat.Rand (arcSeed, randFrac, randInt, spanSeed)
 import Minipat.Time
   ( Arc (..)
@@ -219,23 +221,19 @@ streamDegradeBy r (Stream k) = Stream (tapeDegradeBy r . k)
 streamDegrade :: Stream Rational -> Stream a -> Stream a
 streamDegrade = streamAdjust streamDegradeBy
 
-streamConcat :: Seq (Stream a, CycleDelta) -> Stream a
-streamConcat ss =
-  if Seq.null ss
-    then mempty
-    else
-      Stream $ \arc ->
-      -- Sketch: split arc into cycles, for each render each stream over the cycle, slowing
-      -- by length, then speed everything up by whole amount to fit all into one cycle
-      let w = sum (fmap snd ss)
-          go1 (i, Span subArc _) = tapeFastBy i (unCycleDelta w) (snd (go2 i subArc))
-          go2 i subArc = foldl' (go3 i subArc) (0, mempty) ss
-          go3 i subArc (!o, !t) (p, v) =
-            (o + v, t <> tapeLateBy o (tapeSlowBy i (unCycleDelta v) (unStream p subArc)))
-      in  mconcat (fmap go1 (spanSplit arc))
+streamSeq :: NESeq (Stream a, CycleDelta) -> Stream a
+streamSeq ss = Stream $ \arc ->
+  -- Sketch: split arc into cycles, for each render each stream over the cycle, slowing
+  -- by length, then speed everything up by whole amount to fit all into one cycle
+  let w = sum (fmap snd ss)
+      go1 (i, Span subArc _) = tapeFastBy i (unCycleDelta w) (snd (go2 i subArc))
+      go2 i subArc = foldl' (go3 i subArc) (0, mempty) ss
+      go3 i subArc (!o, !t) (p, v) =
+        (o + v, t <> tapeLateBy o (tapeSlowBy i (unCycleDelta v) (unStream p subArc)))
+  in  mconcat (fmap go1 (spanSplit arc))
 
-streamReplicate :: Int -> Stream a -> Stream a
-streamReplicate n s = Stream $ \arc ->
+streamRep :: Int -> Stream a -> Stream a
+streamRep n s = Stream $ \arc ->
   -- Sketch: split arc into cycles, for each render the stream over the cycle,
   -- shift and concatenate n times, then speed everything up to fit into one cycle
   let go1 (i, Span subArc _) = tapeFastBy i (fromIntegral n) (go2 subArc)
@@ -247,45 +245,40 @@ streamReplicate n s = Stream $ \arc ->
 streamCont :: (CycleTime -> a) -> Stream a
 streamCont f = Stream (tapeSingleton . evCont f)
 
-streamEuclid :: Int -> Int -> Maybe Int -> Stream a -> Stream a
-streamEuclid filled steps (fromMaybe 0 -> shift) s =
+-- TODO implement this more efficiently than just concatenation
+streamEuc :: Int -> Int -> Maybe Int -> Stream a -> Stream a
+streamEuc filled steps (fromMaybe 0 -> shift) s =
   let activeEl = (s, 1)
       passiveEl = (mempty, 1)
       eucSeq =
-        Seq.fromFunction steps $ \ix0 ->
+        NESeq.fromFunction steps $ \ix0 ->
           let ix1 = ix0 + shift
               ix = if ix1 >= steps then ix1 - steps else ix1
               active = mod ix filled == 0
           in  if active then activeEl else passiveEl
-  in  streamConcat eucSeq
+  in  streamSeq eucSeq
 
-streamRand :: Seq (Stream a) -> Stream a
+streamRand :: NESeq (Stream a) -> Stream a
 streamRand ss =
-  if Seq.null ss
-    then mempty
-    else
-      let l = Seq.length ss
-          f arc =
-            let s = arcSeed arc
-                i = randInt l s
-                t = Seq.index ss i
-            in  unStream t arc
-      in  Stream (foldMap' (f . spanActive . snd) . spanSplit)
+  let l = NESeq.length ss
+      f arc =
+        let s = arcSeed arc
+            i = randInt l s
+            t = NESeq.index ss i
+        in  unStream t arc
+  in  Stream (foldMap' (f . spanActive . snd) . spanSplit)
 
-streamAlt :: Seq (Stream a) -> Stream a
+streamAlt :: NESeq (Stream a) -> Stream a
 streamAlt ss =
-  if Seq.null ss
-    then mempty
-    else
-      let l = Seq.length ss
-          f z arc =
-            let i = mod (fromInteger (unCycle z)) l
-                t = Seq.index ss i
-            in  unStream t arc
-      in  Stream (foldMap' (\(z, sp) -> f z (spanActive sp)) . spanSplit)
+  let l = NESeq.length ss
+      f z arc =
+        let i = mod (fromInteger (unCycle z)) l
+            t = NESeq.index ss i
+        in  unStream t arc
+  in  Stream (foldMap' (\(z, sp) -> f z (spanActive sp)) . spanSplit)
 
-streamPar :: Seq (Stream a) -> Stream a
-streamPar = foldl' (<>) mempty
+streamPar :: NESeq (Stream a) -> Stream a
+streamPar = foldl1' (<>)
 
 -- TODO move to module with continuous primitives
 -- fnSine :: Rational -> Time -> Double
@@ -299,3 +292,13 @@ streamPar = foldl' (<>) mempty
 --
 -- streamInteg :: Num n => Stream n -> Stream n
 -- streamInteg = undefined
+
+instance Pattern Stream where
+  patPure = pure
+  patEmpty = mempty
+  patPar = streamPar
+  patAlt = streamAlt
+  patRand = streamRand
+  patSeq = streamSeq
+  patEuc = streamEuc
+  patRep = streamRep

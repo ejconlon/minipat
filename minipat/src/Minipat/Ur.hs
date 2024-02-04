@@ -1,13 +1,14 @@
 module Minipat.Ur where
 
-import Minipat.Ast (Ident)
-import Minipat.Stream (Stream)
+import Data.Map.Strict (Map)
+import Minipat.Class (Pattern)
 import Minipat.Time (CycleDelta)
 
 ur
-  :: CycleDelta
-  -> Stream Ident
-  -> [(Ident, Stream a)]
-  -> [(Ident, Stream a -> Stream a)]
-  -> Stream a
+  :: (Pattern f, Ord k)
+  => CycleDelta
+  -> f k
+  -> Map k (f a)
+  -> Map k (f a -> f a)
+  -> f a
 ur = error "TODO"

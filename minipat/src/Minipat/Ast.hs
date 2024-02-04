@@ -43,6 +43,7 @@ import Data.Ratio (denominator, numerator, (%))
 import Data.Sequence.NonEmpty (NESeq (..))
 import Data.String (IsString (..))
 import Data.Text (Text)
+import Minipat.Class (Pattern (..))
 import Minipat.Print (Brace (..), Sep (..), braceCloseChar, braceOpenChar, sepChar)
 import Prettyprinter (Doc, Pretty (..))
 import Prettyprinter qualified as P
@@ -462,3 +463,19 @@ instance Bitraversable Pat where
           PatGroup gs -> fmap PatGroup (traverse go gs)
           PatMod (Mod r m) -> fmap PatMod $ Mod <$> go r <*> traverse (bitraverse f pure) m
           PatPoly (Poly rs mc) -> fmap (\rs' -> PatPoly (Poly rs' mc)) (traverse go rs)
+
+mkPat :: (Monoid b) => PatX b a (UnPat b a) -> Pat b a
+mkPat = Pat . JotP mempty
+
+mkPatGroup :: (Monoid b) => GroupType -> NESeq (Pat b a) -> Pat b a
+mkPatGroup gt = mkPat . PatGroup . Group 0 gt . fmap unPat
+
+instance (Monoid b) => Pattern (Pat b) where
+  patPure = mkPat . PatPure
+  patEmpty = mkPat PatSilence
+  patPar = mkPat . PatGroup . Group 0 GroupTypePar . fmap unPat
+  patAlt = mkPat . PatGroup . Group 0 GroupTypeAlt . fmap unPat
+  patRand = error "TODO"
+  patSeq = error "TODO"
+  patEuc = error "TODO"
+  patRep = error "TODO"

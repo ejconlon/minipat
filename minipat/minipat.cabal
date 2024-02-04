@@ -25,6 +25,7 @@ source-repository head
 library
   exposed-modules:
       Minipat.Ast
+      Minipat.Class
       Minipat.Eval
       Minipat.Interp
       Minipat.Norm

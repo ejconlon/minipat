@@ -21,8 +21,6 @@ import Control.Monad.Except (Except, runExcept)
 import Control.Monad.Trans (lift)
 import Data.Ratio ((%))
 import Data.Sequence (Seq (..))
-import Data.Sequence.NonEmpty (NESeq)
-import Data.Sequence.NonEmpty qualified as NESeq
 import Data.Typeable (Typeable)
 import Minipat.Ast
   ( Degrade (..)
@@ -42,19 +40,14 @@ import Minipat.Ast
   , SpeedDir (..)
   , factorValue
   )
+import Minipat.Class (Pattern (..))
 import Minipat.Rewrite (RwErr, RwT, rewriteM, throwRw)
 import Minipat.Stream
   ( Stream (..)
-  , streamAlt
-  , streamConcat
   , streamDegradeBy
-  , streamEuclid
   , streamFast
   , streamFastBy
-  , streamRand
-  , streamReplicate
   , streamSlow
-  , streamPar
   )
 import Minipat.Time (CycleDelta (..))
 
@@ -109,8 +102,8 @@ lookInterp
   -> PatX b a (M b e (Stream c, CycleDelta))
   -> RwT b (M b e) (Stream c, CycleDelta)
 lookInterp (InterpEnv sel proj) = \case
-  PatPure a -> pure (pure (proj a), 1)
-  PatSilence -> pure (mempty, 1)
+  PatPure a -> pure (patPure (proj a), 1)
+  PatSilence -> pure (patEmpty, 1)
   PatExtent t ->
     case t of
       ExtentShort _ -> throwRw InterpErrShort
@@ -120,19 +113,19 @@ lookInterp (InterpEnv sel proj) = \case
           LongExtentElongate f -> pure (el, CycleDelta (factorValue f * unCycleDelta w))
           LongExtentReplicate mf ->
             let v = maybe 2 fromInteger mf
-            in  pure (streamReplicate v el, fromIntegral v)
+            in  pure (patRep v el, fromIntegral v)
   PatGroup (Group _ ty els) -> do
     els' <- lift (sequenceA els)
     case ty of
-      GroupTypeSeq _ -> pure (streamConcat (NESeq.toSeq els'), 1)
-      GroupTypePar -> pure (streamPar (fmap fst (NESeq.toSeq els')), 1)
+      GroupTypeSeq _ -> pure (patSeq els', 1)
+      GroupTypePar -> pure (patPar (fmap fst els'), 1)
       GroupTypeRand ->
         let els'' = fmap (\(el, w) -> streamFastBy (unCycleDelta w) el) els'
-            s = streamRand (NESeq.toSeq els'')
+            s = patRand els''
         in  pure (s, 1)
       GroupTypeAlt ->
         let els'' = fmap (\(el, w) -> streamFastBy (unCycleDelta w) el) els'
-            s = streamAlt (NESeq.toSeq els'')
+            s = patAlt els''
         in  pure (s, 1)
   PatMod (Mod melw md) ->
     case md of
@@ -157,17 +150,9 @@ lookInterp (InterpEnv sel proj) = \case
       ModTypeEuclid euc -> do
         let (Euclid (fromInteger -> filled) (fromInteger -> steps) (fmap fromInteger -> mshift)) = euc
         (el, _) <- lift melw
-        let s = streamEuclid filled steps mshift el
+        let s = patEuc filled steps mshift el
         pure (s, fromIntegral steps)
   PatPoly (Poly _ _) -> error "TODO"
-
-eucSeq :: Euclid -> r -> r -> NESeq r
-eucSeq (Euclid (fromInteger -> filled) (fromInteger -> steps) (maybe 0 fromInteger -> shift)) activeEl passiveEl =
-  NESeq.fromFunction steps $ \ix0 ->
-    let ix1 = ix0 + shift
-        ix = if ix1 >= steps then ix1 - steps else ix1
-        active = mod ix filled == 0
-    in  if active then activeEl else passiveEl
 
 subInterp :: InterpEnv e a c -> Pat b a -> M b e (Stream c)
 subInterp env = fmap fst . rewriteM (lookInterp env) . unPat
