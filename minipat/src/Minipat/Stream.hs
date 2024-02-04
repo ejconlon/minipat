@@ -49,12 +49,11 @@ import Data.Foldable (foldMap', foldl', toList)
 import Data.Foldable1 (foldl1')
 import Data.Heap (Entry (..), Heap)
 import Data.Heap qualified as H
-import Data.Maybe (fromMaybe)
 import Data.Semigroup (Semigroup (..))
 import Data.Sequence.NonEmpty (NESeq)
 import Data.Sequence.NonEmpty qualified as NESeq
 import Data.String (IsString (..))
-import Minipat.Class (Pattern (..))
+import Minipat.Ast (Euclid (..), Pattern (..))
 import Minipat.Rand (arcSeed, randFrac, randInt, spanSeed)
 import Minipat.Time
   ( Arc (..)
@@ -221,15 +220,15 @@ streamDegBy r (Stream k) = Stream (tapeDegradeBy r . k)
 streamDeg :: Stream Rational -> Stream a -> Stream a
 streamDeg = streamAdjust streamDegBy
 
-streamSeq :: NESeq (Stream a, CycleDelta) -> Stream a
+streamSeq :: NESeq (Stream a, Rational) -> Stream a
 streamSeq ss = Stream $ \arc ->
   -- Sketch: split arc into cycles, for each render each stream over the cycle, slowing
   -- by length, then speed everything up by whole amount to fit all into one cycle
   let w = sum (fmap snd ss)
-      go1 (i, Span subArc _) = tapeFastBy i (unCycleDelta w) (snd (go2 i subArc))
+      go1 (i, Span subArc _) = tapeFastBy i w (snd (go2 i subArc))
       go2 i subArc = foldl' (go3 i subArc) (0, mempty) ss
       go3 i subArc (!o, !t) (p, v) =
-        (o + v, t <> tapeLateBy o (tapeSlowBy i (unCycleDelta v) (unStream p subArc)))
+        (o + v, t <> tapeLateBy (CycleDelta o) (tapeSlowBy i v (unStream p subArc)))
   in  mconcat (fmap go1 (spanSplit arc))
 
 streamRep :: Int -> Stream a -> Stream a
@@ -246,8 +245,8 @@ streamCont :: (CycleTime -> a) -> Stream a
 streamCont f = Stream (tapeSingleton . evCont f)
 
 -- TODO implement this more efficiently than just concatenation
-streamEuc :: Int -> Int -> Maybe Int -> Stream a -> Stream a
-streamEuc filled steps (fromMaybe 0 -> shift) s =
+streamEuc :: Euclid -> Stream a -> Stream a
+streamEuc (Euclid (fromInteger -> filled) (fromInteger -> steps) (maybe 0 fromInteger -> shift)) s =
   let activeEl = (s, 1)
       passiveEl = (mempty, 1)
       eucSeq =
@@ -308,3 +307,4 @@ instance Pattern Stream where
   patSlow = streamSlow
   patDegBy = streamDegBy
   patDeg = streamDeg
+  patSub = error "TODO"

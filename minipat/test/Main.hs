@@ -349,20 +349,20 @@ runPatNormCase (n, patStr, npat) = testCase n $ do
 
 testPatNormCases :: TestTree
 testPatNormCases =
-  let patPure = JotP () . PatPure
-      patTime r l = JotP () (PatExtent (ExtentLong r l))
+  let mkPure = JotP () . PatPure
+      mkTime r l = JotP () (PatExtent (ExtentLong r l))
   in  testGroup "pat norm cases" $
         fmap
           runPatNormCase
           [
             ( "pure"
             , "x"
-            , Pat (patPure "x")
+            , Pat (mkPure "x")
             )
           ,
             ( "seq singleton"
             , "[x]"
-            , Pat (patPure "x")
+            , Pat (mkPure "x")
             )
           ,
             ( "seq simple"
@@ -370,49 +370,49 @@ testPatNormCases =
             , Pat
                 ( JotP
                     ()
-                    (PatGroup (Group 1 (GroupTypeSeq SeqPresSpace) (neseq [patPure "x", patPure "y"])))
+                    (PatGroup (Group 1 (GroupTypeSeq SeqPresSpace) (neseq [mkPure "x", mkPure "y"])))
                 )
             )
           ,
             ( "repeat one long"
             , "x!1"
-            , Pat (patTime (patPure "x") (LongExtentReplicate (Just 1)))
+            , Pat (mkTime (mkPure "x") (LongExtentReplicate (Just 1)))
             )
           ,
             ( "repeat two long"
             , "x!2"
-            , Pat (patTime (patPure "x") (LongExtentReplicate (Just 2)))
+            , Pat (mkTime (mkPure "x") (LongExtentReplicate (Just 2)))
             )
           ,
             ( "repeat two long implicit"
             , "x!"
-            , Pat (patTime (patPure "x") (LongExtentReplicate Nothing))
+            , Pat (mkTime (mkPure "x") (LongExtentReplicate Nothing))
             )
           ,
             ( "repeat two short"
             , "x !"
-            , Pat (patTime (patPure "x") (LongExtentReplicate Nothing))
+            , Pat (mkTime (mkPure "x") (LongExtentReplicate Nothing))
             )
           ,
             ( "repeat three short"
             , "x ! !"
-            , Pat (patTime (patPure "x") (LongExtentReplicate (Just 3)))
+            , Pat (mkTime (mkPure "x") (LongExtentReplicate (Just 3)))
             )
           ,
             ( "repeat seq short"
             , "x ! y"
-            , let xpart = patTime (patPure "x") (LongExtentReplicate Nothing)
-              in  Pat (JotP () (PatGroup (Group 0 (GroupTypeSeq SeqPresSpace) (neseq [xpart, patPure "y"]))))
+            , let xpart = mkTime (mkPure "x") (LongExtentReplicate Nothing)
+              in  Pat (JotP () (PatGroup (Group 0 (GroupTypeSeq SeqPresSpace) (neseq [xpart, mkPure "y"]))))
             )
           ,
             ( "elongate two long"
             , "x@2"
-            , Pat (patTime (patPure "x") (LongExtentElongate 2))
+            , Pat (mkTime (mkPure "x") (LongExtentElongate 2))
             )
           ,
             ( "elongate two short"
             , "x _"
-            , Pat (patTime (patPure "x") (LongExtentElongate 2))
+            , Pat (mkTime (mkPure "x") (LongExtentElongate 2))
             )
           ]
 

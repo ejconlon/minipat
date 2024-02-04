@@ -34,15 +34,14 @@ import Minipat.Ast
   , Pat (..)
   , PatF (..)
   , PatX
+  , Pattern (..)
   , Poly (..)
   , Select (..)
   , Speed (..)
   , SpeedDir (..)
   , factorValue
   )
-import Minipat.Class (Pattern (..))
 import Minipat.Rewrite (RwErr, RwT, rewriteM, throwRw)
-import Minipat.Time (CycleDelta (..))
 
 -- | A function that processes a 'Select'
 type Sel e a = forall f. (Pattern f) => Select -> f a -> Either (InterpErr e) (f a)
@@ -93,8 +92,8 @@ runM = runExcept
 lookInterp
   :: (Pattern f)
   => InterpEnv e a c
-  -> PatX b a (M b e (f c, CycleDelta))
-  -> RwT b (M b e) (f c, CycleDelta)
+  -> PatX b a (M b e (f c, Rational))
+  -> RwT b (M b e) (f c, Rational)
 lookInterp (InterpEnv sel proj) = \case
   PatPure a -> pure (patPure (proj a), 1)
   PatSilence -> pure (patEmpty, 1)
@@ -104,7 +103,7 @@ lookInterp (InterpEnv sel proj) = \case
       ExtentLong melw u -> do
         (el, w) <- lift melw
         case u of
-          LongExtentElongate f -> pure (el, CycleDelta (factorValue f * unCycleDelta w))
+          LongExtentElongate f -> pure (el, factorValue f * w)
           LongExtentReplicate mf ->
             let v = maybe 2 fromInteger mf
             in  pure (patRep v el, fromIntegral v)
@@ -114,11 +113,11 @@ lookInterp (InterpEnv sel proj) = \case
       GroupTypeSeq _ -> pure (patSeq els', 1)
       GroupTypePar -> pure (patPar (fmap fst els'), 1)
       GroupTypeRand ->
-        let els'' = fmap (\(el, w) -> patFastBy (unCycleDelta w) el) els'
+        let els'' = fmap (\(el, w) -> patFastBy w el) els'
             s = patRand els''
         in  pure (s, 1)
       GroupTypeAlt ->
-        let els'' = fmap (\(el, w) -> patFastBy (unCycleDelta w) el) els'
+        let els'' = fmap (\(el, w) -> patFastBy w el) els'
             s = patAlt els''
         in  pure (s, 1)
   PatMod (Mod melw md) ->
@@ -142,10 +141,9 @@ lookInterp (InterpEnv sel proj) = \case
         let el' = patDegBy d el
         pure (el', w)
       ModTypeEuclid euc -> do
-        let (Euclid (fromInteger -> filled) (fromInteger -> steps) (fmap fromInteger -> mshift)) = euc
         (el, _) <- lift melw
-        let s = patEuc filled steps mshift el
-        pure (s, fromIntegral steps)
+        let s = patEuc euc el
+        pure (s, fromInteger (eucSteps euc))
   PatPoly (Poly _ _) -> error "TODO"
 
 subInterp :: (Pattern f) => InterpEnv e a c -> Pat b a -> M b e (f c)

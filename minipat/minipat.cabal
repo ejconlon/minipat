@@ -25,7 +25,6 @@ source-repository head
 library
   exposed-modules:
       Minipat.Ast
-      Minipat.Class
       Minipat.Eval
       Minipat.Interp
       Minipat.Norm
@@ -35,7 +34,6 @@ library
       Minipat.Rewrite
       Minipat.Stream
       Minipat.Time
-      Minipat.Ur
   other-modules:
       Paths_minipat
   hs-source-dirs:
