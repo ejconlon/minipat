@@ -11,6 +11,9 @@ module Minipat.Parser
   , identPatP
   , factorP
   , identP
+  , selectP
+  , selectedP
+  , selectedIdentPatP
   )
 where
 
@@ -144,14 +147,6 @@ factorP = do
 bracedP :: Brace -> P a -> P a
 bracedP b = L.betweenP (stripTokP (braceOpenChar b)) (tokP (braceCloseChar b))
 
-selectP :: P Select
-selectP = do
-  tokP ':'
-  isNum <- L.lookP (fmap isDigit L.headP)
-  if isNum
-    then fmap SelectSample L.uintP
-    else fmap SelectTransform identP
-
 speedFastP :: P s -> P (Speed s)
 speedFastP ps = do
   tokP '*'
@@ -162,21 +157,21 @@ speedSlowP ps = do
   tokP '/'
   Speed SpeedDirSlow <$> ps
 
-elongateShortP :: P ShortExtent
-elongateShortP = ShortExtentElongate <$ tokP '_'
+elongateShortP :: P Short
+elongateShortP = ShortElongate <$ tokP '_'
 
-replicateShortP :: P ShortExtent
-replicateShortP = ShortExtentReplicate <$ tokP '!'
+replicateShortP :: P Short
+replicateShortP = ShortReplicate <$ tokP '!'
 
-elongateLongP :: P LongExtent
+elongateLongP :: P Elongate
 elongateLongP = do
   tokP '@'
-  LongExtentElongate <$> factorP
+  Elongate <$> factorP
 
-replicateLongP :: P LongExtent
+replicateLongP :: P Replicate
 replicateLongP = do
   tokP '!'
-  LongExtentReplicate <$> L.optP L.uintP
+  Replicate <$> L.optP L.uintP
 
 degradeP :: P Degrade
 degradeP = do
@@ -206,10 +201,10 @@ silencePatP :: P (PPat a)
 silencePatP = Pat <$> jotP (PatSilence <$ tokP '~')
 
 shortElongatePatP :: P (PPat a)
-shortElongatePatP = Pat <$> jotP (PatExtent . ExtentShort <$> elongateShortP)
+shortElongatePatP = Pat <$> jotP (PatShort <$> elongateShortP)
 
 shortReplicatePatP :: P (PPat a)
-shortReplicatePatP = Pat <$> jotP (PatExtent . ExtentShort <$> replicateShortP)
+shortReplicatePatP = Pat <$> jotP (PatShort <$> replicateShortP)
 
 withPatDecosP :: P (PPat Factor) -> PPat a -> P (PPat a)
 withPatDecosP ps = go
@@ -218,9 +213,8 @@ withPatDecosP ps = go
     mp' <- fmap (fmap Pat) . mayJotP $ do
       mc <- L.lookP L.unconsP
       case mc of
-        Just '@' -> fmap (Just . PatExtent . ExtentLong pp) elongateLongP
-        Just '!' -> fmap (Just . PatExtent . ExtentLong pp) replicateLongP
-        Just ':' -> fmap (Just . PatMod . Mod pp . ModTypeSelect) selectP
+        Just '@' -> fmap (Just . PatMod . Mod pp . ModTypeElongate) elongateLongP
+        Just '!' -> fmap (Just . PatMod . Mod pp . ModTypeReplicate) replicateLongP
         Just '*' -> fmap (Just . PatMod . Mod pp . ModTypeSpeed) (speedFastP ps)
         Just '/' -> fmap (Just . PatMod . Mod pp . ModTypeSpeed) (speedSlowP ps)
         Just '(' -> fmap (Just . PatMod . Mod pp . ModTypeEuclid) euclidP
@@ -352,3 +346,17 @@ topPatP p = patP p (fix (\pf -> rePatP factorP pf pf))
 -- | Parses a top-level pattern of identifiers.
 identPatP :: P (PPat Ident)
 identPatP = topPatP identP
+
+selectP :: P Select
+selectP = do
+  tokP ':'
+  isNum <- L.lookP (fmap isDigit L.headP)
+  if isNum
+    then fmap SelectSample L.uintP
+    else fmap SelectTransform identP
+
+selectedP :: P a -> P (Selected a)
+selectedP pa = Selected <$> pa <*> L.optP selectP
+
+selectedIdentPatP :: P (PPat (Selected Ident))
+selectedIdentPatP = topPatP (selectedP identP)

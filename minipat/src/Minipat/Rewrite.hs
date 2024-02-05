@@ -22,7 +22,7 @@ import Bowtie (pattern JotP)
 import Control.Exception (Exception)
 import Control.Monad.Except (MonadError (..))
 import Control.Monad.Identity (Identity (..))
-import Control.Monad.Reader (MonadReader (..), Reader, ReaderT (..), asks)
+import Control.Monad.Reader (Reader, ReaderT (..), asks)
 import Data.Bifoldable (Bifoldable (..))
 import Data.Bifunctor (Bifunctor (..))
 import Data.Bitraversable (Bitraversable (..))
@@ -31,11 +31,8 @@ import Data.Sequence.NonEmpty qualified as NESeq
 import Data.Typeable (Typeable)
 import Minipat.Ast qualified as A
 
--- | Path components are pushed onto the end as
--- we descend the tree
 data RwErr e b = RwErr
-  { rwErrPath :: !(NESeq b)
-  -- ^ Path of all locations from the root (closest at end)
+  { rwErrLoc :: !b
   , rwErrReason :: !e
   }
   deriving stock (Eq, Ord, Show)
@@ -56,7 +53,7 @@ asksRw :: (Monad m) => (b -> c) -> RwT b m c
 asksRw f = asks (f . NESeq.last)
 
 throwRw :: (MonadError (RwErr e b) m) => e -> RwT b m a
-throwRw e = ask >>= \bs -> throwError (RwErr bs e)
+throwRw e = askRw >>= \b -> throwError (RwErr b e)
 
 wrapRw :: (Monad m) => A.PatX b a (A.UnPat b a) -> RwT b m (A.UnPat b a)
 wrapRw = asksRw . flip JotP
@@ -86,7 +83,7 @@ instance Bifunctor (TapF a) where
     go = \case
       A.PatPure a -> A.PatPure a
       A.PatSilence -> A.PatSilence
-      A.PatExtent t -> A.PatExtent (fmap g t)
+      A.PatShort s -> A.PatShort s
       A.PatGroup gs -> A.PatGroup (fmap g gs)
       A.PatMod m -> A.PatMod (bimap f g m)
       A.PatPoly p -> A.PatPoly (fmap g p)
@@ -97,7 +94,7 @@ instance Bifoldable (TapF a) where
     go z = \case
       A.PatPure _ -> z
       A.PatSilence -> z
-      A.PatExtent t -> foldr g z t
+      A.PatShort _ -> z
       A.PatGroup gs -> foldr g z gs
       A.PatMod m -> bifoldr f g z m
       A.PatPoly p -> foldr g z p
@@ -108,7 +105,7 @@ instance Bitraversable (TapF a) where
     go = \case
       A.PatPure a -> pure (A.PatPure a)
       A.PatSilence -> pure A.PatSilence
-      A.PatExtent t -> fmap A.PatExtent (traverse g t)
+      A.PatShort s -> pure (A.PatShort s)
       A.PatGroup gs -> fmap A.PatGroup (traverse g gs)
       A.PatMod m -> fmap A.PatMod (bitraverse f g m)
       A.PatPoly p -> fmap A.PatPoly (traverse g p)

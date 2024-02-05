@@ -10,7 +10,7 @@ import Data.Semigroup (Semigroup (..))
 import Data.String (IsString (..))
 import Data.Text (Text)
 import Data.Typeable (Typeable)
-import Minipat.Eval (EvalEnv, evalPat)
+-- import Minipat.Eval (evalPat)
 import Minipat.Stream (Stream)
 import Minipat.Stream qualified as S
 
@@ -46,11 +46,11 @@ estreamThrow = EStream . Left . SomeException
 estreamFilter :: (a -> Bool) -> EStream k a -> EStream j a
 estreamFilter = estreamMap . S.streamFilter
 
-class EStreamEval k e a | k -> e a where
-  estreamEvalEnv :: Proxy k -> EvalEnv e a
-
-instance (EStreamEval k e a, Show e, Typeable e) => IsString (EStream k a) where
-  fromString = estreamEval @e (estreamEvalEnv (Proxy :: Proxy k)) . fromString
-
-estreamEval :: (Show e, Typeable e) => EvalEnv e a -> Text -> EStream k a
-estreamEval ee txt = EStream (evalPat ee txt)
+-- class EStreamEval k e a | k -> e a where
+--   estreamEvalEnv :: Proxy k -> EvalEnv e a
+--
+-- instance (EStreamEval k e a, Show e, Typeable e) => IsString (EStream k a) where
+--   fromString = estreamEval @e (estreamEvalEnv (Proxy :: Proxy k)) . fromString
+--
+-- estreamEval :: (Show e, Typeable e) => EvalEnv e a -> Text -> EStream k a
+-- estreamEval ee txt = EStream (evalPat ee txt)

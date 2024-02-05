@@ -4,6 +4,8 @@
 -- | AST used when parsing/printing Tidal mini-notation
 module Minipat.Ast
   ( Ident (..)
+  , Select (..)
+  , Selected (..)
   , QuickRatio (..)
   , quickRatioValue
   , quickRatioRep
@@ -13,16 +15,15 @@ module Minipat.Ast
   , factorFromRational
   , factorValue
   , factorSucc
+  , Short (..)
   , SpeedDir (..)
   , Speed (..)
-  , Select (..)
   , Euclid (..)
   , Degrade (..)
   , ModType (..)
   , Mod (..)
-  , ShortExtent (..)
-  , LongExtent (..)
-  , Extent (..)
+  , Elongate (..)
+  , Replicate (..)
   , SeqPres (..)
   , GroupType (..)
   , Group (..)
@@ -54,6 +55,23 @@ import Prettyprinter qualified as P
 newtype Ident = Ident {unIdent :: Text}
   deriving stock (Show)
   deriving newtype (Eq, Ord, IsString, Pretty)
+
+-- * Selects
+
+data Select = SelectSample !Integer | SelectTransform !Ident
+  deriving stock (Eq, Ord, Show)
+
+instance Pretty Select where
+  pretty s =
+    ":" <> case s of
+      SelectSample i -> pretty i
+      SelectTransform t -> pretty t
+
+data Selected a = Selected !a !(Maybe Select)
+  deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
+
+instance (Pretty a) => Pretty (Selected a) where
+  pretty (Selected a ms) = pretty a <> maybe mempty pretty ms
 
 -- * QuickRatio
 
@@ -169,6 +187,17 @@ factorSucc = \case
   FactorInteger i -> FactorInteger (succ i)
   FactorQuickRatio qr -> FactorRational RationalPresFrac (quickRatioValue qr + 1)
 
+-- * Shorthand
+
+-- | Shorthand for elongate/replicate - attaches to previous element in sequence
+data Short = ShortElongate | ShortReplicate
+  deriving stock (Eq, Ord, Show, Enum, Bounded)
+
+instance Pretty Short where
+  pretty = \case
+    ShortElongate -> "_"
+    ShortReplicate -> "!"
+
 -- * Mod
 
 -- | Speedup or slowdown
@@ -189,16 +218,6 @@ data Speed s = Speed
 
 instance (Pretty s) => Pretty (Speed s) where
   pretty (Speed dir facs) = P.hcat [pretty dir, pretty facs]
-
--- | Select control
-data Select = SelectSample !Integer | SelectTransform !Ident
-  deriving stock (Eq, Ord, Show)
-
-instance Pretty Select where
-  pretty s =
-    ":" <> case s of
-      SelectSample i -> pretty i
-      SelectTransform t -> pretty t
 
 -- | Euclidean sequences
 data Euclid = Euclid
@@ -221,20 +240,40 @@ newtype Degrade = Degrade {unDegrade :: Maybe Factor}
 instance Pretty Degrade where
   pretty (Degrade mfp) = P.hcat ["?", maybe mempty pretty mfp]
 
+-- | Elongate element by the given factor
+newtype Elongate = Elongate {unElongate :: Factor}
+  deriving stock (Show)
+  deriving newtype (Eq, Ord)
+
+instance Pretty Elongate where
+  pretty (Elongate f) = P.hcat ["@", pretty f]
+
+-- | Replicate element by the given factor
+newtype Replicate = Replicate {unReplicate :: Maybe Integer}
+  deriving stock (Show)
+  deriving newtype (Eq, Ord)
+
+instance Pretty Replicate where
+  pretty (Replicate mi) = "!" <> maybe mempty pretty mi
+
+-- TODO add elongate/replicate constructors here
+
 -- | Controls that can be applied to a given pattern
 data ModType s
-  = ModTypeSelect !Select
-  | ModTypeDegrade !Degrade
+  = ModTypeDegrade !Degrade
   | ModTypeEuclid !Euclid
   | ModTypeSpeed !(Speed s)
+  | ModTypeElongate !Elongate
+  | ModTypeReplicate !Replicate
   deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
 
 instance (Pretty s) => Pretty (ModType s) where
   pretty = \case
-    ModTypeDegrade d -> pretty d
-    ModTypeEuclid e -> pretty e
-    ModTypeSelect s -> pretty s
-    ModTypeSpeed s -> pretty s
+    ModTypeDegrade x -> pretty x
+    ModTypeEuclid x -> pretty x
+    ModTypeSpeed x -> pretty x
+    ModTypeElongate x -> pretty x
+    ModTypeReplicate x -> pretty x
 
 -- | An expression modified by some control
 data Mod s r = Mod
@@ -254,39 +293,6 @@ instance Bifoldable Mod where
 
 instance Bitraversable Mod where
   bitraverse f g (Mod r mt) = Mod <$> g r <*> traverse f mt
-
--- * Extents
-
--- | Shorthand for time control
-data ShortExtent = ShortExtentElongate | ShortExtentReplicate
-  deriving stock (Eq, Ord, Show, Enum, Bounded)
-
-instance Pretty ShortExtent where
-  pretty = \case
-    ShortExtentElongate -> "_"
-    ShortExtentReplicate -> "!"
-
--- | Longhand for time control
-data LongExtent
-  = LongExtentElongate !Factor
-  | LongExtentReplicate !(Maybe Integer)
-  deriving stock (Eq, Ord, Show)
-
-instance Pretty LongExtent where
-  pretty = \case
-    LongExtentElongate f -> P.hcat ["@", pretty f]
-    LongExtentReplicate mi -> "!" <> maybe mempty pretty mi
-
--- | Time control that can be applied to an expression
-data Extent r
-  = ExtentShort !ShortExtent
-  | ExtentLong !r !LongExtent
-  deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
-
-instance (Pretty r) => Pretty (Extent r) where
-  pretty = \case
-    ExtentShort s -> pretty s
-    ExtentLong r l -> pretty r <> pretty l
 
 -- * Groups
 
@@ -366,7 +372,7 @@ instance (Pretty r) => Pretty (Poly r) where
 data PatF s a r
   = PatPure !a
   | PatSilence
-  | PatExtent !(Extent r)
+  | PatShort !Short
   | PatGroup !(Group r)
   | PatMod !(Mod s r)
   | PatPoly !(Poly r)
@@ -376,7 +382,7 @@ instance Bifunctor (PatF s) where
   bimap f g = \case
     PatPure a -> PatPure (f a)
     PatSilence -> PatSilence
-    PatExtent t -> PatExtent (fmap g t)
+    PatShort s -> PatShort s
     PatGroup gs -> PatGroup (fmap g gs)
     PatMod m -> PatMod (fmap g m)
     PatPoly p -> PatPoly (fmap g p)
@@ -387,7 +393,7 @@ instance Bifoldable (PatF s) where
     go z = \case
       PatPure a -> f a z
       PatSilence -> z
-      PatExtent t -> foldr g z t
+      PatShort _ -> z
       PatGroup gs -> foldr g z gs
       PatMod m -> foldr g z m
       PatPoly p -> foldr g z p
@@ -396,7 +402,7 @@ instance Bitraversable (PatF s) where
   bitraverse f g = \case
     PatPure a -> fmap PatPure (f a)
     PatSilence -> pure PatSilence
-    PatExtent t -> fmap PatExtent (traverse g t)
+    PatShort s -> pure (PatShort s)
     PatGroup gs -> fmap PatGroup (traverse g gs)
     PatMod m -> fmap PatMod (traverse g m)
     PatPoly p -> fmap PatPoly (traverse g p)
@@ -408,7 +414,7 @@ instance (Pretty s, Pretty a, Pretty r) => Pretty (PatF s a r) where
   pretty a = case a of
     PatPure x -> pretty x
     PatSilence -> "~"
-    PatExtent t -> pretty t
+    PatShort s -> pretty s
     PatGroup gp -> pretty gp
     PatMod m -> pretty m
     PatPoly p -> pretty p
@@ -433,7 +439,7 @@ instance Bifunctor Pat where
       case pf of
         PatPure a -> PatPure (g a)
         PatSilence -> PatSilence
-        PatExtent t -> PatExtent (fmap go t)
+        PatShort s -> PatShort s
         PatGroup gs -> PatGroup (fmap go gs)
         PatMod (Mod r m) -> PatMod (Mod (go r) (fmap (first f) m))
         PatPoly (Poly rs mc) -> PatPoly (Poly (fmap go rs) mc)
@@ -445,7 +451,7 @@ instance Bifoldable Pat where
       case pf of
         PatPure a -> g a z
         PatSilence -> z
-        PatExtent t -> foldr go z t
+        PatShort _ -> z
         PatGroup gs -> foldr go z gs
         PatMod (Mod r m) -> go r (foldr (flip (bifoldr f (const id))) z m)
         PatPoly (Poly rs _) -> foldr go z rs
@@ -459,7 +465,7 @@ instance Bitraversable Pat where
         <*> case pf of
           PatPure a -> fmap PatPure (g a)
           PatSilence -> pure PatSilence
-          PatExtent t -> fmap PatExtent (traverse go t)
+          PatShort s -> pure (PatShort s)
           PatGroup gs -> fmap PatGroup (traverse go gs)
           PatMod (Mod r m) -> fmap PatMod $ Mod <$> go r <*> traverse (bitraverse f pure) m
           PatPoly (Poly rs mc) -> fmap (\rs' -> PatPoly (Poly rs' mc)) (traverse go rs)

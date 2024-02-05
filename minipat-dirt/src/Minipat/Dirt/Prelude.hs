@@ -5,7 +5,7 @@ module Minipat.Dirt.Prelude where
 import Dahdit.Midi.Osc (Datum (..), DatumType (..), IsDatum (..))
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
-import Minipat.Dirt.Eval (liveEvalPat, liveEvalSoundPat)
+-- import Minipat.Dirt.Eval (liveEvalNotePat, liveEvalPat, liveEvalSoundPat)
 import Minipat.Dirt.Osc (Attrs)
 import Minipat.Stream (Stream (..), streamInnerBind)
 
@@ -19,20 +19,23 @@ pF k = fmap (Map.singleton k . DatumFloat . realToFrac)
 pI :: (Integral a) => Text -> Stream a -> Stream Attrs
 pI k = fmap (Map.singleton k . DatumInt32 . fromIntegral)
 
-pat :: DatumType -> Text -> Text -> Stream Attrs
-pat dt k t = stream k (liveEvalPat dt t)
+-- pat :: DatumType -> Text -> Text -> Stream Attrs
+-- pat dt k t = stream k (liveEvalPat dt t)
 
 stream :: (IsDatum a) => Text -> Stream a -> Stream Attrs
 stream k = fmap (Map.singleton k . toDatum)
 
-sound, s :: Text -> Stream Attrs
-sound = liveEvalSoundPat
-s = sound
+-- sound, s :: Text -> Stream Attrs
+-- sound = liveEvalSoundPat
+-- s = sound
+--
+-- note, n :: Text -> Stream Attrs
+-- note = liveEvalNotePat
+-- n = note
 
--- TODO n is midinote? what is difference between note and midinote?
-note, n :: Text -> Stream Attrs
-note = pat DatumTypeInt32 "note"
-n = note
+-- TODO essentially - midinote = note . fmap (- 60)
+-- default note is c5, so we subtract 60 to get to note 0
+-- midinote :: Text -> Stream Attrs
 
 -- Basic effect parameters
 accelerate

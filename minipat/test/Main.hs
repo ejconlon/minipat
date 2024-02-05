@@ -6,7 +6,7 @@ module Main
   )
 where
 
-import Bowtie (Anno (..), pattern JotP)
+import Bowtie (pattern JotP)
 import Control.Exception (throwIO)
 import Control.Monad (void)
 import Data.Bifunctor (first)
@@ -15,14 +15,13 @@ import Data.Maybe (fromMaybe)
 import Data.Ratio ((%))
 import Data.Sequence (Seq (..))
 import Data.Text (Text)
-import Data.Void (Void)
 import Looksee (Err, parse)
 import Minipat.Ast
-import Minipat.Interp (SelAcc, accInterpEnv, accProj, interpPat)
+import Minipat.Interp (interpPat)
 import Minipat.Norm (normPat)
-import Minipat.Parser (P, ParseErr, factorP, identP, identPatP)
+import Minipat.Parser (P, ParseErr, factorP, identP, identPatP, selectedIdentPatP)
 import Minipat.Print (render)
-import Minipat.Stream (Ev (..), Stream, streamRun)
+import Minipat.Stream (Ev (..), streamRun)
 import Minipat.Time (Arc (..), CycleTime (..), Span (..))
 import Prettyprinter qualified as P
 import System.IO (BufferMode (..), hSetBuffering, stdout)
@@ -80,6 +79,9 @@ mkUnTPat = unPat . mkTPat
 tpatP :: P (TPat Ident)
 tpatP = fmap (first (const ())) identPatP
 
+tspatP :: P (TPat (Selected Ident))
+tspatP = fmap (first (const ())) selectedIdentPatP
+
 xPatIdent, yPatIdent :: UnTPat Ident
 xPatIdent = mkUnTPat (PatPure (Ident "x"))
 yPatIdent = mkUnTPat (PatPure (Ident "y"))
@@ -99,11 +101,11 @@ patParseTests =
     , mkUnitRT
         "pat short elongate"
         (expectText "_" (expectParseOk tpatP))
-        (mkTPat (PatExtent (ExtentShort ShortExtentElongate)))
+        (mkTPat (PatShort ShortElongate))
     , mkUnitRT
         "pat short replicate"
         (expectText "!" (expectParseOk tpatP))
-        (mkTPat (PatExtent (ExtentShort ShortExtentReplicate)))
+        (mkTPat (PatShort ShortReplicate))
     , mkUnitRT
         "pat var"
         (expectText "x" (expectParseOk tpatP))
@@ -168,15 +170,15 @@ patParseTests =
     , mkUnitRT
         "pat long elongate"
         (expectText "x@(3/7)" (expectParseOk tpatP))
-        (mkTPat (PatExtent (ExtentLong xPatIdent (LongExtentElongate (FactorRational RationalPresFrac (3 % 7))))))
+        (mkTPat (PatMod (Mod xPatIdent (ModTypeElongate (Elongate (FactorRational RationalPresFrac (3 % 7)))))))
     , mkUnitRT
         "pat long replicate"
         (expectText "x!5" (expectParseOk tpatP))
-        (mkTPat (PatExtent (ExtentLong xPatIdent (LongExtentReplicate (Just 5)))))
+        (mkTPat (PatMod (Mod xPatIdent (ModTypeReplicate (Replicate (Just 5))))))
     , mkUnitRT
         "pat long replicate implicit"
         (expectText "x!" (expectParseOk tpatP))
-        (mkTPat (PatExtent (ExtentLong xPatIdent (LongExtentReplicate Nothing))))
+        (mkTPat (PatMod (Mod xPatIdent (ModTypeReplicate (Replicate Nothing)))))
     , mkUnitRT
         "pat adj optional implicit"
         (expectText "x?" (expectParseOk tpatP))
@@ -194,20 +196,6 @@ patParseTests =
         (expectText "x(1,2,3)" (expectParseOk tpatP))
         (mkTPat (PatMod (Mod xPatIdent (ModTypeEuclid (Euclid 1 2 (Just 3))))))
     , mkUnitRT
-        "pat adj select sample"
-        (expectText "x:4" (expectParseOk tpatP))
-        (mkTPat (PatMod (Mod xPatIdent (ModTypeSelect (SelectSample 4)))))
-    , mkUnitRT
-        "pat adj select transform"
-        (expectText "x:hello" (expectParseOk tpatP))
-        (mkTPat (PatMod (Mod xPatIdent (ModTypeSelect (SelectTransform "hello")))))
-    , mkUnitRT
-        "pat multi mod"
-        (expectText "x:foo(1,2)" (expectParseOk tpatP))
-        ( let p = mkUnTPat (PatMod (Mod xPatIdent (ModTypeSelect (SelectTransform "foo"))))
-          in  mkTPat (PatMod (Mod p (ModTypeEuclid (Euclid 1 2 Nothing))))
-        )
-    , mkUnitRT
         "pat par multi"
         (expectText "[x y , z w]" (expectParseOk tpatP))
         ( let p vs = mkUnTPat (PatGroup (Group 0 (GroupTypeSeq SeqPresSpace) vs))
@@ -221,7 +209,7 @@ patParseTests =
                 ( Group
                     0
                     (GroupTypeSeq SeqPresSpace)
-                    [ mkUnTPat (PatExtent (ExtentLong xPatIdent (LongExtentReplicate Nothing)))
+                    [ mkUnTPat (PatMod (Mod xPatIdent (ModTypeReplicate (Replicate Nothing))))
                     , yPatIdent
                     ]
                 )
@@ -236,7 +224,7 @@ patParseTests =
                     0
                     (GroupTypeSeq SeqPresSpace)
                     [ xPatIdent
-                    , mkUnTPat (PatExtent (ExtentShort ShortExtentReplicate))
+                    , mkUnTPat (PatShort ShortReplicate)
                     ]
                 )
             )
@@ -246,7 +234,7 @@ patParseTests =
 runTripCase :: (TestName, Text, Maybe Text) -> TestTree
 runTripCase (name, txt, mnorm) = testCase name $ do
   -- print txt
-  let e = expectParseOk tpatP
+  let e = expectParseOk tspatP
   (_, act) <- e (Left txt)
   ea <- act
   -- pPrint ea
@@ -341,7 +329,7 @@ runPatNormCase (n, patStr, npat) = testCase n $ do
 testPatNormCases :: TestTree
 testPatNormCases =
   let mkPure = JotP () . PatPure
-      mkTime r l = JotP () (PatExtent (ExtentLong r l))
+      mkMod r l = JotP () (PatMod (Mod r l))
   in  testGroup "pat norm cases" $
         fmap
           runPatNormCase
@@ -367,51 +355,51 @@ testPatNormCases =
           ,
             ( "repeat one long"
             , "x!1"
-            , Pat (mkTime (mkPure "x") (LongExtentReplicate (Just 1)))
+            , Pat (mkMod (mkPure "x") (ModTypeReplicate (Replicate (Just 1))))
             )
           ,
             ( "repeat two long"
             , "x!2"
-            , Pat (mkTime (mkPure "x") (LongExtentReplicate (Just 2)))
+            , Pat (mkMod (mkPure "x") (ModTypeReplicate (Replicate (Just 2))))
             )
           ,
             ( "repeat two long implicit"
             , "x!"
-            , Pat (mkTime (mkPure "x") (LongExtentReplicate Nothing))
+            , Pat (mkMod (mkPure "x") (ModTypeReplicate (Replicate Nothing)))
             )
           ,
             ( "repeat two short"
             , "x !"
-            , Pat (mkTime (mkPure "x") (LongExtentReplicate Nothing))
+            , Pat (mkMod (mkPure "x") (ModTypeReplicate (Replicate Nothing)))
             )
           ,
             ( "repeat three short"
             , "x ! !"
-            , Pat (mkTime (mkPure "x") (LongExtentReplicate (Just 3)))
+            , Pat (mkMod (mkPure "x") (ModTypeReplicate (Replicate (Just 3))))
             )
           ,
             ( "repeat seq short"
             , "x ! y"
-            , let xpart = mkTime (mkPure "x") (LongExtentReplicate Nothing)
+            , let xpart = mkMod (mkPure "x") (ModTypeReplicate (Replicate Nothing))
               in  Pat (JotP () (PatGroup (Group 0 (GroupTypeSeq SeqPresSpace) [xpart, mkPure "y"])))
             )
           ,
             ( "elongate two long"
             , "x@2"
-            , Pat (mkTime (mkPure "x") (LongExtentElongate 2))
+            , Pat (mkMod (mkPure "x") (ModTypeElongate (Elongate 2)))
             )
           ,
             ( "elongate two short"
             , "x _"
-            , Pat (mkTime (mkPure "x") (LongExtentElongate 2))
+            , Pat (mkMod (mkPure "x") (ModTypeElongate (Elongate 2)))
             )
           ]
 
-runPatInterpCase :: (TestName, Maybe Arc, Text, [Ev (SelAcc Ident)]) -> TestTree
+runPatInterpCase :: (TestName, Maybe Arc, Text, [Ev Ident]) -> TestTree
 runPatInterpCase (n, mayArc, patStr, evs) = testCase n $ do
   pat <- either throwIO pure (parse tpatP patStr)
   let pat' = normPat pat
-  pat'' <- either throwIO pure (interpPat @Stream @Void accInterpEnv pat')
+  pat'' <- either throwIO pure (interpPat pat')
   let arc = fromMaybe (Arc 0 1) mayArc
       actualEvs = streamRun pat'' arc
   actualEvs @?= evs
@@ -420,9 +408,6 @@ ev :: Rational -> Rational -> x -> Ev x
 ev start end val =
   let arc = Arc (CycleTime start) (CycleTime end)
   in  Ev (Span arc (Just arc)) val
-
-proj :: a -> SelAcc a
-proj = accProj
 
 testPatInterpCases :: TestTree
 testPatInterpCases =
@@ -434,7 +419,7 @@ testPatInterpCases =
         , Nothing
         , "x"
         ,
-          [ ev 0 1 (proj "x")
+          [ ev 0 1 "x"
           ]
         )
       ,
@@ -442,8 +427,8 @@ testPatInterpCases =
         , Just (Arc 0 2)
         , "x"
         ,
-          [ ev 0 1 (proj "x")
-          , ev 1 2 (proj "x")
+          [ ev 0 1 "x"
+          , ev 1 2 "x"
           ]
         )
       ,
@@ -451,8 +436,8 @@ testPatInterpCases =
         , Just (Arc (CycleTime (1 % 2)) (CycleTime (3 % 2)))
         , "x"
         ,
-          [ Ev (Span (Arc (CycleTime (1 % 2)) 1) (Just (Arc 0 1))) (proj "x")
-          , Ev (Span (Arc 1 (CycleTime (3 % 2))) (Just (Arc 1 2))) (proj "x")
+          [ Ev (Span (Arc (CycleTime (1 % 2)) 1) (Just (Arc 0 1))) "x"
+          , Ev (Span (Arc 1 (CycleTime (3 % 2))) (Just (Arc 1 2))) "x"
           ]
         )
       ,
@@ -460,7 +445,7 @@ testPatInterpCases =
         , Nothing
         , "[x]"
         ,
-          [ ev 0 1 (proj "x")
+          [ ev 0 1 "x"
           ]
         )
       ,
@@ -468,8 +453,8 @@ testPatInterpCases =
         , Nothing
         , "x*2"
         ,
-          [ ev 0 (1 % 2) (proj "x")
-          , ev (1 % 2) 1 (proj "x")
+          [ ev 0 (1 % 2) "x"
+          , ev (1 % 2) 1 "x"
           ]
         )
       ,
@@ -477,7 +462,7 @@ testPatInterpCases =
         , Nothing
         , "x/2"
         ,
-          [ Ev (Span (Arc 0 1) (Just (Arc 0 2))) (proj "x")
+          [ Ev (Span (Arc 0 1) (Just (Arc 0 2))) "x"
           ]
         )
       ,
@@ -485,8 +470,8 @@ testPatInterpCases =
         , Nothing
         , "[x y]"
         ,
-          [ ev 0 (1 % 2) (proj "x")
-          , ev (1 % 2) 1 (proj "y")
+          [ ev 0 (1 % 2) "x"
+          , ev (1 % 2) 1 "y"
           ]
         )
       ,
@@ -494,10 +479,10 @@ testPatInterpCases =
         , Just (Arc 0 2)
         , "[x y]"
         ,
-          [ ev 0 (1 % 2) (proj "x")
-          , ev (1 % 2) 1 (proj "y")
-          , ev 1 (3 % 2) (proj "x")
-          , ev (3 % 2) 2 (proj "y")
+          [ ev 0 (1 % 2) "x"
+          , ev (1 % 2) 1 "y"
+          , ev 1 (3 % 2) "x"
+          , ev (3 % 2) 2 "y"
           ]
         )
       ,
@@ -505,7 +490,7 @@ testPatInterpCases =
         , Nothing
         , "x!1"
         ,
-          [ ev 0 1 (proj "x")
+          [ ev 0 1 "x"
           ]
         )
       ,
@@ -513,8 +498,8 @@ testPatInterpCases =
         , Nothing
         , "x!2"
         ,
-          [ ev 0 (1 % 2) (proj "x")
-          , ev (1 % 2) 1 (proj "x")
+          [ ev 0 (1 % 2) "x"
+          , ev (1 % 2) 1 "x"
           ]
         )
       ,
@@ -522,8 +507,8 @@ testPatInterpCases =
         , Nothing
         , "x!"
         ,
-          [ ev 0 (1 % 2) (proj "x")
-          , ev (1 % 2) 1 (proj "x")
+          [ ev 0 (1 % 2) "x"
+          , ev (1 % 2) 1 "x"
           ]
         )
       ,
@@ -531,8 +516,8 @@ testPatInterpCases =
         , Nothing
         , "x !"
         ,
-          [ ev 0 (1 % 2) (proj "x")
-          , ev (1 % 2) 1 (proj "x")
+          [ ev 0 (1 % 2) "x"
+          , ev (1 % 2) 1 "x"
           ]
         )
       ,
@@ -540,9 +525,9 @@ testPatInterpCases =
         , Nothing
         , "x!3"
         ,
-          [ ev 0 (1 % 3) (proj "x")
-          , ev (1 % 3) (2 % 3) (proj "x")
-          , ev (2 % 3) 1 (proj "x")
+          [ ev 0 (1 % 3) "x"
+          , ev (1 % 3) (2 % 3) "x"
+          , ev (2 % 3) 1 "x"
           ]
         )
       ,
@@ -550,9 +535,9 @@ testPatInterpCases =
         , Nothing
         , "x ! !"
         ,
-          [ ev 0 (1 % 3) (proj "x")
-          , ev (1 % 3) (2 % 3) (proj "x")
-          , ev (2 % 3) 1 (proj "x")
+          [ ev 0 (1 % 3) "x"
+          , ev (1 % 3) (2 % 3) "x"
+          , ev (2 % 3) 1 "x"
           ]
         )
       ,
@@ -560,9 +545,9 @@ testPatInterpCases =
         , Nothing
         , "x ! y"
         ,
-          [ ev 0 (1 % 3) (proj "x")
-          , ev (1 % 3) (2 % 3) (proj "x")
-          , ev (2 % 3) 1 (proj "y")
+          [ ev 0 (1 % 3) "x"
+          , ev (1 % 3) (2 % 3) "x"
+          , ev (2 % 3) 1 "y"
           ]
         )
       ,
@@ -570,7 +555,7 @@ testPatInterpCases =
         , Nothing
         , "x@2"
         ,
-          [ ev 0 1 (proj "x")
+          [ ev 0 1 "x"
           ]
         )
       ,
@@ -578,8 +563,8 @@ testPatInterpCases =
         , Nothing
         , "x@2 y"
         ,
-          [ ev 0 (2 % 3) (proj "x")
-          , ev (2 % 3) 1 (proj "y")
+          [ ev 0 (2 % 3) "x"
+          , ev (2 % 3) 1 "y"
           ]
         )
       ,
@@ -587,8 +572,8 @@ testPatInterpCases =
         , Nothing
         , "x _ y"
         ,
-          [ ev 0 (2 % 3) (proj "x")
-          , ev (2 % 3) 1 (proj "y")
+          [ ev 0 (2 % 3) "x"
+          , ev (2 % 3) 1 "y"
           ]
         )
       ,
@@ -596,7 +581,7 @@ testPatInterpCases =
         , Nothing
         , "[x | y]"
         ,
-          [ ev 0 1 (proj "x")
+          [ ev 0 1 "x"
           ]
         )
       ,
@@ -604,9 +589,9 @@ testPatInterpCases =
         , Just (Arc 5 8)
         , "[x | y | z]"
         ,
-          [ ev 5 6 (proj "x")
-          , ev 6 7 (proj "x")
-          , ev 7 8 (proj "y")
+          [ ev 5 6 "x"
+          , ev 6 7 "x"
+          , ev 7 8 "y"
           ] -- Arbitrary, based on rand seed
         )
       ,
@@ -614,7 +599,7 @@ testPatInterpCases =
         , Nothing
         , "<x>"
         ,
-          [ ev 0 1 (proj "x")
+          [ ev 0 1 "x"
           ]
         )
       ,
@@ -622,7 +607,7 @@ testPatInterpCases =
         , Nothing
         , "<x y>"
         ,
-          [ ev 0 1 (proj "x")
+          [ ev 0 1 "x"
           ]
         )
       ,
@@ -630,9 +615,9 @@ testPatInterpCases =
         , Just (Arc 5 8)
         , "<x y z>"
         ,
-          [ ev 5 6 (proj "z")
-          , ev 6 7 (proj "x")
-          , ev 7 8 (proj "y")
+          [ ev 5 6 "z"
+          , ev 6 7 "x"
+          , ev 7 8 "y"
           ]
         )
       ,
@@ -640,29 +625,18 @@ testPatInterpCases =
         , Nothing
         , "[x , y , z]"
         ,
-          [ ev 0 1 (proj "x")
-          , ev 0 1 (proj "z")
-          , ev 0 1 (proj "y")
+          [ ev 0 1 "x"
+          , ev 0 1 "z"
+          , ev 0 1 "y"
           ] -- Note this order is arbitrary, just comes from heap behavior
-        )
-      ,
-        ( "sel"
-        , Nothing
-        , "x:1:s"
-        ,
-          [ ev
-              0
-              1
-              (Anno (SelectTransform "s" :<| SelectSample 1 :<| Empty) "x")
-          ]
         )
       ,
         ( "degrade"
         , Just (Arc 0 4)
         , "x?"
         ,
-          [ ev 0 1 (proj "x")
-          , ev 1 2 (proj "x")
+          [ ev 0 1 "x"
+          , ev 1 2 "x"
           ]
         )
       ,
@@ -670,9 +644,9 @@ testPatInterpCases =
         , Nothing
         , "x(3,8)"
         ,
-          [ ev 0 (1 % 8) (proj "x")
-          , ev (3 % 8) (4 % 8) (proj "x")
-          , ev (6 % 8) (7 % 8) (proj "x")
+          [ ev 0 (1 % 8) "x"
+          , ev (3 % 8) (4 % 8) "x"
+          , ev (6 % 8) (7 % 8) "x"
           ]
         )
       ,
@@ -680,9 +654,9 @@ testPatInterpCases =
         , Nothing
         , "x(3,8,1)"
         ,
-          [ ev (2 % 8) (3 % 8) (proj "x")
-          , ev (5 % 8) (6 % 8) (proj "x")
-          , ev (7 % 8) (8 % 8) (proj "x")
+          [ ev (2 % 8) (3 % 8) "x"
+          , ev (5 % 8) (6 % 8) "x"
+          , ev (7 % 8) (8 % 8) "x"
           ]
         )
       ,
@@ -690,9 +664,9 @@ testPatInterpCases =
         , Nothing
         , "x(3,8,2)"
         ,
-          [ ev (1 % 8) (2 % 8) (proj "x")
-          , ev (4 % 8) (5 % 8) (proj "x")
-          , ev (6 % 8) (7 % 8) (proj "x")
+          [ ev (1 % 8) (2 % 8) "x"
+          , ev (4 % 8) (5 % 8) "x"
+          , ev (6 % 8) (7 % 8) "x"
           ]
         )
       ,
@@ -700,9 +674,9 @@ testPatInterpCases =
         , Nothing
         , "x(3,8,3)"
         ,
-          [ ev 0 (1 % 8) (proj "x")
-          , ev (3 % 8) (4 % 8) (proj "x")
-          , ev (5 % 8) (6 % 8) (proj "x")
+          [ ev 0 (1 % 8) "x"
+          , ev (3 % 8) (4 % 8) "x"
+          , ev (5 % 8) (6 % 8) "x"
           ]
         )
       ]
