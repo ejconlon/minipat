@@ -19,8 +19,6 @@ L.logInfo logger "Initializing"
 
 st <- C.initSt logger C.defaultEnv
 
-handshake = C.handshake st
-
 getCps = C.getCps st
 getAhead = C.getAhead st
 getPlaying = C.getPlaying st
@@ -39,6 +37,7 @@ hush = C.hush st
 panic = C.panic st
 play = setPlaying True
 stop = setPlaying False
+handshake = C.handshake st
 
 d0 = setOrbit 0
 d1 = setOrbit 1
@@ -49,7 +48,4 @@ d5 = setOrbit 5
 d6 = setOrbit 6
 d7 = setOrbit 7
 
-L.logInfo logger "Handshaking"
-
-handshake >>= \ok -> if ok then L.logInfo logger "Ready" else L.logError logger "Handshake failed"
-
+handshake

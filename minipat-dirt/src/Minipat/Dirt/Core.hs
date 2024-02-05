@@ -30,7 +30,7 @@ import Data.Map.Strict qualified as Map
 import Data.Ratio ((%))
 import Data.Sequence (Seq)
 import Data.Text qualified as T
-import Minipat.Dirt.Logger (LogAction, logError, newLogger)
+import Minipat.Dirt.Logger (LogAction, logError, logInfo, newLogger)
 import Minipat.Dirt.Osc (Attrs, PlayEnv (..), PlayErr, Timed (..), convertTape, handshakePacket, playPacket)
 import Minipat.Dirt.Resources (RelVar, acquireAsync, relVarAcquire, relVarDispose, relVarInit)
 import Minipat.Stream (Stream (..))
@@ -225,14 +225,19 @@ flushQueueSTM dom = void (flushTQueue (domQueue dom))
 
 -- Handshake with SuperDirt
 -- On success set playing true; on error false
-handshake :: St -> IO Bool
-handshake st = bracket acq rel use
+handshake :: St -> IO ()
+handshake st = bracket acq rel (const (pure ()))
  where
   acq = do
+    logInfo (stLogger st) "Handshaking ..."
     withMVar (stRes st) (flip sendPacket handshakePacket . resConn)
     recvPacket st
-  rel = setPlaying st . isRight
-  use = pure . isRight
+  rel resp = do
+    let ok = isRight resp
+    if ok
+      then logInfo (stLogger st) "... handshake succeeded"
+      else logError (stLogger st) "... handshake FAILED"
+    setPlaying st ok
 
 genEventsSTM :: Domain -> PosixTime -> STM (PlayEnv, Either PlayErr (Seq (Timed Attrs)))
 genEventsSTM dom now = do
@@ -262,7 +267,8 @@ data Resources = Resources
   }
 
 data St = St
-  { stEnv :: !Env
+  { stLogger :: !LogAction
+  , stEnv :: !Env
   , stDom :: !Domain
   , stRes :: !(MVar Resources)
   }
@@ -279,21 +285,21 @@ acqGenTask logger dom = acquireLoop (domAhead dom) (doGen logger dom)
 acqSendTask :: OscConn -> Domain -> Acquire (Async ())
 acqSendTask conn dom = acquireAwait (domPlaying dom) (domQueue dom) (doSend conn)
 
-newSt :: Env -> IO St
-newSt env = St env <$> initDomain env <*> newEmptyMVar
+newSt :: LogAction -> Env -> IO St
+newSt logger env = St logger env <$> initDomain env <*> newEmptyMVar
 
-initRes :: LogAction -> St -> IO ()
-initRes logger st = do
+initRes :: St -> IO ()
+initRes st = do
   disposeSt st
   rv <- relVarInit
   flip onException (relVarDispose rv) $ do
     conn <- relVarAcquire rv (acqConn (stEnv st))
-    genTask <- relVarAcquire rv (acqGenTask logger (stDom st))
+    genTask <- relVarAcquire rv (acqGenTask (stLogger st) (stDom st))
     sendTask <- relVarAcquire rv (acqSendTask conn (stDom st))
     putMVar (stRes st) (Resources rv conn genTask sendTask)
 
 initSt :: LogAction -> Env -> IO St
-initSt logger env = newSt env >>= \st -> st <$ initRes logger st
+initSt logger env = newSt logger env >>= \st -> st <$ initRes st
 
 disposeSt :: St -> IO ()
 disposeSt st = mask_ (tryTakeMVar (stRes st) >>= maybe (pure ()) (relVarDispose . resRel))
