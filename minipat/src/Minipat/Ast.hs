@@ -31,9 +31,7 @@ module Minipat.Ast
   , Pat (..)
   , PatX
   , UnPat
-  , Sub (..)
   , Pattern (..)
-  , ur
   )
 where
 
@@ -42,8 +40,6 @@ import Data.Bifoldable (Bifoldable (..))
 import Data.Bifunctor (Bifunctor (..))
 import Data.Bitraversable (Bitraversable (..))
 import Data.Foldable (toList)
-import Data.Map.Strict (Map)
-import Data.Map.Strict qualified as Map
 import Data.Ratio (denominator, numerator, (%))
 import Data.Sequence.NonEmpty (NESeq (..))
 import Data.String (IsString (..))
@@ -474,11 +470,6 @@ mkPat = Pat . JotP mempty
 mkPatGroup :: (Monoid b) => GroupType -> NESeq (Pat b a) -> Pat b a
 mkPatGroup gt = mkPat . PatGroup . Group 0 gt . fmap unPat
 
-data Sub f k a = Sub
-  { subElems :: !(Map k (f a))
-  , subXforms :: !(Map Ident (f a -> f a))
-  }
-
 -- | 'Pat' and 'Stream' can be constructed abstractly with this
 class (Functor f) => Pattern f where
   patPure :: a -> f a
@@ -493,7 +484,6 @@ class (Functor f) => Pattern f where
   patFast, patSlow :: f Rational -> f a -> f a
   patDegBy :: Rational -> f a -> f a
   patDeg :: f Rational -> f a -> f a
-  patSub :: Sub f k a -> f k -> f a
 
 instance (Monoid b) => Pattern (Pat b) where
   patPure = mkPat . PatPure
@@ -510,12 +500,20 @@ instance (Monoid b) => Pattern (Pat b) where
   patSlow = error "TODO"
   patDegBy = error "TODO"
   patDeg = error "TODO"
-  patSub = error "TODO"
 
-ur
-  :: (Pattern f, Ord k)
-  => f k
-  -> [(k, f a)]
-  -> [(Ident, f a -> f a)]
-  -> f a
-ur p xs ys = patSub (Sub (Map.fromList xs) (Map.fromList ys)) p
+-- TODO figure this out
+--
+-- data Sub f k a = Sub
+--   { subElems :: !(Map k (f a))
+--   , subXforms :: !(Map Ident (f a -> f a))
+--   }
+--
+-- patSub :: Sub f k a -> f k -> f a
+--
+-- ur
+--   :: (Pattern f, Ord k)
+--   => f k
+--   -> [(k, f a)]
+--   -> [(Ident, f a -> f a)]
+--   -> f a
+-- ur p xs ys = patSub (Sub (Map.fromList xs) (Map.fromList ys)) p

@@ -307,4 +307,3 @@ instance Pattern Stream where
   patSlow = streamSlow
   patDegBy = streamDegBy
   patDeg = streamDeg
-  patSub = error "TODO"
