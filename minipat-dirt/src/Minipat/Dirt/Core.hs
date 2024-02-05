@@ -22,6 +22,7 @@ import Control.Monad.IO.Class (liftIO)
 import Dahdit.Midi.Osc (Datum (..), Packet)
 import Dahdit.Network (Conn (..), HostPort (..), resolveAddr, runDecoder, runEncoder, udpServerConn)
 import Data.Acquire (Acquire)
+import Data.Either (isRight)
 import Data.Foldable (foldl', for_)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Map.Strict (Map)
@@ -30,7 +31,7 @@ import Data.Ratio ((%))
 import Data.Sequence (Seq)
 import Data.Text qualified as T
 import Minipat.Dirt.Logger (LogAction, logError, newLogger)
-import Minipat.Dirt.Osc (Attrs, PlayEnv (..), PlayErr, Timed (..), convertTape, playPacket)
+import Minipat.Dirt.Osc (Attrs, PlayEnv (..), PlayErr, Timed (..), convertTape, handshakePacket, playPacket)
 import Minipat.Dirt.Resources (RelVar, acquireAsync, relVarAcquire, relVarDispose, relVarInit)
 import Minipat.Stream (Stream (..))
 import Minipat.Time (Arc (..), bpmToCps, cpsToBpm)
@@ -199,20 +200,42 @@ clearOrbit :: St -> Int -> IO ()
 clearOrbit st o = updateOrbits st (Map.delete o)
 
 clearAllOrbits :: St -> IO ()
-clearAllOrbits st = atomically $ do
-  let dom = stDom st
-  writeTVar (domOrbits dom) mempty
-  writeTVar (domStream dom) mempty
+clearAllOrbits st = atomically (clearAllOrbitsSTM (stDom st))
 
 hush :: St -> IO ()
 hush st = atomically $ do
   let dom = stDom st
+  clearAllOrbitsSTM dom
+  flushQueueSTM dom
+
+panic :: St -> IO ()
+panic st = atomically $ do
+  let dom = stDom st
+  clearAllOrbitsSTM dom
+  flushQueueSTM dom
+  writeTVar (domPlaying dom) False
+
+clearAllOrbitsSTM :: Domain -> STM ()
+clearAllOrbitsSTM dom = do
   writeTVar (domOrbits dom) mempty
   writeTVar (domStream dom) mempty
-  void (flushTQueue (domQueue dom))
 
-genEvents :: Domain -> PosixTime -> STM (PlayEnv, Either PlayErr (Seq (Timed Attrs)))
-genEvents dom now = do
+flushQueueSTM :: Domain -> STM ()
+flushQueueSTM dom = void (flushTQueue (domQueue dom))
+
+-- Handshake with SuperDirt
+-- On success set playing true; on error false
+handshake :: St -> IO Bool
+handshake st = bracket acq rel use
+ where
+  acq = do
+    withMVar (stRes st) (flip sendPacket handshakePacket . resConn)
+    recvPacket st
+  rel = setPlaying st . isRight
+  use = pure . isRight
+
+genEventsSTM :: Domain -> PosixTime -> STM (PlayEnv, Either PlayErr (Seq (Timed Attrs)))
+genEventsSTM dom now = do
   ahead <- readTVar (domAhead dom)
   cps <- readTVar (domCps dom)
   cyc <- readTVar (domCycle dom)
@@ -223,8 +246,8 @@ genEvents dom now = do
       mpevs = convertTape penv tape
   pure (penv, mpevs)
 
-advanceCycle :: Domain -> STM ()
-advanceCycle dom = modifyTVar' (domCycle dom) (+ 1)
+advanceCycleSTM :: Domain -> STM ()
+advanceCycleSTM dom = modifyTVar' (domCycle dom) (+ 1)
 
 data OscConn = OscConn
   { ocTargetAddr :: !NS.SockAddr
@@ -285,7 +308,7 @@ doGen logger dom now = do
   mr <- atomically $ do
     playing <- readTVar (domPlaying dom)
     if playing
-      then fmap Just (genEvents dom now)
+      then fmap Just (genEventsSTM dom now)
       else pure Nothing
   case mr of
     Nothing -> pure ()
@@ -293,16 +316,12 @@ doGen logger dom now = do
       case mpevs of
         Left err -> logError logger (T.pack ("Gen failed: " ++ show err))
         Right pevs -> do
-          -- putStrLn ("*** GEN " ++ showPosixTime now)
-          -- putStrLn ("Writing " ++ show (length pevs) ++ " events")
           atomically $ do
-            advanceCycle dom
+            advanceCycleSTM dom
             for_ pevs (writeTQueue (domQueue dom) . fmap playPacket)
 
 doSend :: OscConn -> Timed Packet -> IO ()
-doSend conn (Timed _key val) = do
-  -- putStrLn ("*** SEND " ++ showPosixTime key)
-  sendPacket conn val
+doSend conn (Timed _ val) = do sendPacket conn val
 
 sendPacket :: OscConn -> Packet -> IO ()
 sendPacket (OscConn targetAddr (Conn _ enc)) = runEncoder enc targetAddr
