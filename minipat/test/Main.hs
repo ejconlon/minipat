@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Main
@@ -13,9 +14,6 @@ import Data.Either (isLeft, isRight)
 import Data.Maybe (fromMaybe)
 import Data.Ratio ((%))
 import Data.Sequence (Seq (..))
-import Data.Sequence qualified as Seq
-import Data.Sequence.NonEmpty (NESeq)
-import Data.Sequence.NonEmpty qualified as NESeq
 import Data.Text (Text)
 import Data.Void (Void)
 import Looksee (Err, parse)
@@ -82,16 +80,13 @@ mkUnTPat = unPat . mkTPat
 tpatP :: P (TPat Ident)
 tpatP = fmap (first (const ())) identPatP
 
-neseq :: [a] -> NESeq a
-neseq = NESeq.unsafeFromSeq . Seq.fromList
-
 xPatIdent, yPatIdent :: UnTPat Ident
 xPatIdent = mkUnTPat (PatPure (Ident "x"))
 yPatIdent = mkUnTPat (PatPure (Ident "y"))
 
-xyPatIdents, zwPatIdents :: NESeq (UnTPat Ident)
-xyPatIdents = neseq (fmap (mkUnTPat . PatPure) [Ident "x", Ident "y"])
-zwPatIdents = neseq (fmap (mkUnTPat . PatPure) [Ident "z", Ident "w"])
+xyPatIdents, zwPatIdents :: Seq (UnTPat Ident)
+xyPatIdents = fmap (mkUnTPat . PatPure) [Ident "x", Ident "y"]
+zwPatIdents = fmap (mkUnTPat . PatPure) [Ident "z", Ident "w"]
 
 patParseTests :: [TestTree]
 patParseTests =
@@ -130,7 +125,7 @@ patParseTests =
         (expectText "x y . z w" (expectParseOk tpatP))
         ( let p vs = mkUnTPat (PatGroup (Group 0 (GroupTypeSeq SeqPresSpace) vs))
           in  mkTPat
-                (PatGroup (Group 0 (GroupTypeSeq SeqPresDot) (NESeq.unsafeFromSeq (Seq.fromList [p xyPatIdents, p zwPatIdents]))))
+                (PatGroup (Group 0 (GroupTypeSeq SeqPresDot) [p xyPatIdents, p zwPatIdents]))
         )
     , mkUnitRT
         "pat par"
@@ -216,7 +211,7 @@ patParseTests =
         "pat par multi"
         (expectText "[x y , z w]" (expectParseOk tpatP))
         ( let p vs = mkUnTPat (PatGroup (Group 0 (GroupTypeSeq SeqPresSpace) vs))
-          in  mkTPat (PatGroup (Group 1 GroupTypePar (NESeq.unsafeFromSeq (Seq.fromList [p xyPatIdents, p zwPatIdents]))))
+          in  mkTPat (PatGroup (Group 1 GroupTypePar [p xyPatIdents, p zwPatIdents]))
         )
     , mkUnitRT
         "pat long replicate implicit seq"
@@ -226,11 +221,9 @@ patParseTests =
                 ( Group
                     0
                     (GroupTypeSeq SeqPresSpace)
-                    ( neseq
-                        [ mkUnTPat (PatExtent (ExtentLong xPatIdent (LongExtentReplicate Nothing)))
-                        , yPatIdent
-                        ]
-                    )
+                    [ mkUnTPat (PatExtent (ExtentLong xPatIdent (LongExtentReplicate Nothing)))
+                    , yPatIdent
+                    ]
                 )
             )
         )
@@ -242,11 +235,9 @@ patParseTests =
                 ( Group
                     0
                     (GroupTypeSeq SeqPresSpace)
-                    ( neseq
-                        [ xPatIdent
-                        , mkUnTPat (PatExtent (ExtentShort ShortExtentReplicate))
-                        ]
-                    )
+                    [ xPatIdent
+                    , mkUnTPat (PatExtent (ExtentShort ShortExtentReplicate))
+                    ]
                 )
             )
         )
@@ -370,7 +361,7 @@ testPatNormCases =
             , Pat
                 ( JotP
                     ()
-                    (PatGroup (Group 1 (GroupTypeSeq SeqPresSpace) (neseq [mkPure "x", mkPure "y"])))
+                    (PatGroup (Group 1 (GroupTypeSeq SeqPresSpace) [mkPure "x", mkPure "y"]))
                 )
             )
           ,
@@ -402,7 +393,7 @@ testPatNormCases =
             ( "repeat seq short"
             , "x ! y"
             , let xpart = mkTime (mkPure "x") (LongExtentReplicate Nothing)
-              in  Pat (JotP () (PatGroup (Group 0 (GroupTypeSeq SeqPresSpace) (neseq [xpart, mkPure "y"]))))
+              in  Pat (JotP () (PatGroup (Group 0 (GroupTypeSeq SeqPresSpace) [xpart, mkPure "y"])))
             )
           ,
             ( "elongate two long"

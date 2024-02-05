@@ -41,7 +41,7 @@ import Data.Bifunctor (Bifunctor (..))
 import Data.Bitraversable (Bitraversable (..))
 import Data.Foldable (toList)
 import Data.Ratio (denominator, numerator, (%))
-import Data.Sequence.NonEmpty (NESeq (..))
+import Data.Sequence (Seq)
 import Data.String (IsString (..))
 import Data.Text (Text)
 import Minipat.Print (Brace (..), Sep (..), braceCloseChar, braceOpenChar, sepChar)
@@ -334,7 +334,7 @@ groupPatTypeSep = \case
 data Group r = Group
   { groupLevel :: !Int
   , groupType :: !GroupType
-  , groupElems :: !(NESeq r)
+  , groupElems :: !(Seq r)
   }
   deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
 
@@ -349,7 +349,7 @@ instance (Pretty r) => Pretty (Group r) where
 
 -- | A polymeter wrapping at the given number of steps
 data Poly r = Poly
-  { polyElems :: !(NESeq r)
+  { polyElems :: !(Seq r)
   , polySteps :: !(Maybe Integer)
   }
   deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
@@ -467,17 +467,17 @@ instance Bitraversable Pat where
 mkPat :: (Monoid b) => PatX b a (UnPat b a) -> Pat b a
 mkPat = Pat . JotP mempty
 
-mkPatGroup :: (Monoid b) => GroupType -> NESeq (Pat b a) -> Pat b a
+mkPatGroup :: (Monoid b) => GroupType -> Seq (Pat b a) -> Pat b a
 mkPatGroup gt = mkPat . PatGroup . Group 0 gt . fmap unPat
 
 -- | 'Pat' and 'Stream' can be constructed abstractly with this
 class (Functor f) => Pattern f where
   patPure :: a -> f a
   patEmpty :: f a
-  patPar :: NESeq (f a) -> f a
-  patAlt :: NESeq (f a) -> f a
-  patRand :: NESeq (f a) -> f a
-  patSeq :: NESeq (f a, Rational) -> f a
+  patPar :: Seq (f a) -> f a
+  patAlt :: Seq (f a) -> f a
+  patRand :: Seq (f a) -> f a
+  patSeq :: Seq (f a, Rational) -> f a
   patEuc :: Euclid -> f a -> f a
   patRep :: Int -> f a -> f a
   patFastBy, patSlowBy :: Rational -> f a -> f a

@@ -21,8 +21,7 @@ import Control.Monad.Fix (fix)
 import Data.Char (isAlpha, isAlphaNum, isDigit, isSpace)
 import Data.Ratio (denominator, numerator)
 import Data.Sequence (Seq (..))
-import Data.Sequence.NonEmpty (NESeq (..), (|>))
-import Data.Sequence.NonEmpty qualified as NESeq
+import Data.Sequence qualified as Seq
 import Data.Text qualified as T
 import Looksee qualified as L
 import Minipat.Ast
@@ -38,8 +37,6 @@ annoJot (Anno b x) = JotP b x
 data ParseErr
   = -- | Dot notation forbidden in the current position
     ParseErrDotForbidden
-  | -- | Parsed an empty sequence
-    ParseErrEmpty
   | -- | Elongation not allowed in the current position
     ParseErrElongate
   | -- | Invalid quick ratio char
@@ -49,7 +46,6 @@ data ParseErr
 instance L.HasErrMessage ParseErr where
   getErrMessage = \case
     ParseErrDotForbidden -> ["Dot is not allowed in this position"]
-    ParseErrEmpty -> ["Sequence is empty"]
     ParseErrElongate -> ["Elongate is not allowed in this position"]
     ParseErrRatioChar c -> ["Invalid ratio " <> T.singleton c]
 
@@ -234,7 +230,7 @@ withPatDecosP ps = go
       Just p' -> go p'
       Nothing -> pure p
 
-spaceSeqPatP :: P (PPat a) -> P (NESeq (UnPPat a))
+spaceSeqPatP :: P (PPat a) -> P (Seq (UnPPat a))
 spaceSeqPatP pr = go Empty
  where
   go !acc = do
@@ -243,9 +239,7 @@ spaceSeqPatP pr = go Empty
       (Just c, _) | not (isEndChar c) -> do
         Pat r <- L.stripEndP pr
         go (acc :|> r)
-      _ -> case NESeq.nonEmptySeq acc of
-        Nothing -> L.throwP ParseErrEmpty
-        Just neAcc -> pure neAcc
+      _ -> pure acc
 
 spaceGroupP :: P (PPat a) -> P (Anno Loc (Group (UnPPat a)))
 spaceGroupP = annoP . fmap (Group 0 (GroupTypeSeq SeqPresSpace)) . spaceSeqPatP
@@ -253,7 +247,7 @@ spaceGroupP = annoP . fmap (Group 0 (GroupTypeSeq SeqPresSpace)) . spaceSeqPatP
 unNestSeqPatP :: Anno Loc (Group (UnPPat a)) -> PPat a
 unNestSeqPatP (Anno x p@(Group lvl _ acc)) =
   Pat $ case (acc, lvl) of
-    (r :<|| Empty, 0) -> r
+    (r :<| Empty, 0) -> r
     _ -> JotP x (PatGroup p)
 
 nestedSeqPatP :: P (PPat a) -> P (PPat a)
@@ -293,11 +287,11 @@ groupPatP delim opts pr pg = goStart
           Just (subDelim, subTy) -> do
             let Pat p = unNestSeqPatP g
             stripTokP subDelim
-            annoP (goRest subTy subDelim (NESeq.singleton p))
+            annoP (goRest subTy subDelim (Seq.singleton p))
           Nothing -> pure g
   goRest subTy subDelim !totalAcc = do
     Pat acc <- nestedSeqPatP pr
-    let totalAcc' = totalAcc |> acc
+    let totalAcc' = totalAcc :|> acc
     mc <- L.lookP L.unconsP
     if mc == delim
       then pure (Group 0 subTy totalAcc')
@@ -310,7 +304,7 @@ anglePatP = bracedP BraceAngle . fmap Pat . jotP . fmap (PatGroup . Group 0 Grou
 
 curlyPatP :: P (PPat a) -> P (PPat a)
 curlyPatP pr = fmap Pat $ jotP $ do
-  ps <- bracedP BraceCurly (fmap NESeq.unsafeFromSeq (L.sepBy1P (stripTokP ',') (fmap unPat (nestedSeqPatP pr))))
+  ps <- bracedP BraceCurly (L.sepBy1P (stripTokP ',') (fmap unPat (nestedSeqPatP pr)))
   mx <- L.lookP L.unconsP
   mc <-
     if mx == Just '%'

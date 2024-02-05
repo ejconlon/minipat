@@ -19,15 +19,16 @@ import Minipat.Ast
   , ShortExtent (..)
   , UnPat
   )
-import Minipat.Rewrite (Rw, overhaul, wrapRw)
+import Minipat.Rewrite (Rw, asksRw, overhaul, wrapRw)
 
-foldNorm :: (b -> b -> b) -> NESeq (UnPat b a) -> NESeq (UnPat b a)
+foldNorm :: (b -> b -> b) -> Seq (UnPat b a) -> Seq (UnPat b a)
 foldNorm f = goFirst
  where
-  goFirst (y :<|| ys) = do
-    goRest (NESeq.singleton y) ys
+  goFirst = \case
+    Empty -> Empty
+    (y :<| ys) -> goRest (NESeq.singleton y) ys
   goRest ws@(winit :||> wlast@(JotP wlb wlpf)) = \case
-    Empty -> ws
+    Empty -> NESeq.toSeq ws
     y@(JotP b pf) :<| ys ->
       let ws' = case pf of
             PatExtent (ExtentShort s) ->
@@ -53,9 +54,10 @@ subNorm f x = case x of
     let ss' = case ty of
           GroupTypeSeq _ -> foldNorm f ss
           _ -> ss
-    -- Unwrap any group singletons we find
+    -- Unwrap any empty groups or singletons we find
     case ss' of
-      q :<|| Empty -> pure q
+      Empty -> asksRw (`JotP` PatSilence)
+      q :<| Empty -> pure q
       _ -> wrapRw (PatGroup (Group lvl ty ss'))
   _ -> wrapRw x
 
