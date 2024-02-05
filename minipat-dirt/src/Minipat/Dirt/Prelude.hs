@@ -2,28 +2,27 @@
 
 module Minipat.Dirt.Prelude where
 
-import Dahdit.Midi.Osc (Datum (..), DatumType (..), IsDatum (..))
-import Data.Map.Strict qualified as Map
+import Data.Int (Int32)
 import Data.Text (Text)
--- import Minipat.Dirt.Eval (liveEvalNotePat, liveEvalPat, liveEvalSoundPat)
-import Minipat.Dirt.Osc (Attrs)
+import Minipat.Dirt.Osc (Attr (..), Attrs, IsAttrs (..))
 import Minipat.Stream (Stream (..), streamInnerBind)
 
-setIn, (#) :: Stream Attrs -> Stream Attrs -> Stream Attrs
-setIn p1 p2 = streamInnerBind p1 (\m1 -> fmap (<> m1) p2)
+setIn, (#) :: (IsAttrs a, IsAttrs b) => Stream a -> Stream b -> Stream Attrs
+setIn p1 p2 = streamInnerBind p1 $ \m1 ->
+  let a1 = toAttrs m1 in fmap (\m2 -> toAttrs m2 <> a1) p2
 (#) = setIn
 
-pF :: (Real a) => Text -> Stream a -> Stream Attrs
-pF k = fmap (Map.singleton k . DatumFloat . realToFrac)
+pF :: (Real a) => Text -> Stream a -> Stream (Attr Float)
+pF k = fmap (Attr k . realToFrac)
 
-pI :: (Integral a) => Text -> Stream a -> Stream Attrs
-pI k = fmap (Map.singleton k . DatumInt32 . fromIntegral)
+pI :: (Integral a) => Text -> Stream a -> Stream (Attr Int32)
+pI k = fmap (Attr k . fromIntegral)
 
--- pat :: DatumType -> Text -> Text -> Stream Attrs
--- pat dt k t = stream k (liveEvalPat dt t)
+stream :: Text -> Stream a -> Stream (Attr a)
+stream k = fmap (Attr k)
 
-stream :: (IsDatum a) => Text -> Stream a -> Stream Attrs
-stream k = fmap (Map.singleton k . toDatum)
+-- pat :: IsDatum a => DatumTypeProxy a -> Text -> Text -> Stream (Attr a)
+-- pat dtp k t = stream k (liveEvalPat dt t)
 
 -- sound, s :: Text -> Stream Attrs
 -- sound = liveEvalSoundPat
@@ -37,6 +36,7 @@ stream k = fmap (Map.singleton k . toDatum)
 -- default note is c5, so we subtract 60 to get to note 0
 -- midinote :: Text -> Stream Attrs
 
+-- TODO check these are all float, not int
 -- Basic effect parameters
 accelerate
   , attack
@@ -68,7 +68,7 @@ accelerate
   , sustain
   , tremolodepth
   , tremolorate
-    :: (Real a) => Stream a -> Stream Attrs
+    :: (Real a) => Stream a -> Stream (Attr Float)
 accelerate = pF "accelerate"
 attack = pF "attack"
 bandf = pF "bandf"
@@ -120,7 +120,7 @@ accel
   , sz
   , tremdp
   , tremr
-    :: (Real a) => Stream a -> Stream Attrs
+    :: (Real a) => Stream a -> Stream (Attr Float)
 att = attack
 bpf = bandf
 bpq = bandq

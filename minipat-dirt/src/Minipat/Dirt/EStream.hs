@@ -5,12 +5,7 @@ module Minipat.Dirt.EStream where
 
 import Control.Exception (Exception, SomeException (..))
 import Data.Kind (Type)
-import Data.Proxy (Proxy (..))
 import Data.Semigroup (Semigroup (..))
-import Data.String (IsString (..))
-import Data.Text (Text)
-import Data.Typeable (Typeable)
--- import Minipat.Eval (evalPat)
 import Minipat.Stream (Stream)
 import Minipat.Stream qualified as S
 

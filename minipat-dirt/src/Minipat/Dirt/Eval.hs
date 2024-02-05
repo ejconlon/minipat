@@ -1,11 +1,11 @@
 -- {-# LANGUAGE OverloadedStrings #-}
 
-module Minipat.Dirt.Eval
-  -- ( liveEvalPat
-  -- , liveEvalSoundPat
-  -- , liveEvalNotePat
-  -- )
-where
+module Minipat.Dirt.Eval where
+
+-- ( liveEvalPat
+-- , liveEvalSoundPat
+-- , liveEvalNotePat
+-- )
 
 -- import Control.Exception (Exception)
 -- import Dahdit.Midi.Osc (Datum (..), DatumType (..))

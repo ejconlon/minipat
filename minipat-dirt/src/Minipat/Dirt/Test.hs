@@ -6,7 +6,6 @@ import Control.Concurrent.MVar (withMVar)
 import Control.Exception (throwIO)
 import Dahdit.Midi.Osc (Datum (..))
 import Data.Foldable (for_)
-import Data.Map.Strict qualified as Map
 import Data.Ratio ((%))
 import Data.Sequence (Seq)
 import Minipat.Dirt.Core
@@ -20,7 +19,7 @@ import Minipat.Dirt.Core
   , setTempo
   , withSt
   )
-import Minipat.Dirt.Osc (Attrs, PlayEnv (..), PlayErr, Timed (..), convertTape, handshakePacket, playPacket)
+import Minipat.Dirt.Osc (Attrs, PlayEnv (..), PlayErr, Timed (..), attrs, convertTape, handshakePacket, playPacket)
 import Minipat.Stream (Ev (..), streamFastBy, tapeSingleton)
 import Minipat.Time (Arc (..), Span (..))
 import Nanotime (TimeLike (..), threadDelayDelta, timeDeltaFromFracSecs)
@@ -63,7 +62,7 @@ testPlay = do
           convertTape penv $
             tapeSingleton $
               Ev (Span (Arc 0 1) (Just (Arc 0 1))) $
-                Map.fromList
+                attrs
                   [ ("sound", DatumString "tabla")
                   , ("orbit", DatumInt32 0)
                   ]
@@ -76,7 +75,7 @@ testReal = do
   withSt $ \st -> do
     withMVar (stRes st) (sendHandshake . resConn)
     let m =
-          Map.fromList
+          attrs
             [ ("sound", DatumString "cpu")
             , ("orbit", DatumInt32 0)
             ]

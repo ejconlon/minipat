@@ -1,8 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Minipat.Dirt.Osc
-  ( Timed (..)
+  ( DatumTypeProxy (..)
+  , unDatumTypeProxy
+  , Timed (..)
   , Attrs
+  , attrs
+  , IsAttrs (..)
+  , Attr (..)
   , PlayErr (..)
   , PlayEnv (..)
   , convertEvent
@@ -15,9 +20,10 @@ where
 import Control.Exception (Exception)
 import Control.Monad (foldM)
 import Control.Monad.Except (throwError)
-import Dahdit.Midi.Osc (Datum (..), Msg (..), Packet (..))
+import Dahdit.Midi.Osc (Datum (..), DatumType (..), IsDatum (..), Msg (..), Packet (..))
 import Dahdit.Midi.OscAddr (RawAddrPat)
 import Data.Foldable (foldl')
+import Data.Int (Int32)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Sequence (Seq (..))
@@ -27,6 +33,17 @@ import Minipat.Stream (Ev (..), Tape, tapeToList)
 import Minipat.Time (CycleDelta (..), CycleTime (..), Span, spanCycle, spanDelta)
 import Nanotime (PosixTime, TimeDelta (..), addTime, timeDeltaFromFracSecs, timeDeltaToNanos)
 
+data DatumTypeProxy a where
+  DatumLikeInt32 :: DatumTypeProxy Int32
+  DatumLikeFloat :: DatumTypeProxy Float
+  DatumLikeString :: DatumTypeProxy Text
+
+unDatumTypeProxy :: DatumTypeProxy a -> DatumType
+unDatumTypeProxy = \case
+  DatumLikeInt32 -> DatumTypeInt32
+  DatumLikeFloat -> DatumTypeFloat
+  DatumLikeString -> DatumTypeString
+
 data Timed a = Timed
   { timedKey :: !PosixTime
   , timedVal :: !a
@@ -34,6 +51,24 @@ data Timed a = Timed
   deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
 
 type Attrs = Map Text Datum
+
+attrs :: [(Text, Datum)] -> Attrs
+attrs = Map.fromList
+
+class IsAttrs a where
+  toAttrs :: a -> Attrs
+
+instance IsAttrs Attrs where
+  toAttrs = id
+
+data Attr a = Attr
+  { attrKey :: !Text
+  , attrVal :: !a
+  }
+  deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
+
+instance (IsDatum a) => IsAttrs (Attr a) where
+  toAttrs (Attr k v) = Map.singleton k (toDatum v)
 
 namedPayload :: Attrs -> Seq Datum
 namedPayload = foldl' go Empty . Map.toList
@@ -114,26 +149,26 @@ timeDeltaToMicros td =
   let (_, ns) = timeDeltaToNanos td
   in  fromIntegral ns / 1000
 
-convertEvent :: PlayEnv -> Ev Attrs -> M (Timed Attrs)
+convertEvent :: (IsAttrs a) => PlayEnv -> Ev a -> M (Timed Attrs)
 convertEvent (PlayEnv startTime startCyc cps) (Ev sp dat) = do
   targetCyc <- fmap unCycleTime (spanCycleM sp)
   let cycOffset = targetCyc - fromInteger startCyc
       onset = addTime startTime (timeDeltaFromFracSecs (cycOffset / cps))
   deltaCyc <- fmap unCycleDelta (spanDeltaM sp)
   let deltaTime = timeDeltaToMicros (timeDeltaFromFracSecs (deltaCyc / cps))
-  dat' <- replaceAliases playAliases dat
+  dat' <- replaceAliases playAliases (toAttrs dat)
   dat'' <- insertSafe "delta" (DatumFloat deltaTime) dat'
   dat''' <- insertSafe "cps" (DatumFloat (realToFrac cps)) dat''
   pure (Timed onset dat''')
 
-convertTape :: PlayEnv -> Tape Attrs -> M (Seq (Timed Attrs))
+convertTape :: (IsAttrs a) => PlayEnv -> Tape a -> M (Seq (Timed Attrs))
 convertTape penv = traverse (convertEvent penv) . Seq.fromList . tapeToList
 
 playAddr :: RawAddrPat
 playAddr = "/dirt/play"
 
 playPacket :: Attrs -> Packet
-playPacket attrs = PacketMsg (Msg playAddr (namedPayload attrs))
+playPacket ats = PacketMsg (Msg playAddr (namedPayload ats))
 
 handshakeAddr :: RawAddrPat
 handshakeAddr = "/dirt/handshake"
