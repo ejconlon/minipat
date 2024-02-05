@@ -4,7 +4,8 @@ module Minipat.Dirt.Prelude where
 
 import Data.Int (Int32)
 import Data.Text (Text)
-import Minipat.Dirt.Osc (Attr (..), Attrs, IsAttrs (..))
+import Minipat.Dirt.Osc (Attr (..), Attrs, DatumProxy, IsAttrs (..))
+import Minipat.Dirt.Parser (datumPat, notePat, soundPat)
 import Minipat.Stream (Stream (..), streamInnerBind)
 
 setIn, (#) :: (IsAttrs a, IsAttrs b) => Stream a -> Stream b -> Stream Attrs
@@ -21,20 +22,16 @@ pI k = fmap (Attr k . fromIntegral)
 stream :: Text -> Stream a -> Stream (Attr a)
 stream k = fmap (Attr k)
 
--- pat :: IsDatum a => DatumTypeProxy a -> Text -> Text -> Stream (Attr a)
--- pat dtp k t = stream k (liveEvalPat dt t)
+pat :: DatumProxy a -> Text -> Text -> Stream (Attr a)
+pat dp k = stream k . datumPat dp
 
--- sound, s :: Text -> Stream Attrs
--- sound = liveEvalSoundPat
--- s = sound
---
--- note, n :: Text -> Stream Attrs
--- note = liveEvalNotePat
--- n = note
+sound, s :: Text -> Stream Attrs
+sound = soundPat
+s = sound
 
--- TODO essentially - midinote = note . fmap (- 60)
--- default note is c5, so we subtract 60 to get to note 0
--- midinote :: Text -> Stream Attrs
+note, n :: Text -> Stream (Attr Int32)
+note = notePat
+n = note
 
 -- TODO check these are all float, not int
 -- Basic effect parameters

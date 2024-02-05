@@ -3,13 +3,9 @@
 
 module Minipat.Dirt.Notes where
 
-import Data.Char (isAlpha)
 import Data.Maybe (fromMaybe)
 import Data.Sequence (Seq)
 import Data.Text (Text)
-import Data.Text qualified as T
-import Looksee qualified as L
-import Minipat.Parser (P)
 import Prettyprinter (Pretty (..))
 
 data NoteName
@@ -113,17 +109,27 @@ octNoteIsMidi (OctNote moct nn) =
         | otherwise -> oct >= 0 && oct <= 8
 
 -- | An integral note type that can represent notes outside the MIDI scale.
+-- This is rooted at C5, MIDI note 60, so care must be taken to adjust before
+-- converting to/from MIDI values.
 newtype LinNote = LinNote {unLinNote :: Int}
   deriving stock (Show)
   deriving newtype (Eq, Ord)
 
--- Midi notes are between 0 (C-1) and 127 (G9)
--- Piano notes are between 21 (A0) and 108 (C8)
-linIsMidiNote :: LinNote -> Bool
-linIsMidiNote (LinNote n) = n >= 0 && n < 127
+linToMidi :: LinNote -> Int
+linToMidi = (60 +) . unLinNote
+
+midiToLin :: Int -> LinNote
+midiToLin = LinNote . subtract 60
 
 linFreq :: LinNote -> Double
-linFreq (LinNote n) = 440 * (2 ** ((fromIntegral n - 69) / 12))
+linFreq n =
+  let m = fromIntegral (linToMidi n)
+  in  440 * (2 ** ((m - 69) / 12))
+
+-- Midi notes are between 0 (C-1) and 127 (G9)
+-- Piano notes are between 21 (A0) and 108 (C8)
+linIsMidi :: LinNote -> Bool
+linIsMidi n = let m = linToMidi n in m >= 0 && m < 128
 
 newtype Interval = Interval {unInterval :: Int}
   deriving stock (Show)
@@ -184,15 +190,6 @@ convNoteName = \case
   "bs" -> Just NoteNameBS
   "bsharp" -> Just NoteNameBS
   _ -> Nothing
-
-parseOctNote :: P OctNote
-parseOctNote = do
-  noteRaw <- L.takeWhile1P isAlpha
-  case convNoteName noteRaw of
-    Nothing -> fail ("Not note name: " ++ T.unpack noteRaw)
-    Just nn -> do
-      moct <- fmap (fmap (Octave . fromInteger)) (L.optP L.intP)
-      pure (OctNote moct nn)
 
 data ChordName
   = ChordNameMaj
