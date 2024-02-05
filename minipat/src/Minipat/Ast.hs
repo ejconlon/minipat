@@ -5,7 +5,6 @@
 module Minipat.Ast
   ( Ident (..)
   , Select (..)
-  , Selected (..)
   , QuickRatio (..)
   , quickRatioValue
   , quickRatioRep
@@ -56,22 +55,17 @@ newtype Ident = Ident {unIdent :: Text}
   deriving stock (Show)
   deriving newtype (Eq, Ord, IsString, Pretty)
 
--- * Selects
+-- * Select
 
-data Select = SelectSample !Integer | SelectTransform !Ident
-  deriving stock (Eq, Ord, Show)
-
-instance Pretty Select where
-  pretty s =
-    ":" <> case s of
-      SelectSample i -> pretty i
-      SelectTransform t -> pretty t
-
-data Selected a = Selected !a !(Maybe Select)
+-- | A selection of some kind - note, transformation, etc.
+data Select s a = Select !a !(Maybe s)
   deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
 
-instance (Pretty a) => Pretty (Selected a) where
-  pretty (Selected a ms) = pretty a <> maybe mempty pretty ms
+instance (Pretty s, Pretty a) => Pretty (Select s a) where
+  pretty (Select a ms) =
+    case ms of
+      Nothing -> pretty a
+      Just s -> P.hcat [pretty a, ":", pretty s]
 
 -- * QuickRatio
 

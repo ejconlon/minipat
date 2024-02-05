@@ -9,19 +9,18 @@ module Minipat.Parser
   , PPat
   , topPatP
   , identPatP
+  , selectIdentPatP
   , factorP
   , identP
   , selectP
-  , selectedP
-  , selectedIdentPatP
   )
 where
 
 import Bowtie (Anno (..), Jot, pattern JotP)
 import Control.Exception (Exception)
-import Control.Monad (when)
+import Control.Monad (guard, when)
 import Control.Monad.Fix (fix)
-import Data.Char (isAlpha, isAlphaNum, isDigit, isSpace)
+import Data.Char (isAlpha, isAlphaNum, isSpace)
 import Data.Ratio (denominator, numerator)
 import Data.Sequence (Seq (..))
 import Data.Sequence qualified as Seq
@@ -109,8 +108,18 @@ tokP = L.charP_
 stripIdentP :: P Ident
 stripIdentP = L.stripEndP identP
 
+guardP :: (Char -> Bool) -> P ()
+guardP f = do
+  h <- L.lookP L.headP
+  guard (f h)
+
 identP :: P Ident
 identP = fmap Ident (L.takeWhile1P isIdentChar)
+
+selectP :: P a -> P s -> P (Select s a)
+selectP pa ps = do
+  a <- pa
+  fmap (Select a) (L.optP (tokP ':' *> ps))
 
 fracFactorP :: P Factor
 fracFactorP = do
@@ -347,16 +356,6 @@ topPatP p = patP p (fix (\pf -> rePatP factorP pf pf))
 identPatP :: P (PPat Ident)
 identPatP = topPatP identP
 
-selectP :: P Select
-selectP = do
-  tokP ':'
-  isNum <- L.lookP (fmap isDigit L.headP)
-  if isNum
-    then fmap SelectSample L.uintP
-    else fmap SelectTransform identP
-
-selectedP :: P a -> P (Selected a)
-selectedP pa = Selected <$> pa <*> L.optP selectP
-
-selectedIdentPatP :: P (PPat (Selected Ident))
-selectedIdentPatP = topPatP (selectedP identP)
+-- | Parses a top-level pattern of identifiers with selections.
+selectIdentPatP :: P s -> P (PPat (Select s Ident))
+selectIdentPatP = topPatP . selectP identP

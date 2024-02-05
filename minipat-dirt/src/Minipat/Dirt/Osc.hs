@@ -1,8 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Minipat.Dirt.Osc
-  ( DatumTypeProxy (..)
-  , unDatumTypeProxy
+  ( DatumProxy (..)
+  , datumProxyType
   , Timed (..)
   , Attrs
   , attrs
@@ -23,7 +23,7 @@ import Control.Monad.Except (throwError)
 import Dahdit.Midi.Osc (Datum (..), DatumType (..), IsDatum (..), Msg (..), Packet (..))
 import Dahdit.Midi.OscAddr (RawAddrPat)
 import Data.Foldable (foldl')
-import Data.Int (Int32)
+import Data.Int (Int32, Int64)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Sequence (Seq (..))
@@ -33,16 +33,20 @@ import Minipat.Stream (Ev (..), Tape, tapeToList)
 import Minipat.Time (CycleDelta (..), CycleTime (..), Span, spanCycle, spanDelta)
 import Nanotime (PosixTime, TimeDelta (..), addTime, timeDeltaFromFracSecs, timeDeltaToNanos)
 
-data DatumTypeProxy a where
-  DatumLikeInt32 :: DatumTypeProxy Int32
-  DatumLikeFloat :: DatumTypeProxy Float
-  DatumLikeString :: DatumTypeProxy Text
+data DatumProxy a where
+  DatumProxyInt32 :: DatumProxy Int32
+  DatumProxyInt64 :: DatumProxy Int64
+  DatumProxyFloat :: DatumProxy Float
+  DatumProxyDouble :: DatumProxy Double
+  DatumProxyString :: DatumProxy Text
 
-unDatumTypeProxy :: DatumTypeProxy a -> DatumType
-unDatumTypeProxy = \case
-  DatumLikeInt32 -> DatumTypeInt32
-  DatumLikeFloat -> DatumTypeFloat
-  DatumLikeString -> DatumTypeString
+datumProxyType :: DatumProxy a -> DatumType
+datumProxyType = \case
+  DatumProxyInt32 -> DatumTypeInt32
+  DatumProxyInt64 -> DatumTypeInt64
+  DatumProxyFloat -> DatumTypeFloat
+  DatumProxyDouble -> DatumTypeDouble
+  DatumProxyString -> DatumTypeString
 
 data Timed a = Timed
   { timedKey :: !PosixTime

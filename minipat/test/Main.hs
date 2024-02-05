@@ -15,11 +15,11 @@ import Data.Maybe (fromMaybe)
 import Data.Ratio ((%))
 import Data.Sequence (Seq (..))
 import Data.Text (Text)
-import Looksee (Err, parse)
+import Looksee (Err, intP, parse)
 import Minipat.Ast
 import Minipat.Interp (interpPat)
 import Minipat.Norm (normPat)
-import Minipat.Parser (P, ParseErr, factorP, identP, identPatP, selectedIdentPatP)
+import Minipat.Parser (P, ParseErr, factorP, identP, identPatP, selectIdentPatP)
 import Minipat.Print (render)
 import Minipat.Stream (Ev (..), streamRun)
 import Minipat.Time (Arc (..), CycleTime (..), Span (..))
@@ -79,8 +79,8 @@ mkUnTPat = unPat . mkTPat
 tpatP :: P (TPat Ident)
 tpatP = fmap (first (const ())) identPatP
 
-tspatP :: P (TPat (Selected Ident))
-tspatP = fmap (first (const ())) selectedIdentPatP
+tspatP :: P (TPat (Select Integer Ident))
+tspatP = fmap (first (const ())) (selectIdentPatP intP)
 
 xPatIdent, yPatIdent :: UnTPat Ident
 xPatIdent = mkUnTPat (PatPure (Ident "x"))

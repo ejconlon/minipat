@@ -1,40 +1,43 @@
 -- {-# LANGUAGE OverloadedStrings #-}
 
-module Minipat.Dirt.Eval where
+module Minipat.Dirt.Eval
+  ( datumPat
+  )
+where
 
 -- ( liveEvalPat
 -- , liveEvalSoundPat
 -- , liveEvalNotePat
 -- )
 
--- import Control.Exception (Exception)
--- import Dahdit.Midi.Osc (Datum (..), DatumType (..))
--- import Data.Map.Strict qualified as Map
--- import Data.Text (Text)
--- import Data.Void (Void)
--- import Looksee (intP, sciP)
--- import Minipat.Ast (Ident (..), Pattern (..), Select (..))
--- import Minipat.Dirt.Notes (LinNote)
--- import Minipat.Dirt.Osc (Attrs)
--- import Minipat.Eval (evalPat)
--- import Minipat.Interp (InterpErr (..))
--- import Minipat.Parser (P, identP)
---
--- datumP :: DatumType -> P Datum
--- datumP = \case
---   DatumTypeInt32 -> fmap (DatumInt32 . fromInteger) intP
---   DatumTypeInt64 -> fmap (DatumInt64 . fromInteger) intP
---   DatumTypeFloat -> fmap (DatumFloat . realToFrac) sciP
---   DatumTypeDouble -> fmap (DatumDouble . realToFrac) sciP
---   DatumTypeString -> fmap (DatumString . unIdent) identP
---   dt -> fail ("Datum type is not parseable: " <> show dt)
---
--- forbidEvalEnv :: DatumType -> EvalEnv e Datum
--- forbidEvalEnv dt = EvalEnv forbidInterpEnv (datumP dt)
---
--- liveEvalPat :: (Pattern f) => DatumType -> Text -> f Datum
--- liveEvalPat dt txt = either (pure patEmpty) id (evalPat @_ @Void (forbidEvalEnv dt) txt)
---
+import Control.Exception (Exception)
+import Dahdit.Midi.Osc (Datum (..), DatumType (..))
+import Data.Map.Strict qualified as Map
+import Data.Text (Text)
+import Data.Void (Void)
+import Looksee (intP, sciP)
+import Minipat.Ast (Ident (..), Pattern (..), Select (..))
+import Minipat.Dirt.Notes (LinNote)
+import Minipat.Dirt.Osc (Attrs, DatumProxy (..))
+import Minipat.Eval (evalPat)
+import Minipat.Interp (InterpErr (..))
+import Minipat.Parser (P, identP)
+
+datumP :: DatumProxy a -> P a
+datumP = \case
+  DatumProxyInt32 -> fmap fromInteger intP
+  DatumProxyInt64 -> fmap fromInteger intP
+  DatumProxyFloat -> fmap realToFrac sciP
+  DatumProxyDouble -> fmap realToFrac sciP
+  DatumProxyString -> fmap unIdent identP
+
+-- TODO figure out out to propagate error
+parsePat :: (Pattern f) => P a -> Text -> f a
+parsePat p = either (pure patEmpty) id . evalPat p
+
+datumPat :: (Pattern f) => DatumProxy a -> Text -> f a
+datumPat = parsePat . datumP
+
 -- data SoundSelectErr = SoundSelectErr
 --   deriving stock (Eq, Ord, Show)
 --
