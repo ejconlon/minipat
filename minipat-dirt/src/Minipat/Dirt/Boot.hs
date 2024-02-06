@@ -17,6 +17,9 @@ initialize = do
   L.logInfo logger "Initializing"
   C.initSt logger C.defaultEnv
 
+dispose :: Dirt => IO ()
+dispose = C.disposeSt dirt
+
 getCps :: (Dirt) => IO Rational
 getCps = C.getCps dirt
 
