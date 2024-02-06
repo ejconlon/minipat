@@ -121,7 +121,7 @@ data Domain = Domain
   , domAhead :: !(TVar TimeDelta)
   , domPlaying :: !(TVar Bool)
   , domCycle :: !(TVar Integer)
-  , domOrbits :: !(TVar (Map Int (Stream Attrs)))
+  , domOrbits :: !(TVar (Map Integer (Stream Attrs)))
   , domStream :: !(TVar (Stream Attrs))
   , domQueue :: !(TQueue (Timed Packet))
   -- TODO bound the queue
@@ -187,17 +187,17 @@ setCycle :: St -> Integer -> IO ()
 setCycle st x = atomically (writeTVar (domCycle (stDom st)) x)
 
 -- TODO only set orbit if not present
-updateOrbits :: St -> (Map Int (Stream Attrs) -> Map Int (Stream Attrs)) -> IO ()
+updateOrbits :: St -> (Map Integer (Stream Attrs) -> Map Integer (Stream Attrs)) -> IO ()
 updateOrbits st f = atomically $ do
   let dom = stDom st
   m' <- stateTVar (domOrbits dom) (\m -> let m' = f m in (m', m'))
   let z = foldl' (\x (o, y) -> x <> fmap (Map.insert "orbit" (DatumInt32 (fromIntegral o))) y) mempty (Map.toList m')
   writeTVar (domStream dom) z
 
-setOrbit :: St -> Int -> Stream Attrs -> IO ()
+setOrbit :: St -> Integer -> Stream Attrs -> IO ()
 setOrbit st o s = updateOrbits st (Map.insert o s)
 
-clearOrbit :: St -> Int -> IO ()
+clearOrbit :: St -> Integer -> IO ()
 clearOrbit st o = updateOrbits st (Map.delete o)
 
 clearAllOrbits :: St -> IO ()

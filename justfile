@@ -47,5 +47,6 @@ lint-apply:
 
 # Run a dirt session in ghci
 dirt:
+  just build minipat-dirt
   bin/dirt-ghci
 
