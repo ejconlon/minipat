@@ -31,7 +31,6 @@ library
       Minipat.Dirt.Logger
       Minipat.Dirt.Notes
       Minipat.Dirt.Osc
-      Minipat.Dirt.Parser
       Minipat.Dirt.Prelude
       Minipat.Dirt.Resources
       Minipat.Dirt.Test
