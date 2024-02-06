@@ -8,6 +8,7 @@ import Control.Applicative (Alternative (..))
 import Dahdit.Midi.Osc (Datum (..))
 import Data.Char (isAlpha, isAlphaNum)
 import Data.Int (Int32)
+import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -56,6 +57,11 @@ chordNameP = do
     Nothing -> fail ("Not chord name: " ++ T.unpack nameRaw)
     Just cn -> pure cn
 
+ordP :: (Ord a, Show a) => Map a b -> P a -> P b
+ordP m pa =  pa >>= \a -> case Map.lookup a m of
+  Nothing -> fail ("Not found: " ++ show a)
+  Just b -> pure b
+
 -- General combinators
 
 setIn, (#) :: (IsAttrs a, IsAttrs b) => Stream a -> Stream b -> Stream Attrs
@@ -86,15 +92,37 @@ data Sound = Sound
 instance IsAttrs Sound where
   toAttrs (Sound so mn) = Map.insert "sound" (DatumString (unIdent so)) (maybe Map.empty toAttrs mn)
 
+soundP :: P Sound
+soundP = fmap (\(Select so mn) -> Sound so mn) (selectP identP noteP)
+
 sound, s :: Pattern f => Text -> f Sound
-sound = fmap conv . parsePat (selectP identP noteP)
- where
-  conv (Select so mn) = Sound so mn
+sound = parsePat soundP
 s = sound
 
 note, n :: Pattern f => Text -> f Note
 note = parsePat noteP
 n = note
+
+data Chord = Chord
+  { chordRoot :: !Note
+  , chordName :: !ChordName
+  } deriving stock (Eq, Ord, Show)
+
+-- chord :: Pattern f =>
+
+data Arp = ArpUp | ArpDown deriving stock (Eq, Ord, Show, Enum, Bounded)
+
+arpMap :: Map Text Arp
+arpMap = Map.fromList [("up", ArpUp), ("down", ArpDown)]
+
+arpP :: P Arp
+arpP = ordP arpMap (fmap unIdent identP)
+
+arp :: Pattern f => Text -> f Arp
+arp = parsePat arpP
+
+-- strum :: Stream Arp -> Stream Chord -> Stream Note
+-- strum arps chords = undefined
 
 -- Params
 

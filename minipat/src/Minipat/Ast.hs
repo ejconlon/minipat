@@ -41,7 +41,7 @@ import Data.Bifunctor (Bifunctor (..))
 import Data.Bitraversable (Bitraversable (..))
 import Data.Foldable (toList)
 import Data.Ratio (denominator, numerator, (%))
-import Data.Sequence (Seq)
+import Data.Sequence (Seq (..))
 import Data.String (IsString (..))
 import Data.Text (Text)
 import Minipat.Print (Brace (..), Sep (..), braceCloseChar, braceOpenChar, sepChar)
@@ -468,7 +468,16 @@ mkPat :: (Monoid b) => PatX b a (UnPat b a) -> Pat b a
 mkPat = Pat . JotP mempty
 
 mkPatGroup :: (Monoid b) => GroupType -> Seq (Pat b a) -> Pat b a
-mkPatGroup gt = mkPat . PatGroup . Group 0 gt . fmap unPat
+mkPatGroup gt = \case
+  Empty -> mkPat PatSilence
+  x :<| Empty -> x
+  xs -> mkPat (PatGroup (Group 0 gt (fmap unPat xs)))
+
+-- mkPatSeq :: (Monoid b) => Seq (Pat b a, Rational) -> Pat b a
+-- mkPatSeq = \case
+--   Empty -> mkPat PatSilence
+--   (x, _) :<| Empty -> x
+--   xs -> mkPat (PatGroup (Group 0 (GroupTypeSeq SeqPresSpace) _
 
 -- | 'Pat' and 'Stream' can be constructed abstractly with this
 class (Functor f) => Pattern f where
@@ -488,9 +497,9 @@ class (Functor f) => Pattern f where
 instance (Monoid b) => Pattern (Pat b) where
   patPure = mkPat . PatPure
   patEmpty = mkPat PatSilence
-  patPar = mkPat . PatGroup . Group 0 GroupTypePar . fmap unPat
-  patAlt = mkPat . PatGroup . Group 0 GroupTypeAlt . fmap unPat
-  patRand = mkPat . PatGroup . Group 0 GroupTypeRand . fmap unPat
+  patPar = mkPatGroup GroupTypePar
+  patAlt = mkPatGroup GroupTypeAlt
+  patRand = mkPatGroup GroupTypeRand
   patSeq = error "TODO"
   patEuc = error "TODO"
   patRep = error "TODO"
