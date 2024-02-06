@@ -56,7 +56,7 @@ instance Pretty NoteName where
     NoteNameB -> "b"
     NoteNameBS -> "bs"
 
-noteValue :: NoteName -> Int
+noteValue :: NoteName -> Integer
 noteValue = \case
   NoteNameCF -> -1
   NoteNameC -> 0
@@ -80,7 +80,7 @@ noteValue = \case
   NoteNameB -> 11
   NoteNameBS -> 12
 
-newtype Octave = Octave {unOctave :: Int}
+newtype Octave = Octave {unOctave :: Integer}
   deriving stock (Show)
   deriving newtype (Eq, Ord, Enum, Pretty)
 
@@ -111,49 +111,49 @@ octNoteIsMidi (OctNote moct nn) =
 -- | An integral note type that can represent notes outside the MIDI scale.
 -- This is rooted at C5, MIDI note 60, so care must be taken to adjust before
 -- converting to/from MIDI values.
-newtype LinNote = LinNote {unLinNote :: Int}
+newtype Note = Note {unNote :: Integer}
   deriving stock (Show)
   deriving newtype (Eq, Ord)
 
-c5MidiNum :: Int
+c5MidiNum :: Integer
 c5MidiNum = 72
 
-linToMidi :: LinNote -> Int
-linToMidi = (c5MidiNum +) . unLinNote
+noteToMidi :: Note -> Integer
+noteToMidi = (c5MidiNum +) . unNote
 
-midiToLin :: Int -> LinNote
-midiToLin = LinNote . subtract c5MidiNum
+midiToNote :: Integer -> Note
+midiToNote = Note . subtract c5MidiNum
 
-linFreq :: LinNote -> Double
-linFreq n =
-  let m = fromIntegral (linToMidi n)
-  in  440 * (2 ** ((m - 69) / 12))
+noteFreq :: (Floating a) => Note -> a
+noteFreq n =
+  let m = noteToMidi n
+  in  440 * (2 ** ((fromInteger m - 69) / 12))
 
 -- Midi notes are between 0 (C-1) and 127 (G9)
 -- Piano notes are between 21 (A0) and 108 (C8)
-linIsMidi :: LinNote -> Bool
-linIsMidi n = let m = linToMidi n in m >= 0 && m < 128
+noteIsMidi :: Note -> Bool
+noteIsMidi n = let m = noteToMidi n in m >= 0 && m < 128
 
-newtype Interval = Interval {unInterval :: Int}
+newtype Interval = Interval {unInterval :: Integer}
   deriving stock (Show)
   deriving newtype (Eq, Ord, Num)
 
-linAddInterval :: Interval -> LinNote -> LinNote
-linAddInterval (Interval i) (LinNote n) = LinNote (i + n)
+noteAddInterval :: Interval -> Note -> Note
+noteAddInterval (Interval i) (Note n) = Note (i + n)
 
-linToOct :: LinNote -> OctNote
-linToOct (LinNote n) = OctNote (Just (Octave (div n 12 - 1))) (toEnum (mod n 12))
+noteToOct :: Note -> OctNote
+noteToOct (Note n) = OctNote (Just (Octave (div n 12 - 1))) (toEnum (mod (fromInteger n) 12))
 
-linSubInterval :: LinNote -> LinNote -> Interval
-linSubInterval (LinNote a) (LinNote b) = Interval (a - b)
+linSubInterval :: Note -> Note -> Interval
+linSubInterval (Note a) (Note b) = Interval (a - b)
 
-octToLin :: OctNote -> LinNote
-octToLin (OctNote moct nn) =
+octToNote :: OctNote -> Note
+octToNote (OctNote moct nn) =
   let oct = maybe 5 unOctave moct
-  in  LinNote ((oct + 1) * 12 + noteValue nn - c5MidiNum)
+  in  Note ((oct + 1) * 12 + noteValue nn - c5MidiNum)
 
 octAddInterval :: Interval -> OctNote -> OctNote
-octAddInterval i = linToOct . linAddInterval i . octToLin
+octAddInterval i = noteToOct . noteAddInterval i . octToNote
 
 convNoteName :: Text -> Maybe NoteName
 convNoteName = \case

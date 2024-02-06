@@ -44,9 +44,9 @@ octNoteP = do
       moct <- fmap (fmap (Octave . fromInteger)) (L.optP L.intP)
       pure (OctNote moct nn)
 
-linNoteP :: P LinNote
-linNoteP =
-  fmap octToLin octNoteP <|> fmap (LinNote . fromInteger) L.intP
+noteP :: P Note
+noteP =
+  fmap octToNote octNoteP <|> fmap (Note . fromInteger) L.intP
 
 chordNameP :: P ChordName
 chordNameP = do
@@ -55,11 +55,11 @@ chordNameP = do
     Nothing -> fail ("Not chord name: " ++ T.unpack nameRaw)
     Just cn -> pure cn
 
--- TODO IsAttrs instance for LinNote instead
+-- TODO IsAttrs instance for Note instead
 notePat :: (Pattern f) => Text -> f (Attr Int32)
-notePat = fmap conv . parsePat linNoteP
+notePat = fmap conv . parsePat noteP
  where
-  conv = Attr "note" . fromIntegral . unLinNote
+  conv = Attr "note" . fromIntegral . unNote
 
 -- TODO IsAttrs instance for sound
 soundPat :: (Pattern f) => Text -> f Attrs
