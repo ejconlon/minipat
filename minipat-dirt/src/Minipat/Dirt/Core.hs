@@ -30,8 +30,9 @@ import Data.Map.Strict qualified as Map
 import Data.Ratio ((%))
 import Data.Sequence (Seq)
 import Data.Text qualified as T
+import Minipat.Dirt.Attrs (Attrs)
 import Minipat.Dirt.Logger (LogAction, logError, logInfo, newLogger)
-import Minipat.Dirt.Osc (Attrs, PlayEnv (..), PlayErr, Timed (..), convertTape, handshakePacket, playPacket)
+import Minipat.Dirt.Osc (PlayEnv (..), PlayErr, Timed (..), convertTape, handshakePacket, playPacket)
 import Minipat.Dirt.Resources (RelVar, acquireAsync, relVarAcquire, relVarDispose, relVarInit)
 import Minipat.Print (prettyPrint)
 import Minipat.Stream (Stream (..), streamRun)

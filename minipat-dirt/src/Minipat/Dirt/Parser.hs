@@ -15,8 +15,8 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Looksee qualified as L
 import Minipat.Ast (Ident (..), Pattern (..), Select (..))
+import Minipat.Dirt.Attrs (Attr (..), Attrs, DatumProxy (..), attrs)
 import Minipat.Dirt.Notes
-import Minipat.Dirt.Osc (Attr (..), Attrs, DatumProxy (..), attrs)
 import Minipat.Eval (evalPat)
 import Minipat.Parser (P, identP, selectP)
 

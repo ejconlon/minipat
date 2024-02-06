@@ -1,13 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Minipat.Dirt.Osc
-  ( DatumProxy (..)
-  , datumProxyType
-  , Timed (..)
-  , Attrs
-  , attrs
-  , IsAttrs (..)
-  , Attr (..)
+  ( Timed (..)
   , PlayErr (..)
   , PlayEnv (..)
   , convertEvent
@@ -20,59 +14,23 @@ where
 import Control.Exception (Exception)
 import Control.Monad (foldM)
 import Control.Monad.Except (throwError)
-import Dahdit.Midi.Osc (Datum (..), DatumType (..), IsDatum (..), Msg (..), Packet (..))
+import Dahdit.Midi.Osc (Datum (..), Msg (..), Packet (..))
 import Dahdit.Midi.OscAddr (RawAddrPat)
 import Data.Foldable (foldl')
-import Data.Int (Int32, Int64)
-import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Sequence (Seq (..))
 import Data.Sequence qualified as Seq
 import Data.Text (Text)
+import Minipat.Dirt.Attrs (Attrs, IsAttrs (..))
 import Minipat.Stream (Ev (..), Tape, tapeToList)
 import Minipat.Time (CycleDelta (..), CycleTime (..), Span, spanCycle, spanDelta)
 import Nanotime (PosixTime, TimeDelta (..), addTime, timeDeltaFromFracSecs, timeDeltaToNanos)
-
-data DatumProxy a where
-  DatumProxyInt32 :: DatumProxy Int32
-  DatumProxyInt64 :: DatumProxy Int64
-  DatumProxyFloat :: DatumProxy Float
-  DatumProxyDouble :: DatumProxy Double
-  DatumProxyString :: DatumProxy Text
-
-datumProxyType :: DatumProxy a -> DatumType
-datumProxyType = \case
-  DatumProxyInt32 -> DatumTypeInt32
-  DatumProxyInt64 -> DatumTypeInt64
-  DatumProxyFloat -> DatumTypeFloat
-  DatumProxyDouble -> DatumTypeDouble
-  DatumProxyString -> DatumTypeString
 
 data Timed a = Timed
   { timedKey :: !PosixTime
   , timedVal :: !a
   }
   deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
-
-type Attrs = Map Text Datum
-
-attrs :: [(Text, Datum)] -> Attrs
-attrs = Map.fromList
-
-class IsAttrs a where
-  toAttrs :: a -> Attrs
-
-instance IsAttrs Attrs where
-  toAttrs = id
-
-data Attr a = Attr
-  { attrKey :: !Text
-  , attrVal :: !a
-  }
-  deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
-
-instance (IsDatum a) => IsAttrs (Attr a) where
-  toAttrs (Attr k v) = Map.singleton k (toDatum v)
 
 namedPayload :: Attrs -> Seq Datum
 namedPayload = foldl' go Empty . Map.toList
@@ -119,7 +77,7 @@ playAliases =
   , ("bpq", "bandq")
   , ("res", "resonance")
   , ("midi", "midinote")
-  , ("n", "midinote")
+  , ("n", "note")
   , ("oct", "octave")
   , ("accel", "accelerate")
   , ("leg", "legato")

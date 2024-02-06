@@ -2,9 +2,9 @@
 
 module Minipat.Dirt.Boot where
 
+import Minipat.Dirt.Attrs (Attrs)
 import Minipat.Dirt.Core qualified as C
 import Minipat.Dirt.Logger qualified as L
-import Minipat.Dirt.Osc (Attrs)
 import Minipat.Stream (Stream)
 import Nanotime (TimeDelta)
 

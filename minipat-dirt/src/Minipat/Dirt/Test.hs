@@ -8,6 +8,7 @@ import Dahdit.Midi.Osc (Datum (..))
 import Data.Foldable (for_)
 import Data.Ratio ((%))
 import Data.Sequence (Seq)
+import Minipat.Dirt.Attrs (Attrs, attrs)
 import Minipat.Dirt.Core
   ( OscConn
   , Resources (..)
@@ -19,7 +20,7 @@ import Minipat.Dirt.Core
   , setTempo
   , withSt
   )
-import Minipat.Dirt.Osc (Attrs, PlayEnv (..), PlayErr, Timed (..), attrs, convertTape, handshakePacket, playPacket)
+import Minipat.Dirt.Osc (PlayEnv (..), PlayErr, Timed (..), convertTape, handshakePacket, playPacket)
 import Minipat.Stream (Ev (..), streamFastBy, tapeSingleton)
 import Minipat.Time (Arc (..), Span (..))
 import Nanotime (TimeLike (..), threadDelayDelta, timeDeltaFromFracSecs)

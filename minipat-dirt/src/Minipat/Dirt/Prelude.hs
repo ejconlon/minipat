@@ -4,7 +4,7 @@ module Minipat.Dirt.Prelude where
 
 import Data.Int (Int32)
 import Data.Text (Text)
-import Minipat.Dirt.Osc (Attr (..), Attrs, DatumProxy, IsAttrs (..))
+import Minipat.Dirt.Attrs (Attr (..), Attrs, DatumProxy, IsAttrs (..))
 import Minipat.Dirt.Parser (datumPat, notePat, soundPat)
 import Minipat.Stream (Stream (..), streamInnerBind)
 
