@@ -58,9 +58,10 @@ chordNameP = do
     Just cn -> pure cn
 
 ordP :: (Ord a, Show a) => Map a b -> P a -> P b
-ordP m pa =  pa >>= \a -> case Map.lookup a m of
-  Nothing -> fail ("Not found: " ++ show a)
-  Just b -> pure b
+ordP m pa =
+  pa >>= \a -> case Map.lookup a m of
+    Nothing -> fail ("Not found: " ++ show a)
+    Just b -> pure b
 
 -- General combinators
 
@@ -75,10 +76,10 @@ pF k = fmap (Attr k . realToFrac)
 pI :: (Pattern f, Integral a) => Text -> f a -> f (Attr Int32)
 pI k = fmap (Attr k . fromIntegral)
 
-attrPat :: Pattern f => Text -> f a -> f (Attr a)
+attrPat :: (Pattern f) => Text -> f a -> f (Attr a)
 attrPat k = fmap (Attr k)
 
-datumAttrPat :: Pattern f => DatumProxy a -> Text -> Text -> f (Attr a)
+datumAttrPat :: (Pattern f) => DatumProxy a -> Text -> Text -> f (Attr a)
 datumAttrPat dp k = attrPat k . datumPat dp
 
 -- Specific combinators
@@ -95,18 +96,19 @@ instance IsAttrs Sound where
 soundP :: P Sound
 soundP = fmap (\(Select so mn) -> Sound so mn) (selectP identP noteP)
 
-sound, s :: Pattern f => Text -> f Sound
+sound, s :: (Pattern f) => Text -> f Sound
 sound = parsePat soundP
 s = sound
 
-note, n :: Pattern f => Text -> f Note
+note, n :: (Pattern f) => Text -> f Note
 note = parsePat noteP
 n = note
 
 data Chord = Chord
   { chordRoot :: !Note
   , chordName :: !ChordName
-  } deriving stock (Eq, Ord, Show)
+  }
+  deriving stock (Eq, Ord, Show)
 
 -- chord :: Pattern f =>
 
@@ -118,7 +120,7 @@ arpMap = Map.fromList [("up", ArpUp), ("down", ArpDown)]
 arpP :: P Arp
 arpP = ordP arpMap (fmap unIdent identP)
 
-arp :: Pattern f => Text -> f Arp
+arp :: (Pattern f) => Text -> f Arp
 arp = parsePat arpP
 
 -- strum :: Stream Arp -> Stream Chord -> Stream Note

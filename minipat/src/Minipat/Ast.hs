@@ -301,8 +301,8 @@ seqPresSep = \case
   SeqPresSpace -> Nothing
 
 -- | Renders a sequence of elements with the given punctuation and nesting
-prettyGroup :: Maybe Brace -> Maybe Sep -> Int -> [Doc ann] -> Doc ann
-prettyGroup mb ms lvl ds =
+prettyGroup :: Maybe Brace -> Maybe Sep -> Integer -> [Doc ann] -> Doc ann
+prettyGroup mb ms (fromInteger -> lvl) ds =
   let prefix = pretty (replicate lvl '[') <> maybe mempty (pretty . braceOpenChar) mb
       suffix = maybe mempty (pretty . braceCloseChar) mb <> pretty (replicate lvl ']')
       body = P.hsep (maybe ds (\s -> P.punctuate (" " <> pretty (sepChar s)) ds) ms)
@@ -332,7 +332,7 @@ groupPatTypeSep = \case
 
 -- | A group of sub-patterns
 data Group r = Group
-  { groupLevel :: !Int
+  { groupLevel :: !Integer
   , groupType :: !GroupType
   , groupElems :: !(Seq r)
   }
@@ -473,6 +473,9 @@ mkPatGroup gt = \case
   x :<| Empty -> x
   xs -> mkPat (PatGroup (Group 0 gt (fmap unPat xs)))
 
+mkPatSpeed :: (Monoid b) => SpeedDir -> Pat b Rational -> Pat b a -> Pat b a
+mkPatSpeed sd pf (Pat pa) = mkPat (PatMod (Mod pa (ModTypeSpeed (Speed sd (fmap factorFromRational pf)))))
+
 -- mkPatSeq :: (Monoid b) => Seq (Pat b a, Rational) -> Pat b a
 -- mkPatSeq = \case
 --   Empty -> mkPat PatSilence
@@ -488,11 +491,11 @@ class (Functor f) => Pattern f where
   patRand :: Seq (f a) -> f a
   patSeq :: Seq (f a, Rational) -> f a
   patEuc :: Euclid -> f a -> f a
-  patRep :: Int -> f a -> f a
-  patFastBy, patSlowBy :: Rational -> f a -> f a
+  patRep :: Integer -> f a -> f a
   patFast, patSlow :: f Rational -> f a -> f a
-  patDegBy :: Rational -> f a -> f a
+  patFastBy, patSlowBy :: Rational -> f a -> f a
   patDeg :: f Rational -> f a -> f a
+  patDegBy :: Rational -> f a -> f a
 
 instance (Monoid b) => Pattern (Pat b) where
   patPure = mkPat . PatPure
@@ -503,12 +506,12 @@ instance (Monoid b) => Pattern (Pat b) where
   patSeq = error "TODO"
   patEuc = error "TODO"
   patRep = error "TODO"
-  patFastBy = error "TODO"
-  patFast = error "TODO"
-  patSlowBy = error "TODO"
-  patSlow = error "TODO"
-  patDegBy = error "TODO"
+  patFast = mkPatSpeed SpeedDirFast
+  patSlow = mkPatSpeed SpeedDirSlow
+  patFastBy = patFast . patPure
+  patSlowBy = patSlow . patPure
   patDeg = error "TODO"
+  patDegBy = patDeg . patPure
 
 -- TODO figure this out
 --

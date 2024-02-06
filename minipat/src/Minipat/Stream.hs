@@ -235,11 +235,11 @@ streamSeq ss = Stream $ \arc ->
         (o + v, t <> tapeLateBy (CycleDelta o) (tapeSlowBy i v (unStream p subArc)))
   in  mconcat (fmap go1 (spanSplit arc))
 
-streamRep :: Int -> Stream a -> Stream a
+streamRep :: Integer -> Stream a -> Stream a
 streamRep n s = Stream $ \arc ->
   -- Sketch: split arc into cycles, for each render the stream over the cycle,
   -- shift and concatenate n times, then speed everything up to fit into one cycle
-  let go1 (i, Span subArc _) = tapeFastBy i (fromIntegral n) (go2 subArc)
+  let go1 (i, Span subArc _) = tapeFastBy i (fromInteger n) (go2 subArc)
       go2 subArc =
         let t = unStream s subArc
         in  mconcat (fmap (\k -> tapeLateBy (fromIntegral k) t) [0 .. n - 1])
