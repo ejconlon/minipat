@@ -20,7 +20,7 @@ import Minipat.Ast
 import Minipat.Interp (interpPat)
 import Minipat.Norm (normPat)
 import Minipat.Parser (P, ParseErr, factorP, identP, identPatP, selectIdentPatP)
-import Minipat.Print (render)
+import Minipat.Print (prettyShow)
 import Minipat.Stream (Ev (..), streamRun)
 import Minipat.Time (Arc (..), CycleTime (..), Span (..))
 import Prettyprinter qualified as P
@@ -43,7 +43,7 @@ type Cmp m a = Maybe a -> Either (Err ParseErr) a -> m ()
 expectParse :: (MonadExpect m, P.Pretty a) => Cmp m a -> P a -> Expect m a Text (Either (Err ParseErr) a)
 expectParse cmp p = mkExpect enc dec cmp
  where
-  enc = pure . render
+  enc = pure . prettyShow
   dec = pure . parse p
 
 expectParseOk :: (MonadExpect m, Eq a, Show a, P.Pretty a) => P a -> Expect m a Text (Either (Err ParseErr) a)

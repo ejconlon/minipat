@@ -38,6 +38,7 @@ panic = C.panic st
 play = setPlaying True
 stop = setPlaying False
 handshake = C.handshake st
+peek = C.peek st
 
 d0 = setOrbit 0
 d1 = setOrbit 1

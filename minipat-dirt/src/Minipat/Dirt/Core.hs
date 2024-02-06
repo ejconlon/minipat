@@ -33,7 +33,8 @@ import Data.Text qualified as T
 import Minipat.Dirt.Logger (LogAction, logError, logInfo, newLogger)
 import Minipat.Dirt.Osc (Attrs, PlayEnv (..), PlayErr, Timed (..), convertTape, handshakePacket, playPacket)
 import Minipat.Dirt.Resources (RelVar, acquireAsync, relVarAcquire, relVarDispose, relVarInit)
-import Minipat.Stream (Stream (..))
+import Minipat.Print (prettyPrint)
+import Minipat.Stream (Stream (..), streamRun)
 import Minipat.Time (Arc (..), bpmToCps, cpsToBpm)
 import Nanotime
   ( PosixTime (..)
@@ -215,15 +216,7 @@ panic st = atomically $ do
   flushQueueSTM dom
   writeTVar (domPlaying dom) False
 
-clearAllOrbitsSTM :: Domain -> STM ()
-clearAllOrbitsSTM dom = do
-  writeTVar (domOrbits dom) mempty
-  writeTVar (domStream dom) mempty
-
-flushQueueSTM :: Domain -> STM ()
-flushQueueSTM dom = void (flushTQueue (domQueue dom))
-
--- Handshake with SuperDirt
+-- | Handshake with SuperDirt
 -- On success set playing true; on error false
 handshake :: St -> IO ()
 handshake st = bracket acq rel (const (pure ()))
@@ -238,6 +231,22 @@ handshake st = bracket acq rel (const (pure ()))
       then logInfo (stLogger st) "... handshake succeeded"
       else logError (stLogger st) "... handshake FAILED"
     setPlaying st ok
+
+peek :: (Show a) => St -> Stream a -> IO ()
+peek st s = do
+  cyc <- fmap fromIntegral (getCycle st)
+  let arc = Arc cyc (cyc + 1)
+      evs = streamRun s arc
+  prettyPrint arc
+  for_ evs (prettyPrint . fmap show)
+
+clearAllOrbitsSTM :: Domain -> STM ()
+clearAllOrbitsSTM dom = do
+  writeTVar (domOrbits dom) mempty
+  writeTVar (domStream dom) mempty
+
+flushQueueSTM :: Domain -> STM ()
+flushQueueSTM dom = void (flushTQueue (domQueue dom))
 
 genEventsSTM :: Domain -> PosixTime -> STM (PlayEnv, Either PlayErr (Seq (Timed Attrs)))
 genEventsSTM dom now = do

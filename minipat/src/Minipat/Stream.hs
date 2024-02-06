@@ -66,12 +66,17 @@ import Minipat.Time
   , spanTimeMapMono
   , spanWholeMapMono
   )
+import Prettyprinter (Pretty (..))
+import Prettyprinter qualified as P
 
 data Ev a = Ev
   { evSpan :: !Span
   , evValue :: !a
   }
   deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
+
+instance (Pretty a) => Pretty (Ev a) where
+  pretty (Ev sp v) = P.hsep [pretty sp, pretty v]
 
 evCont :: (CycleTime -> a) -> Arc -> Ev a
 evCont f arc = Ev (Span arc Nothing) (f (arcStart arc))

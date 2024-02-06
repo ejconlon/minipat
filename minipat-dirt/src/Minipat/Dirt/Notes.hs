@@ -115,11 +115,14 @@ newtype LinNote = LinNote {unLinNote :: Int}
   deriving stock (Show)
   deriving newtype (Eq, Ord)
 
+c5MidiNum :: Int
+c5MidiNum = 72
+
 linToMidi :: LinNote -> Int
-linToMidi = (60 +) . unLinNote
+linToMidi = (c5MidiNum +) . unLinNote
 
 midiToLin :: Int -> LinNote
-midiToLin = LinNote . subtract 60
+midiToLin = LinNote . subtract c5MidiNum
 
 linFreq :: LinNote -> Double
 linFreq n =
@@ -146,8 +149,8 @@ linSubInterval (LinNote a) (LinNote b) = Interval (a - b)
 
 octToLin :: OctNote -> LinNote
 octToLin (OctNote moct nn) =
-  let oct = maybe (-1) unOctave moct
-  in  LinNote (((oct + 1) * 12) + noteValue nn)
+  let oct = maybe 5 unOctave moct
+  in  LinNote ((oct + 1) * 12 + noteValue nn - c5MidiNum)
 
 octAddInterval :: Interval -> OctNote -> OctNote
 octAddInterval i = linToOct . linAddInterval i . octToLin

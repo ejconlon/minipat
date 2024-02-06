@@ -30,19 +30,28 @@ module Minipat.Time
 where
 
 import Data.Maybe (fromMaybe)
+import Minipat.Print (prettyRat, prettyTup)
 import Nanotime (TimeDelta, timeDeltaFromFracSecs, timeDeltaToFracSecs)
+import Prettyprinter (Pretty (..))
+import Prettyprinter qualified as P
 
 newtype CycleTime = CycleTime {unCycleTime :: Rational}
   deriving stock (Show)
   deriving newtype (Eq, Ord, Num, Fractional, Real, RealFrac)
 
+instance Pretty CycleTime where
+  pretty = prettyRat . unCycleTime
+
 newtype CycleDelta = CycleDelta {unCycleDelta :: Rational}
   deriving stock (Show)
   deriving newtype (Eq, Ord, Num, Fractional, Real, RealFrac)
 
+instance Pretty CycleDelta where
+  pretty = prettyRat . unCycleDelta
+
 newtype Cycle = Cycle {unCycle :: Integer}
   deriving stock (Show)
-  deriving newtype (Eq, Ord, Num)
+  deriving newtype (Eq, Ord, Num, Pretty)
 
 cycTimeFloor :: CycleTime -> Cycle
 cycTimeFloor = Cycle . floor . unCycleTime
@@ -55,6 +64,9 @@ cycTimeMid s e = s + (e - s) / 2
 
 data Arc = Arc {arcStart :: !CycleTime, arcEnd :: !CycleTime}
   deriving stock (Eq, Ord, Show)
+
+instance Pretty Arc where
+  pretty (Arc s e) = prettyTup s e
 
 arcUnion :: Arc -> Arc -> Arc
 arcUnion (Arc s1 e1) (Arc s2 e2) = Arc (min s1 s2) (max e1 e2)
@@ -77,6 +89,9 @@ data Span = Span
   , spanWhole :: !(Maybe Arc)
   }
   deriving stock (Eq, Ord, Show)
+
+instance Pretty Span where
+  pretty (Span ac wh) = P.hsep (pretty ac : maybe [] (pure . pretty) wh)
 
 -- | Map a monotonic function over all cycle times
 spanTimeMapMono :: (CycleTime -> CycleTime) -> Span -> Span
