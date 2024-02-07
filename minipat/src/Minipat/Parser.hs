@@ -156,12 +156,12 @@ factorP = do
 bracedP :: Brace -> P a -> P a
 bracedP b = L.betweenP (stripTokP (braceOpenChar b)) (tokP (braceCloseChar b))
 
-speedFastP :: P s -> P (Speed s)
+speedFastP :: P (PPat Factor) -> P (Speed Loc)
 speedFastP ps = do
   tokP '*'
   Speed SpeedDirFast <$> ps
 
-speedSlowP :: P s -> P (Speed s)
+speedSlowP :: P (PPat Factor) -> P (Speed Loc)
 speedSlowP ps = do
   tokP '/'
   Speed SpeedDirSlow <$> ps

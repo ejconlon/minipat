@@ -29,7 +29,6 @@ module Minipat.Ast
   , Poly (..)
   , PatF (..)
   , Pat (..)
-  , PatX
   , UnPat
   , Pattern (..)
   )
@@ -204,13 +203,16 @@ instance Pretty SpeedDir where
     SpeedDirSlow -> "/"
 
 -- | Speed control
-data Speed s = Speed
+data Speed b = Speed
   { speedDir :: !SpeedDir
-  , speedFactor :: !s
+  , speedFactor :: !(Pat b Factor)
   }
-  deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
+  deriving stock (Eq, Ord, Show)
 
-instance (Pretty s) => Pretty (Speed s) where
+-- instance Foldable Speed where
+--   foldr f z (Speed x y) = Speed x (bifoldr f y)
+
+instance Pretty (Speed b) where
   pretty (Speed dir facs) = P.hcat [pretty dir, pretty facs]
 
 -- | Euclidean sequences
@@ -253,15 +255,15 @@ instance Pretty Replicate where
 -- TODO add elongate/replicate constructors here
 
 -- | Controls that can be applied to a given pattern
-data ModType s
+data ModType b
   = ModTypeDegrade !Degrade
   | ModTypeEuclid !Euclid
-  | ModTypeSpeed !(Speed s)
+  | ModTypeSpeed !(Speed b)
   | ModTypeElongate !Elongate
   | ModTypeReplicate !Replicate
-  deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
+  deriving stock (Eq, Ord, Show)
 
-instance (Pretty s) => Pretty (ModType s) where
+instance Pretty (ModType b) where
   pretty = \case
     ModTypeDegrade x -> pretty x
     ModTypeEuclid x -> pretty x
@@ -270,23 +272,14 @@ instance (Pretty s) => Pretty (ModType s) where
     ModTypeReplicate x -> pretty x
 
 -- | An expression modified by some control
-data Mod s r = Mod
+data Mod b r = Mod
   { modTarget :: !r
-  , modType :: !(ModType s)
+  , modType :: !(ModType b)
   }
   deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
 
-instance (Pretty c, Pretty r) => Pretty (Mod c r) where
+instance (Pretty r) => Pretty (Mod b r) where
   pretty (Mod tar ty) = P.hcat [pretty tar, pretty ty]
-
-instance Bifunctor Mod where
-  bimap f g (Mod r mt) = Mod (g r) (fmap f mt)
-
-instance Bifoldable Mod where
-  bifoldr f g z (Mod r mt) = g r (foldr f z mt)
-
-instance Bitraversable Mod where
-  bitraverse f g (Mod r mt) = Mod <$> g r <*> traverse f mt
 
 -- * Groups
 
@@ -363,16 +356,16 @@ instance (Pretty r) => Pretty (Poly r) where
 
 -- * Functor
 
-data PatF s a r
+data PatF b a r
   = PatPure !a
   | PatSilence
   | PatShort !Short
   | PatGroup !(Group r)
-  | PatMod !(Mod s r)
+  | PatMod !(Mod b r)
   | PatPoly !(Poly r)
   deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
 
-instance Bifunctor (PatF s) where
+instance Bifunctor (PatF b) where
   bimap f g = \case
     PatPure a -> PatPure (f a)
     PatSilence -> PatSilence
@@ -381,7 +374,7 @@ instance Bifunctor (PatF s) where
     PatMod m -> PatMod (fmap g m)
     PatPoly p -> PatPoly (fmap g p)
 
-instance Bifoldable (PatF s) where
+instance Bifoldable (PatF b) where
   bifoldr f g = go
    where
     go z = \case
@@ -392,7 +385,7 @@ instance Bifoldable (PatF s) where
       PatMod m -> foldr g z m
       PatPoly p -> foldr g z p
 
-instance Bitraversable (PatF s) where
+instance Bitraversable (PatF b) where
   bitraverse f g = \case
     PatPure a -> fmap PatPure (f a)
     PatSilence -> pure PatSilence
@@ -401,10 +394,10 @@ instance Bitraversable (PatF s) where
     PatMod m -> fmap PatMod (traverse g m)
     PatPoly p -> fmap PatPoly (traverse g p)
 
-instance (IsString a) => IsString (PatF s a r) where
+instance (IsString a) => IsString (PatF b a r) where
   fromString = PatPure . fromString
 
-instance (Pretty s, Pretty a, Pretty r) => Pretty (PatF s a r) where
+instance (Pretty a, Pretty r) => Pretty (PatF b a r) where
   pretty a = case a of
     PatPure x -> pretty x
     PatSilence -> "~"
@@ -420,51 +413,11 @@ newtype Pat b a = Pat {unPat :: UnPat b a}
   deriving stock (Show)
   deriving newtype (Eq, Ord, Functor, Foldable, Pretty)
 
-type PatX b = PatF (Pat b Factor)
-
-type UnPat b = Jot (PatX b) b
+type UnPat b = Jot (PatF b) b
 
 instance Traversable (Pat a) where traverse f = fmap Pat . traverse f . unPat
 
-instance Bifunctor Pat where
-  bimap f g = Pat . go . unPat
-   where
-    go (JotP b pf) = JotP (f b) $
-      case pf of
-        PatPure a -> PatPure (g a)
-        PatSilence -> PatSilence
-        PatShort s -> PatShort s
-        PatGroup gs -> PatGroup (fmap go gs)
-        PatMod (Mod r m) -> PatMod (Mod (go r) (fmap (first f) m))
-        PatPoly (Poly rs mc) -> PatPoly (Poly (fmap go rs) mc)
-
-instance Bifoldable Pat where
-  bifoldr f g = flip (go . unPat)
-   where
-    go (JotP b pf) z = f b $
-      case pf of
-        PatPure a -> g a z
-        PatSilence -> z
-        PatShort _ -> z
-        PatGroup gs -> foldr go z gs
-        PatMod (Mod r m) -> go r (foldr (flip (bifoldr f (const id))) z m)
-        PatPoly (Poly rs _) -> foldr go z rs
-
-instance Bitraversable Pat where
-  bitraverse f g = fmap Pat . go . unPat
-   where
-    go (JotP b pf) =
-      JotP
-        <$> f b
-        <*> case pf of
-          PatPure a -> fmap PatPure (g a)
-          PatSilence -> pure PatSilence
-          PatShort s -> pure (PatShort s)
-          PatGroup gs -> fmap PatGroup (traverse go gs)
-          PatMod (Mod r m) -> fmap PatMod $ Mod <$> go r <*> traverse (bitraverse f pure) m
-          PatPoly (Poly rs mc) -> fmap (\rs' -> PatPoly (Poly rs' mc)) (traverse go rs)
-
-mkPat :: (Monoid b) => PatX b a (UnPat b a) -> Pat b a
+mkPat :: (Monoid b) => PatF b a (UnPat b a) -> Pat b a
 mkPat = Pat . JotP mempty
 
 mkPatGroup :: (Monoid b) => GroupType -> Seq (Pat b a) -> Pat b a

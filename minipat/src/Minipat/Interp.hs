@@ -8,8 +8,6 @@ module Minipat.Interp
 where
 
 import Control.Exception (Exception)
-import Control.Monad.Except (Except, runExcept)
-import Control.Monad.Trans (lift)
 import Data.Ratio ((%))
 import Minipat.Ast
   ( Degrade (..)
@@ -21,7 +19,6 @@ import Minipat.Ast
   , ModType (..)
   , Pat (..)
   , PatF (..)
-  , PatX
   , Pattern (..)
   , Poly (..)
   , Replicate (..)
@@ -29,7 +26,7 @@ import Minipat.Ast
   , SpeedDir (..)
   , factorValue
   )
-import Minipat.Rewrite (RwErr, RwT, rewriteM, throwRw)
+import Minipat.Rewrite (AnnoErr, Rw, patCataRw, runPatRw, throwRw)
 
 -- | An error interpreting a 'Pat' as a 'Stream'
 data InterpErr
@@ -39,37 +36,30 @@ data InterpErr
 
 instance Exception InterpErr
 
-type M b = Except (RwErr InterpErr b)
-
-runM :: M b a -> Either (RwErr InterpErr b) a
-runM = runExcept
-
 lookInterp
   :: (Pattern f)
-  => PatX b a (M b (f a, Rational))
-  -> RwT b (M b) (f a, Rational)
+  => PatF b a (f a, Rational)
+  -> Rw b InterpErr (f a, Rational)
 lookInterp = \case
   PatPure a -> pure (patPure a, 1)
   PatSilence -> pure (patEmpty, 1)
   PatShort _ -> throwRw InterpErrShort
   PatGroup (Group _ ty els) -> do
-    els' <- lift (sequenceA els)
     case ty of
-      GroupTypeSeq _ -> pure (patSeq els', 1)
-      GroupTypePar -> pure (patPar (fmap fst els'), 1)
+      GroupTypeSeq _ -> pure (patSeq els, 1)
+      GroupTypePar -> pure (patPar (fmap fst els), 1)
       GroupTypeRand ->
-        let els'' = fmap (\(el, w) -> patFastBy w el) els'
+        let els'' = fmap (\(el, w) -> patFastBy w el) els
             s = patRand els''
         in  pure (s, 1)
       GroupTypeAlt ->
-        let els'' = fmap (\(el, w) -> patFastBy w el) els'
+        let els'' = fmap (\(el, w) -> patFastBy w el) els
             s = patAlt els''
         in  pure (s, 1)
-  PatMod (Mod melw md) -> do
-    (el, w) <- lift melw
+  PatMod (Mod (el, w) md) -> do
     case md of
       ModTypeSpeed (Speed dir spat) -> do
-        spat' <- lift (subInterp spat)
+        spat' <- subInterp spat
         let f = case dir of
               SpeedDirFast -> patFast
               SpeedDirSlow -> patSlow
@@ -94,9 +84,8 @@ lookInterp = \case
         pure (el', w')
   PatPoly (Poly _ _) -> error "TODO"
 
-subInterp :: (Pattern f) => Pat b a -> M b (f a)
-subInterp = fmap fst . rewriteM lookInterp . unPat
+subInterp :: (Pattern f) => Pat b a -> Rw b InterpErr (f a)
+subInterp = fmap fst . patCataRw lookInterp
 
--- | Interpret the given 'Pat' as any 'Pattern'
-interpPat :: (Pattern f) => Pat b a -> Either (RwErr InterpErr b) (f a)
-interpPat = runM . subInterp
+interpPat :: (Pattern f) => Pat b a -> Either (AnnoErr b InterpErr) (f a)
+interpPat = runPatRw subInterp

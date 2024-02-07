@@ -1,130 +1,153 @@
--- | Utilities for rewriting patterns
-module Minipat.Rewrite
-  ( RwErr (..)
-  , RwT
-  , Rw
-  , askRw
-  , asksRw
-  , throwRw
-  , wrapRw
-  , PatRw
-  , rewrite
-  , PatRwM
-  , rewriteM
-  , PatOvh
-  , overhaul
-  , PatOvhM
-  , overhaulM
-  )
-where
+{-# LANGUAGE UndecidableInstances #-}
 
-import Bowtie (pattern JotP)
+-- | Utilities for rewriting patterns
+module Minipat.Rewrite where
+
+import Bowtie (Jot, pattern JotP)
 import Control.Exception (Exception)
-import Control.Monad.Except (MonadError (..))
+import Control.Monad ((>=>))
+import Control.Monad.Except (ExceptT, MonadError (..), runExceptT)
+import Control.Monad.IO.Class (MonadIO (..))
 import Control.Monad.Identity (Identity (..))
-import Control.Monad.Reader (Reader, ReaderT (..), asks)
-import Data.Bifoldable (Bifoldable (..))
-import Data.Bifunctor (Bifunctor (..))
+import Control.Monad.Reader (MonadReader (..), ReaderT (..), asks)
+import Control.Monad.State (MonadState (..))
+import Control.Monad.Trans (MonadTrans (..))
 import Data.Bitraversable (Bitraversable (..))
 import Data.Sequence.NonEmpty (NESeq)
 import Data.Sequence.NonEmpty qualified as NESeq
 import Data.Typeable (Typeable)
-import Minipat.Ast qualified as A
+import Data.Void (Void, absurd)
+import Minipat.Ast (Mod (..), ModType (..), Pat (..), PatF (..), Poly (..), Speed (..), UnPat)
 
-data RwErr e b = RwErr
-  { rwErrLoc :: !b
-  , rwErrReason :: !e
+-- * General rewriting (can go in Bowtie)
+
+data AnnoErr k e = AnnoErr
+  { annoErrKey :: !k
+  , annoErrVal :: !e
   }
   deriving stock (Eq, Ord, Show)
 
 instance
-  (Show b, Typeable b, Show e, Typeable e)
-  => Exception (RwErr b e)
+  (Show k, Typeable k, Show e, Typeable e)
+  => Exception (AnnoErr k e)
 
--- | As we rewrite, we keep track of all locations from the root (snocing)
-type RwT b = ReaderT (NESeq b)
+unwrapAnnoErr :: Either (AnnoErr k Void) a -> a
+unwrapAnnoErr = either (absurd . annoErrVal) id
 
-type Rw b = Reader (NESeq b)
+newtype RwT k e m a = RwT {unRwT :: ReaderT (NESeq k) (ExceptT (AnnoErr k e) m) a}
+  deriving newtype (Functor, Applicative, Monad)
 
-askRw :: (Monad m) => RwT b m b
-askRw = asks NESeq.last
+type Rw k e = RwT k e Identity
 
-asksRw :: (Monad m) => (b -> c) -> RwT b m c
-asksRw f = asks (f . NESeq.last)
+instance MonadTrans (RwT k e) where
+  lift = RwT . lift . lift
 
-throwRw :: (MonadError (RwErr e b) m) => e -> RwT b m a
-throwRw e = askRw >>= \b -> throwError (RwErr b e)
+runRwT :: RwT k e m a -> k -> m (Either (AnnoErr k e) a)
+runRwT m = runExceptT . runReaderT (unRwT m) . NESeq.singleton
 
-wrapRw :: (Monad m) => A.PatX b a (A.UnPat b a) -> RwT b m (A.UnPat b a)
-wrapRw = asksRw . flip JotP
+runRw :: Rw k e a -> k -> Either (AnnoErr k e) a
+runRw m = runIdentity . runRwT m
 
-type PatRw b a x = A.PatX b a x -> Rw b x
+pushRw :: (Monad m) => k -> RwT k e m a -> RwT k e m a
+pushRw b m = RwT (local (NESeq.|> b) (unRwT m))
 
-rewrite :: PatRw b a x -> A.UnPat b a -> x
-rewrite f = runIdentity . rewriteM (f . fmap runIdentity)
+peekRw :: (Monad m) => RwT k e m k
+peekRw = RwT (asks NESeq.last)
 
-type PatRwM b a m x = A.PatX b a (m x) -> RwT b m x
+peeksRw :: (Monad m) => (k -> a) -> RwT k e m a
+peeksRw f = RwT (asks (f . NESeq.last))
 
--- | Rewrite just the current pattern constructors (ignoring embedded patterns)
-rewriteM :: PatRwM b a m x -> A.UnPat b a -> m x
-rewriteM f (JotP b0 pf0) = go (NESeq.singleton b0) pf0
+askRw :: (Monad m) => RwT k e m (NESeq k)
+askRw = RwT ask
+
+asksRw :: (Monad m) => (NESeq k -> a) -> RwT k e m a
+asksRw f = RwT (asks f)
+
+throwRw :: (Monad m) => e -> RwT k e m a
+throwRw e = RwT (asks NESeq.last >>= \b -> throwError (AnnoErr b e))
+
+instance (MonadReader r m) => MonadReader r (RwT k e m) where
+  ask = lift ask
+  reader f = lift (reader f)
+  local f m = RwT $ do
+    bs <- ask
+    ea <- lift (lift (local f (runExceptT (runReaderT (unRwT m) bs))))
+    either throwError pure ea
+
+instance (MonadState s m) => MonadState s (RwT k e m) where
+  get = lift get
+  put = lift . put
+  state f = lift (state f)
+
+instance (MonadIO m) => MonadIO (RwT k e m) where
+  liftIO = lift . liftIO
+
+wrapRw :: g a (Jot g k a) -> Rw k e (Jot g k a)
+wrapRw = peeksRw . flip JotP
+
+jotCataRw :: (Bitraversable g) => (g a z -> Rw k e z) -> Jot g k a -> Rw k e z
+jotCataRw f = jotCataRwT (bitraverse pure id >=> f)
+
+jotCataRwT :: (Monad m, Bitraversable g) => (g a (RwT k e m z) -> RwT k e m z) -> Jot g k a -> RwT k e m z
+jotCataRwT f = goJ
  where
-  go bs pf = runReaderT (f (fmap (push bs) pf)) bs
-  push bs (JotP b pf) = go (bs NESeq.|> b) pf
+  goJ (JotP b g) = pushRw b (goG g)
+  goG g = f (fmap goJ g)
 
--- Targets both positions filled by patterns
-newtype TapF a s r = TapF {unTapF :: A.PatF s a r}
-  deriving stock (Show)
-  deriving newtype (Eq, Ord, Functor, Foldable)
+-- * Pattern rewriting
 
-instance Bifunctor (TapF a) where
-  bimap f g = TapF . go . unTapF
-   where
-    go = \case
-      A.PatPure a -> A.PatPure a
-      A.PatSilence -> A.PatSilence
-      A.PatShort s -> A.PatShort s
-      A.PatGroup gs -> A.PatGroup (fmap g gs)
-      A.PatMod m -> A.PatMod (bimap f g m)
-      A.PatPoly p -> A.PatPoly (fmap g p)
+patCataRw :: (PatF b a z -> Rw b e z) -> Pat b a -> Rw b e z
+patCataRw f = jotCataRw f . unPat
 
-instance Bifoldable (TapF a) where
-  bifoldr f g z0 (TapF p0) = go z0 p0
-   where
-    go z = \case
-      A.PatPure _ -> z
-      A.PatSilence -> z
-      A.PatShort _ -> z
-      A.PatGroup gs -> foldr g z gs
-      A.PatMod m -> bifoldr f g z m
-      A.PatPoly p -> foldr g z p
+patCataRwT :: (Monad m) => (PatF b a (RwT b e m z) -> RwT b e m z) -> Pat b a -> RwT b e m z
+patCataRwT f = jotCataRwT f . unPat
 
-instance Bitraversable (TapF a) where
-  bitraverse f g = fmap TapF . go . unTapF
-   where
-    go = \case
-      A.PatPure a -> pure (A.PatPure a)
-      A.PatSilence -> pure A.PatSilence
-      A.PatShort s -> pure (A.PatShort s)
-      A.PatGroup gs -> fmap A.PatGroup (traverse g gs)
-      A.PatMod m -> fmap A.PatMod (bitraverse f g m)
-      A.PatPoly p -> fmap A.PatPoly (traverse g p)
+patNatRw :: (forall x. PatF b x (UnPat b x) -> Rw b e (UnPat b x)) -> Pat b a -> Rw b e (Pat b a)
+patNatRw f = patNatRwT (bitraverse pure id >=> f)
 
-type PatOvh b = forall a. PatRw b a (A.UnPat b a)
+patNatRwT
+  :: (Monad m) => (forall x. PatF b x (RwT b e m (UnPat b x)) -> RwT b e m (UnPat b x)) -> Pat b a -> RwT b e m (Pat b a)
+patNatRwT f = goP
+ where
+  goP = fmap Pat . goJ . unPat
+  goJ (JotP b pf) = pushRw b (goG pf >>= f)
+  goG = \case
+    PatPure a -> pure (PatPure a)
+    PatSilence -> pure PatSilence
+    PatShort s -> pure (PatShort s)
+    PatGroup gs -> pure (PatGroup (fmap goJ gs))
+    PatMod (Mod r m) -> fmap (PatMod . Mod (goJ r)) (goM m)
+    PatPoly (Poly rs mi) -> pure (PatPoly (Poly (fmap goJ rs) mi))
+  goM = \case
+    ModTypeDegrade d -> pure (ModTypeDegrade d)
+    ModTypeEuclid e -> pure (ModTypeEuclid e)
+    ModTypeSpeed s -> fmap ModTypeSpeed (goS s)
+    ModTypeElongate e -> pure (ModTypeElongate e)
+    ModTypeReplicate r -> pure (ModTypeReplicate r)
+  goS (Speed d p) = fmap (Speed d) (patNatRwT f p)
 
-overhaul :: PatOvh b -> A.UnPat b a -> A.UnPat b a
-overhaul f = runIdentity . overhaulM (f . fmap runIdentity)
+runPatRw :: (Pat b a -> Rw b e z) -> Pat b a -> Either (AnnoErr b e) z
+runPatRw g p@(Pat (JotP b _)) = runRw (g p) b
 
-type PatOvhM b m = forall a. PatRwM b a m (A.UnPat b a)
+runPatRwT :: (Pat b a -> RwT b e m z) -> Pat b a -> m (Either (AnnoErr b e) z)
+runPatRwT g p@(Pat (JotP b _)) = runRwT (g p) b
 
--- Rewrite all pattern constructors *polymorphically* (includes embedded patterns)
-overhaulM :: (Monad m) => PatOvhM b m -> A.UnPat b a -> m (A.UnPat b a)
-overhaulM f (JotP b0 pf0) = goOvhM f (NESeq.singleton b0) pf0
-
-goOvhM :: (Monad m) => PatOvhM b m -> NESeq b -> A.PatX b a (A.UnPat b a) -> m (A.UnPat b a)
-goOvhM f bs pf = do
-  pf' <- fmap unTapF (bitraverse (fmap A.Pat . pushOvhM f bs . A.unPat) (pure . pushOvhM f bs) (TapF pf))
-  runReaderT (f pf') bs
-
-pushOvhM :: (Monad m) => PatOvhM b m -> NESeq b -> A.UnPat b a -> m (A.UnPat b a)
-pushOvhM f bs (JotP b pf) = goOvhM f (bs NESeq.|> b) pf
+patMapInfo :: (b -> c) -> Pat b a -> Pat c a
+patMapInfo f = goP
+ where
+  goP = Pat . goJ . unPat
+  goJ (JotP b pf) = JotP (f b) (goG (fmap goJ pf))
+  goG = \case
+    PatPure a -> PatPure a
+    PatSilence -> PatSilence
+    PatShort s -> PatShort s
+    PatGroup gs -> PatGroup gs
+    PatMod (Mod r m) -> PatMod (Mod r (goM m))
+    PatPoly (Poly rs mi) -> PatPoly (Poly rs mi)
+  goM = \case
+    ModTypeDegrade d -> ModTypeDegrade d
+    ModTypeEuclid e -> ModTypeEuclid e
+    ModTypeSpeed s -> ModTypeSpeed (goS s)
+    ModTypeElongate e -> ModTypeElongate e
+    ModTypeReplicate r -> ModTypeReplicate r
+  goS (Speed d p) = Speed d (patMapInfo f p)

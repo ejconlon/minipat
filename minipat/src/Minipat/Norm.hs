@@ -8,6 +8,7 @@ import Bowtie (pattern JotP)
 import Data.Sequence (Seq (..))
 import Data.Sequence.NonEmpty (NESeq (..))
 import Data.Sequence.NonEmpty qualified as NESeq
+import Data.Void (Void)
 import Minipat.Ast
   ( Elongate (..)
   , Group (..)
@@ -16,12 +17,11 @@ import Minipat.Ast
   , ModType (..)
   , Pat (..)
   , PatF (..)
-  , PatX
   , Replicate (..)
   , Short (..)
   , UnPat
   )
-import Minipat.Rewrite (Rw, asksRw, overhaul, wrapRw)
+import Minipat.Rewrite (Rw, patNatRw, peeksRw, runPatRw, unwrapAnnoErr, wrapRw)
 
 foldNorm :: (b -> b -> b) -> Seq (UnPat b a) -> Seq (UnPat b a)
 foldNorm f = goFirst
@@ -49,7 +49,7 @@ foldNorm f = goFirst
             _ -> ws NESeq.|> y
       in  goRest ws' ys
 
-subNorm :: (b -> b -> b) -> PatX b a (UnPat b a) -> Rw b (UnPat b a)
+subNorm :: (b -> b -> b) -> PatF b a (UnPat b a) -> Rw b Void (UnPat b a)
 subNorm f x = case x of
   PatGroup (Group lvl ty ss) -> do
     -- Fold over sequences, eliminating time shorthands
@@ -58,7 +58,7 @@ subNorm f x = case x of
           _ -> ss
     -- Unwrap any empty groups or singletons we find
     case ss' of
-      Empty -> asksRw (`JotP` PatSilence)
+      Empty -> peeksRw (`JotP` PatSilence)
       q :<| Empty -> pure q
       _ -> wrapRw (PatGroup (Group lvl ty ss'))
   _ -> wrapRw x
@@ -66,7 +66,7 @@ subNorm f x = case x of
 -- Someday we might want to expose this variant, which supports
 -- combining annotations any way we choose
 normPat' :: (b -> b -> b) -> Pat b a -> Pat b a
-normPat' f = Pat . overhaul (subNorm f) . unPat
+normPat' f = unwrapAnnoErr . runPatRw (patNatRw (subNorm f))
 
 -- | Normalize the given pattern
 normPat :: (Semigroup b) => Pat b a -> Pat b a
