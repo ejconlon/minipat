@@ -438,7 +438,24 @@ instance Bifunctor Pat where
     goS (Speed d p) = Speed d (first f p)
 
 instance Bifoldable Pat where
-  bifoldr f g = error "TODO"
+  bifoldr f g = goP
+   where
+    goP z = goJ z . unPat
+    goJ z (JotP b pf) = f b (goG z pf)
+    goG z = \case
+      PatPure a -> g a z
+      PatSilence -> z
+      PatShort _ -> z
+      PatGroup (Group _ _ rs) -> foldr (flip goJ) z rs
+      PatMod (Mod r m) -> goJ (goM z m) r
+      PatPoly (Poly rs _) -> foldr (flip goJ) z rs
+    goM z = \case
+      ModTypeDegrade _ -> z
+      ModTypeEuclid _ -> z
+      ModTypeSpeed s -> goS z s
+      ModTypeElongate _ -> z
+      ModTypeReplicate _ -> z
+    goS z (Speed _ p) = bifoldr f (\_ w -> w) z p
 
 instance Bitraversable Pat where
   bitraverse f g = goP
