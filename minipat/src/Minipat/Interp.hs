@@ -67,9 +67,11 @@ lookInterp = \case
             spat'' = fmap factorValue spat'
             el' = f spat'' el
         pure (el', w)
-      ModTypeDegrade (Degrade dd) -> do
-        let d = maybe (1 % 2) factorValue dd
-        let el' = patDegBy d el
+      ModTypeDegrade (Degrade mdpat) -> do
+        dpat' <- case mdpat of
+          Nothing -> pure (patPure (1 % 2))
+          Just dpat -> fmap (fmap factorValue) (embedRw (interpPat dpat))
+        let el' = patDeg dpat' el
         pure (el', w)
       ModTypeEuclid euc -> do
         let el' = patEuc euc el

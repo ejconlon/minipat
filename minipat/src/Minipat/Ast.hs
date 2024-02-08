@@ -209,9 +209,6 @@ data Speed b = Speed
   }
   deriving stock (Eq, Ord, Show)
 
--- instance Foldable Speed where
---   foldr f z (Speed x y) = Speed x (bifoldr f y)
-
 instance Pretty (Speed b) where
   pretty (Speed dir facs) = P.hcat [pretty dir, pretty facs]
 
@@ -229,11 +226,11 @@ instance Pretty Euclid where
       ["(", pretty i, ",", pretty j] ++ maybe [")"] (\k -> [",", pretty k, ")"]) mk
 
 -- | Degradation (random dropout)
-newtype Degrade = Degrade {unDegrade :: Maybe Factor}
+newtype Degrade b = Degrade {unDegrade :: Maybe (Pat b Factor)}
   deriving stock (Show)
   deriving newtype (Eq, Ord)
 
-instance Pretty Degrade where
+instance Pretty (Degrade b) where
   pretty (Degrade mfp) = P.hcat ["?", maybe mempty pretty mfp]
 
 -- | Elongate element by the given factor
@@ -256,7 +253,7 @@ instance Pretty Replicate where
 
 -- | Controls that can be applied to a given pattern
 data ModType b
-  = ModTypeDegrade !Degrade
+  = ModTypeDegrade !(Degrade b)
   | ModTypeEuclid !Euclid
   | ModTypeSpeed !(Speed b)
   | ModTypeElongate !Elongate
@@ -430,11 +427,12 @@ instance Bifunctor Pat where
       PatMod (Mod r m) -> PatMod (Mod (goJ r) (goM m))
       PatPoly (Poly rs mi) -> PatPoly (Poly (fmap goJ rs) mi)
     goM = \case
-      ModTypeDegrade d -> ModTypeDegrade d
+      ModTypeDegrade d -> ModTypeDegrade (goD d)
       ModTypeEuclid e -> ModTypeEuclid e
       ModTypeSpeed s -> ModTypeSpeed (goS s)
       ModTypeElongate e -> ModTypeElongate e
       ModTypeReplicate r -> ModTypeReplicate r
+    goD (Degrade mp) = Degrade (fmap (first f) mp)
     goS (Speed d p) = Speed d (first f p)
 
 instance Bifoldable Pat where
@@ -450,11 +448,12 @@ instance Bifoldable Pat where
       PatMod (Mod r m) -> goJ (goM z m) r
       PatPoly (Poly rs _) -> foldr (flip goJ) z rs
     goM z = \case
-      ModTypeDegrade _ -> z
+      ModTypeDegrade d -> goD z d
       ModTypeEuclid _ -> z
       ModTypeSpeed s -> goS z s
       ModTypeElongate _ -> z
       ModTypeReplicate _ -> z
+    goD z (Degrade mp) = maybe z (bifoldr f (\_ w -> w) z) mp
     goS z (Speed _ p) = bifoldr f (\_ w -> w) z p
 
 instance Bitraversable Pat where
@@ -470,11 +469,12 @@ instance Bitraversable Pat where
       PatMod (Mod r m) -> liftA2 (\r' m' -> PatMod (Mod r' m')) (goJ r) (goM m)
       PatPoly (Poly rs mi) -> fmap (\rs' -> PatPoly (Poly rs' mi)) (traverse goJ rs)
     goM = \case
-      ModTypeDegrade d -> pure (ModTypeDegrade d)
+      ModTypeDegrade d -> fmap ModTypeDegrade (goD d)
       ModTypeEuclid e -> pure (ModTypeEuclid e)
       ModTypeSpeed s -> fmap ModTypeSpeed (goS s)
       ModTypeElongate e -> pure (ModTypeElongate e)
       ModTypeReplicate r -> pure (ModTypeReplicate r)
+    goD (Degrade mp) = fmap Degrade (traverse (bitraverse f pure) mp)
     goS (Speed d p) = fmap (Speed d) (bitraverse f pure p)
 
 mkPat :: (Monoid b) => PatF b a (UnPat b a) -> Pat b a
@@ -528,17 +528,10 @@ instance (Monoid b) => Pattern (Pat b) where
 
 -- TODO figure this out
 --
--- data Sub f k a = Sub
---   { subElems :: !(Map k (f a))
---   , subXforms :: !(Map Ident (f a -> f a))
---   }
---
--- patSub :: Sub f k a -> f k -> f a
---
 -- ur
 --   :: (Pattern f, Ord k)
---   => f k
+--   => Pat (Select k Ident)
 --   -> [(k, f a)]
 --   -> [(Ident, f a -> f a)]
 --   -> f a
--- ur p xs ys = patSub (Sub (Map.fromList xs) (Map.fromList ys)) p
+-- ur p0 xs ys = go (Map.fromList xs) (Map.fromList ys) p0

@@ -153,14 +153,14 @@ bracedP :: Brace -> P a -> P a
 bracedP b = L.betweenP (stripTokP (braceOpenChar b)) (tokP (braceCloseChar b))
 
 speedFastP :: P (PPat Factor) -> P (Speed Loc)
-speedFastP ps = do
+speedFastP pp = do
   tokP '*'
-  Speed SpeedDirFast <$> ps
+  Speed SpeedDirFast <$> pp
 
 speedSlowP :: P (PPat Factor) -> P (Speed Loc)
-speedSlowP ps = do
+speedSlowP pp = do
   tokP '/'
-  Speed SpeedDirSlow <$> ps
+  Speed SpeedDirSlow <$> pp
 
 elongateShortP :: P Short
 elongateShortP = ShortElongate <$ tokP '_'
@@ -178,10 +178,10 @@ replicateLongP = do
   tokP '!'
   Replicate <$> L.optP L.uintP
 
-degradeP :: P Degrade
-degradeP = do
+degradeP :: P (PPat Factor) -> P (Degrade Loc)
+degradeP pp = do
   tokP '?'
-  fmap Degrade (L.optP factorP)
+  fmap Degrade (L.optP pp)
 
 euclidP :: P Euclid
 euclidP = do
@@ -212,18 +212,18 @@ shortReplicatePatP :: P (PPat a)
 shortReplicatePatP = Pat <$> jotP (PatShort <$> replicateShortP)
 
 withPatDecosP :: P (PPat Factor) -> PPat a -> P (PPat a)
-withPatDecosP ps = go
+withPatDecosP pp = go
  where
-  go p@(Pat pp) = do
+  go p@(Pat pf) = do
     mp' <- fmap (fmap Pat) . mayJotP $ do
       mc <- L.lookP L.unconsP
       case mc of
-        Just '@' -> fmap (Just . PatMod . Mod pp . ModTypeElongate) elongateLongP
-        Just '!' -> fmap (Just . PatMod . Mod pp . ModTypeReplicate) replicateLongP
-        Just '*' -> fmap (Just . PatMod . Mod pp . ModTypeSpeed) (speedFastP ps)
-        Just '/' -> fmap (Just . PatMod . Mod pp . ModTypeSpeed) (speedSlowP ps)
-        Just '(' -> fmap (Just . PatMod . Mod pp . ModTypeEuclid) euclidP
-        Just '?' -> fmap (Just . PatMod . Mod pp . ModTypeDegrade) degradeP
+        Just '@' -> fmap (Just . PatMod . Mod pf . ModTypeElongate) elongateLongP
+        Just '!' -> fmap (Just . PatMod . Mod pf . ModTypeReplicate) replicateLongP
+        Just '*' -> fmap (Just . PatMod . Mod pf . ModTypeSpeed) (speedFastP pp)
+        Just '/' -> fmap (Just . PatMod . Mod pf . ModTypeSpeed) (speedSlowP pp)
+        Just '(' -> fmap (Just . PatMod . Mod pf . ModTypeEuclid) euclidP
+        Just '?' -> fmap (Just . PatMod . Mod pf . ModTypeDegrade) (degradeP pp)
         _ -> pure Nothing
     case mp' of
       Just p' -> go p'

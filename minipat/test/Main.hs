@@ -186,7 +186,9 @@ patParseTests =
     , mkUnitRT
         "pat adj optional explicit"
         (expectText "x?0.5" (expectParseOk tpatP))
-        (mkTPat (PatMod (Mod xPatIdent (ModTypeDegrade (Degrade (Just (FactorRational RationalPresDec (1 % 2))))))))
+        ( mkTPat
+            (PatMod (Mod xPatIdent (ModTypeDegrade (Degrade (Just (mkTPat (PatPure (FactorRational RationalPresDec (1 % 2)))))))))
+        )
     , mkUnitRT
         "pat adj euclid 2"
         (expectText "x(1,2)" (expectParseOk tpatP))
