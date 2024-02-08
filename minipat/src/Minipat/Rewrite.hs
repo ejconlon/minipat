@@ -43,24 +43,3 @@ patNatRwT f p0@(Pat (JotP b0 _)) = runRwT (goP p0) b0
     ModTypeElongate e -> pure (ModTypeElongate e)
     ModTypeReplicate r -> pure (ModTypeReplicate r)
   goS (Speed d p) = fmap (Speed d) (embedRwT (patNatRwT f p))
-
--- TODO just make Bifunctor instance
-patMapInfo :: (b -> c) -> Pat b a -> Pat c a
-patMapInfo f = goP
- where
-  goP = Pat . goJ . unPat
-  goJ (JotP b pf) = JotP (f b) (goG (fmap goJ pf))
-  goG = \case
-    PatPure a -> PatPure a
-    PatSilence -> PatSilence
-    PatShort s -> PatShort s
-    PatGroup gs -> PatGroup gs
-    PatMod (Mod r m) -> PatMod (Mod r (goM m))
-    PatPoly (Poly rs mi) -> PatPoly (Poly rs mi)
-  goM = \case
-    ModTypeDegrade d -> ModTypeDegrade d
-    ModTypeEuclid e -> ModTypeEuclid e
-    ModTypeSpeed s -> ModTypeSpeed (goS s)
-    ModTypeElongate e -> ModTypeElongate e
-    ModTypeReplicate r -> ModTypeReplicate r
-  goS (Speed d p) = Speed d (patMapInfo f p)

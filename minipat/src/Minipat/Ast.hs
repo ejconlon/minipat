@@ -417,6 +417,32 @@ type UnPat b = Jot (PatF b) b
 
 instance Traversable (Pat a) where traverse f = fmap Pat . traverse f . unPat
 
+instance Bifunctor Pat where
+  bimap f g = goP
+   where
+    goP = Pat . goJ . unPat
+    goJ (JotP b pf) = JotP (f b) (goG (fmap goJ pf))
+    goG = \case
+      PatPure a -> PatPure (g a)
+      PatSilence -> PatSilence
+      PatShort s -> PatShort s
+      PatGroup gs -> PatGroup gs
+      PatMod (Mod r m) -> PatMod (Mod r (goM m))
+      PatPoly p -> PatPoly p
+    goM = \case
+      ModTypeDegrade d -> ModTypeDegrade d
+      ModTypeEuclid e -> ModTypeEuclid e
+      ModTypeSpeed s -> ModTypeSpeed (goS s)
+      ModTypeElongate e -> ModTypeElongate e
+      ModTypeReplicate r -> ModTypeReplicate r
+    goS (Speed d p) = Speed d (first f p)
+
+-- instance Bifoldable Pat where
+--   bifoldr f g = error "TODO"
+--
+-- instance Bitraversable  Pat where
+--   bitraverse f g = error "TODO"
+
 mkPat :: (Monoid b) => PatF b a (UnPat b a) -> Pat b a
 mkPat = Pat . JotP mempty
 

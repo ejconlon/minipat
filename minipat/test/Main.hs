@@ -9,6 +9,7 @@ where
 import Bowtie (pattern JotP)
 import Control.Exception (throwIO)
 import Control.Monad (void)
+import Data.Bifunctor (first)
 import Data.Either (isLeft, isRight)
 import Data.Maybe (fromMaybe)
 import Data.Ratio ((%))
@@ -20,7 +21,6 @@ import Minipat.Interp (interpPat)
 import Minipat.Norm (normPat)
 import Minipat.Parser (P, ParseErr, factorP, identP, identPatP, selectIdentPatP)
 import Minipat.Print (prettyShow)
-import Minipat.Rewrite (patMapInfo)
 import Minipat.Stream (Ev (..), streamRun)
 import Minipat.Time (Arc (..), CycleTime (..), Span (..))
 import Prettyprinter qualified as P
@@ -77,10 +77,10 @@ mkUnTPat :: PatF () a (UnPat () a) -> UnTPat a
 mkUnTPat = unPat . mkTPat
 
 tpatP :: P (TPat Ident)
-tpatP = fmap (patMapInfo (const ())) identPatP
+tpatP = fmap (first (const ())) identPatP
 
 tspatP :: P (TPat (Select Integer Ident))
-tspatP = fmap (patMapInfo (const ())) (selectIdentPatP intP)
+tspatP = fmap (first (const ())) (selectIdentPatP intP)
 
 xPatIdent, yPatIdent :: UnTPat Ident
 xPatIdent = mkUnTPat (PatPure (Ident "x"))
