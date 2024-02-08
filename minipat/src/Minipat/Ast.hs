@@ -421,14 +421,14 @@ instance Bifunctor Pat where
   bimap f g = goP
    where
     goP = Pat . goJ . unPat
-    goJ (JotP b pf) = JotP (f b) (goG (fmap goJ pf))
+    goJ (JotP b pf) = JotP (f b) (goG pf)
     goG = \case
       PatPure a -> PatPure (g a)
       PatSilence -> PatSilence
       PatShort s -> PatShort s
-      PatGroup gs -> PatGroup gs
-      PatMod (Mod r m) -> PatMod (Mod r (goM m))
-      PatPoly p -> PatPoly p
+      PatGroup (Group lvl ty rs) -> PatGroup (Group lvl ty (fmap goJ rs))
+      PatMod (Mod r m) -> PatMod (Mod (goJ r) (goM m))
+      PatPoly (Poly rs mi) -> PatPoly (Poly (fmap goJ rs) mi)
     goM = \case
       ModTypeDegrade d -> ModTypeDegrade d
       ModTypeEuclid e -> ModTypeEuclid e
@@ -437,11 +437,28 @@ instance Bifunctor Pat where
       ModTypeReplicate r -> ModTypeReplicate r
     goS (Speed d p) = Speed d (first f p)
 
--- instance Bifoldable Pat where
---   bifoldr f g = error "TODO"
---
--- instance Bitraversable  Pat where
---   bitraverse f g = error "TODO"
+instance Bifoldable Pat where
+  bifoldr f g = error "TODO"
+
+instance Bitraversable Pat where
+  bitraverse f g = goP
+   where
+    goP = fmap Pat . goJ . unPat
+    goJ (JotP b pf) = liftA2 JotP (f b) (goG pf)
+    goG = \case
+      PatPure a -> fmap PatPure (g a)
+      PatSilence -> pure PatSilence
+      PatShort s -> pure (PatShort s)
+      PatGroup (Group lvl ty rs) -> fmap (PatGroup . Group lvl ty) (traverse goJ rs)
+      PatMod (Mod r m) -> liftA2 (\r' m' -> PatMod (Mod r' m')) (goJ r) (goM m)
+      PatPoly (Poly rs mi) -> fmap (\rs' -> PatPoly (Poly rs' mi)) (traverse goJ rs)
+    goM = \case
+      ModTypeDegrade d -> pure (ModTypeDegrade d)
+      ModTypeEuclid e -> pure (ModTypeEuclid e)
+      ModTypeSpeed s -> fmap ModTypeSpeed (goS s)
+      ModTypeElongate e -> pure (ModTypeElongate e)
+      ModTypeReplicate r -> pure (ModTypeReplicate r)
+    goS (Speed d p) = fmap (Speed d) (bitraverse f pure p)
 
 mkPat :: (Monoid b) => PatF b a (UnPat b a) -> Pat b a
 mkPat = Pat . JotP mempty
