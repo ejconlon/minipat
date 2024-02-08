@@ -5,6 +5,7 @@ module Minipat.Norm
 where
 
 import Bowtie (pattern JotP)
+import Bowtie.Rewrite (Rw, peeksRw, unwrapAnnoErr, wrapRw)
 import Data.Sequence (Seq (..))
 import Data.Sequence.NonEmpty (NESeq (..))
 import Data.Sequence.NonEmpty qualified as NESeq
@@ -21,7 +22,7 @@ import Minipat.Ast
   , Short (..)
   , UnPat
   )
-import Minipat.Rewrite (Rw, patNatRw, peeksRw, runPatRw, unwrapAnnoErr, wrapRw)
+import Minipat.Rewrite (patNatRw)
 
 foldNorm :: (b -> b -> b) -> Seq (UnPat b a) -> Seq (UnPat b a)
 foldNorm f = goFirst
@@ -66,7 +67,7 @@ subNorm f x = case x of
 -- Someday we might want to expose this variant, which supports
 -- combining annotations any way we choose
 normPat' :: (b -> b -> b) -> Pat b a -> Pat b a
-normPat' f = unwrapAnnoErr . runPatRw (patNatRw (subNorm f))
+normPat' f = unwrapAnnoErr . patNatRw (subNorm f)
 
 -- | Normalize the given pattern
 normPat :: (Semigroup b) => Pat b a -> Pat b a

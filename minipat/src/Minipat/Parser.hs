@@ -16,7 +16,7 @@ module Minipat.Parser
   )
 where
 
-import Bowtie (Anno (..), Jot, pattern JotP)
+import Bowtie (Anno (..), Jot (..), annoJot, pattern JotP)
 import Control.Exception (Exception)
 import Control.Monad (guard, when)
 import Control.Monad.Fix (fix)
@@ -28,10 +28,6 @@ import Data.Text qualified as T
 import Looksee qualified as L
 import Minipat.Ast
 import Minipat.Print (Brace (..), braceCloseChar, braceOpenChar)
-
--- Should be in Bowtie
-annoJot :: Anno b (g a (Jot g b a)) -> Jot g b a
-annoJot (Anno b x) = JotP b x
 
 -- * The basics
 

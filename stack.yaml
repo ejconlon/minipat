@@ -8,7 +8,7 @@ packages:
 - minipat-dirt
 
 extra-deps:
-- bowtie-0.2.0
+- bowtie-0.3.1
 - dahdit-0.5.1
 - dahdit-network-0.5.2
 - dahdit-midi-0.5.5

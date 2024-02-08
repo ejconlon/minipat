@@ -5,12 +5,12 @@
 
 packages:
 - completed:
-    hackage: bowtie-0.2.0@sha256:1fea0ef4521f8c77544aa885f47d6999acf75db8f0b093fe639d24004a1fbe6f,1771
+    hackage: bowtie-0.3.1@sha256:75386b80c198e948c36e3647df9619f48fcaaf3cd38edafa66bc4a0614fbe613,1848
     pantry-tree:
-      sha256: e72e660bb9ba5ec65ca5572f49fe4467a4a8fba7319e566131c373daaf9dc0af
-      size: 159
+      sha256: 0164d98ecc676e9b95dddc53dc175888213c8c957db114d3748db755ecca9658
+      size: 221
   original:
-    hackage: bowtie-0.2.0
+    hackage: bowtie-0.3.1
 - completed:
     hackage: dahdit-0.5.1@sha256:f583794914a2c775f3e59fe4ef1d39c5ab827ff27894da32f7ae0de4ea9f15b1,3704
     pantry-tree:

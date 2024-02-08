@@ -7,6 +7,7 @@ module Minipat.Interp
   )
 where
 
+import Bowtie.Rewrite (AnnoErr, Rw, embedRw, throwRw)
 import Control.Exception (Exception)
 import Data.Ratio ((%))
 import Minipat.Ast
@@ -26,7 +27,7 @@ import Minipat.Ast
   , SpeedDir (..)
   , factorValue
   )
-import Minipat.Rewrite (AnnoErr, Rw, patCataRw, runPatRw, throwRw)
+import Minipat.Rewrite (patRw)
 
 -- | An error interpreting a 'Pat' as a 'Stream'
 data InterpErr
@@ -59,7 +60,7 @@ lookInterp = \case
   PatMod (Mod (el, w) md) -> do
     case md of
       ModTypeSpeed (Speed dir spat) -> do
-        spat' <- subInterp spat
+        spat' <- embedRw (interpPat spat)
         let f = case dir of
               SpeedDirFast -> patFast
               SpeedDirSlow -> patSlow
@@ -84,8 +85,5 @@ lookInterp = \case
         pure (el', w')
   PatPoly (Poly _ _) -> error "TODO"
 
-subInterp :: (Pattern f) => Pat b a -> Rw b InterpErr (f a)
-subInterp = fmap fst . patCataRw lookInterp
-
 interpPat :: (Pattern f) => Pat b a -> Either (AnnoErr b InterpErr) (f a)
-interpPat = runPatRw subInterp
+interpPat = fmap fst . patRw lookInterp
