@@ -489,6 +489,9 @@ mkPatGroup gt = \case
 mkPatSpeed :: (Monoid b) => SpeedDir -> Pat b Rational -> Pat b a -> Pat b a
 mkPatSpeed sd pf (Pat pa) = mkPat (PatMod (Mod pa (ModTypeSpeed (Speed sd (fmap factorFromRational pf)))))
 
+mkPatDeg :: (Monoid b) => Pat b Rational -> Pat b a -> Pat b a
+mkPatDeg pf (Pat pa) = mkPat (PatMod (Mod pa (ModTypeDegrade (Degrade (Just (fmap factorFromRational pf))))))
+
 -- mkPatSeq :: (Monoid b) => Seq (Pat b a, Rational) -> Pat b a
 -- mkPatSeq = \case
 --   Empty -> mkPat PatSilence
@@ -523,7 +526,7 @@ instance (Monoid b) => Pattern (Pat b) where
   patSlow = mkPatSpeed SpeedDirSlow
   patFastBy = patFast . patPure
   patSlowBy = patSlow . patPure
-  patDeg = error "TODO"
+  patDeg = mkPatDeg
   patDegBy = patDeg . patPure
 
 -- TODO figure this out
