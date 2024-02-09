@@ -486,17 +486,26 @@ mkPatGroup gt = \case
   x :<| Empty -> x
   xs -> mkPat (PatGroup (Group 0 gt (fmap unPat xs)))
 
+mkPatMod :: (Monoid b) => ModType b -> Pat b a -> Pat b a
+mkPatMod mt (Pat pa) = mkPat (PatMod (Mod pa mt))
+
 mkPatSpeed :: (Monoid b) => SpeedDir -> Pat b Rational -> Pat b a -> Pat b a
-mkPatSpeed sd pf (Pat pa) = mkPat (PatMod (Mod pa (ModTypeSpeed (Speed sd (fmap factorFromRational pf)))))
+mkPatSpeed sd pf = mkPatMod (ModTypeSpeed (Speed sd (fmap factorFromRational pf)))
 
 mkPatDeg :: (Monoid b) => Pat b Rational -> Pat b a -> Pat b a
-mkPatDeg pf (Pat pa) = mkPat (PatMod (Mod pa (ModTypeDegrade (Degrade (Just (fmap factorFromRational pf))))))
+mkPatDeg pf = mkPatMod (ModTypeDegrade (Degrade (Just (fmap factorFromRational pf))))
 
--- mkPatSeq :: (Monoid b) => Seq (Pat b a, Rational) -> Pat b a
--- mkPatSeq = \case
---   Empty -> mkPat PatSilence
---   (x, _) :<| Empty -> x
---   xs -> mkPat (PatGroup (Group 0 (GroupTypeSeq SeqPresSpace) _
+mkPatRep :: (Monoid b) => Integer -> Pat b a -> Pat b a
+mkPatRep n = mkPatMod (ModTypeReplicate (Replicate (Just n)))
+
+mkPatSeq :: (Monoid b) => Seq (Pat b a, Rational) -> Pat b a
+mkPatSeq = \case
+  Empty -> mkPat PatSilence
+  (x, _) :<| Empty -> x
+  xs ->
+    let w = sum (fmap snd (toList xs))
+        adjust (x, t) = unPat (patFastBy (t / w) x)
+    in  mkPat (PatGroup (Group 0 (GroupTypeSeq SeqPresSpace) (fmap adjust xs)))
 
 -- | 'Pat' and 'Stream' can be constructed abstractly with this
 class (Functor f) => Pattern f where
@@ -519,9 +528,9 @@ instance (Monoid b) => Pattern (Pat b) where
   patPar = mkPatGroup GroupTypePar
   patAlt = mkPatGroup GroupTypeAlt
   patRand = mkPatGroup GroupTypeRand
-  patSeq = error "TODO"
-  patEuc = error "TODO"
-  patRep = error "TODO"
+  patSeq = mkPatSeq
+  patEuc = mkPatMod . ModTypeEuclid
+  patRep = mkPatRep
   patFast = mkPatSpeed SpeedDirFast
   patSlow = mkPatSpeed SpeedDirSlow
   patFastBy = patFast . patPure
