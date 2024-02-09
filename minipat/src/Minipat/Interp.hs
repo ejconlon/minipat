@@ -3,13 +3,17 @@
 -- | Interpreting patterns as streams
 module Minipat.Interp
   ( InterpErr (..)
+  , castInterpErr
   , interpPat
+  , customInterpPat
   )
 where
 
-import Bowtie.Rewrite (AnnoErr, Rw, embedRw, throwRw)
+import Bowtie.Rewrite (AnnoErr (..), Rw, embedRw, throwRw)
 import Control.Exception (Exception)
 import Data.Ratio ((%))
+import Data.Typeable (Typeable)
+import Data.Void (Void)
 import Minipat.Ast
   ( Degrade (..)
   , Elongate (..)
@@ -30,19 +34,25 @@ import Minipat.Ast
 import Minipat.Rewrite (patRw)
 
 -- | An error interpreting a 'Pat' as a 'Stream'
-data InterpErr
+data InterpErr e
   = -- | When extent shorthands have not been previously eliminated
     InterpErrShort
+  | -- | Wraps custom errors
+    InterpErrCustom !e
   deriving stock (Eq, Ord, Show)
 
-instance Exception InterpErr
+instance (Show e, Typeable e) => Exception (InterpErr e)
 
-lookInterp
+castInterpErr :: InterpErr Void -> InterpErr e
+castInterpErr = \case InterpErrShort -> InterpErrShort
+
+goInterp
   :: (Pattern f)
-  => PatF b a (f a, Rational)
-  -> Rw b InterpErr (f a, Rational)
-lookInterp = \case
-  PatPure a -> pure (patPure a, 1)
+  => (a -> Either e (f c))
+  -> PatF b a (f c, Rational)
+  -> Rw b (InterpErr e) (f c, Rational)
+goInterp use = \case
+  PatPure a -> either (throwRw . InterpErrCustom) (pure . (,1)) (use a)
   PatSilence -> pure (patEmpty, 1)
   PatShort _ -> throwRw InterpErrShort
   PatGroup (Group _ ty els) -> do
@@ -60,7 +70,7 @@ lookInterp = \case
   PatMod (Mod (el, w) md) -> do
     case md of
       ModTypeSpeed (Speed dir spat) -> do
-        spat' <- embedRw (interpPat spat)
+        spat' <- embedRw (recInterpPat spat)
         let f = case dir of
               SpeedDirFast -> patFast
               SpeedDirSlow -> patSlow
@@ -70,7 +80,7 @@ lookInterp = \case
       ModTypeDegrade (Degrade mdpat) -> do
         dpat' <- case mdpat of
           Nothing -> pure (patPure (1 % 2))
-          Just dpat -> fmap (fmap factorValue) (embedRw (interpPat dpat))
+          Just dpat -> fmap (fmap factorValue) (embedRw (recInterpPat dpat))
         let el' = patDeg dpat' el
         pure (el', w)
       ModTypeEuclid euc -> do
@@ -87,5 +97,11 @@ lookInterp = \case
         pure (el', w')
   PatPoly (Poly _ _) -> error "TODO"
 
-interpPat :: (Pattern f) => Pat b a -> Either (AnnoErr b InterpErr) (f a)
-interpPat = fmap fst . patRw lookInterp
+customInterpPat :: (Pattern f) => (a -> Either e (f c)) -> Pat b a -> Either (AnnoErr b (InterpErr e)) (f c)
+customInterpPat use = fmap fst . patRw (goInterp use)
+
+recInterpPat :: (Pattern f) => Pat b a -> Either (AnnoErr b (InterpErr e)) (f a)
+recInterpPat = either (\(AnnoErr b e) -> Left (AnnoErr b (castInterpErr e))) Right . interpPat
+
+interpPat :: (Pattern f) => Pat b a -> Either (AnnoErr b (InterpErr Void)) (f a)
+interpPat = customInterpPat (Right . patPure)
