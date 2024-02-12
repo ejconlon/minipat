@@ -30,7 +30,6 @@ module Minipat.Ast
   , PatF (..)
   , Pat (..)
   , UnPat
-  , Pattern (..)
   )
 where
 
@@ -476,74 +475,3 @@ instance Bitraversable Pat where
       ModTypeReplicate r -> pure (ModTypeReplicate r)
     goD (Degrade mp) = fmap Degrade (traverse (bitraverse f pure) mp)
     goS (Speed d p) = fmap (Speed d) (bitraverse f pure p)
-
-mkPat :: (Monoid b) => PatF b a (UnPat b a) -> Pat b a
-mkPat = Pat . JotP mempty
-
-mkPatGroup :: (Monoid b) => GroupType -> Seq (Pat b a) -> Pat b a
-mkPatGroup gt = \case
-  Empty -> mkPat PatSilence
-  x :<| Empty -> x
-  xs -> mkPat (PatGroup (Group 0 gt (fmap unPat xs)))
-
-mkPatMod :: (Monoid b) => ModType b -> Pat b a -> Pat b a
-mkPatMod mt (Pat pa) = mkPat (PatMod (Mod pa mt))
-
-mkPatSpeed :: (Monoid b) => SpeedDir -> Pat b Rational -> Pat b a -> Pat b a
-mkPatSpeed sd pf = mkPatMod (ModTypeSpeed (Speed sd (fmap factorFromRational pf)))
-
-mkPatDeg :: (Monoid b) => Pat b Rational -> Pat b a -> Pat b a
-mkPatDeg pf = mkPatMod (ModTypeDegrade (Degrade (Just (fmap factorFromRational pf))))
-
-mkPatRep :: (Monoid b) => Integer -> Pat b a -> Pat b a
-mkPatRep n = mkPatMod (ModTypeReplicate (Replicate (Just n)))
-
-mkPatSeq :: (Monoid b) => Seq (Pat b a, Rational) -> Pat b a
-mkPatSeq = \case
-  Empty -> mkPat PatSilence
-  (x, _) :<| Empty -> x
-  xs ->
-    let w = sum (fmap snd (toList xs))
-        adjust (x, t) = unPat (patFastBy (t / w) x)
-    in  mkPat (PatGroup (Group 0 (GroupTypeSeq SeqPresSpace) (fmap adjust xs)))
-
--- | 'Pat' and 'Stream' can be constructed abstractly with this
-class (Functor f) => Pattern f where
-  patPure :: a -> f a
-  patEmpty :: f a
-  patPar :: Seq (f a) -> f a
-  patAlt :: Seq (f a) -> f a
-  patRand :: Seq (f a) -> f a
-  patSeq :: Seq (f a, Rational) -> f a
-  patEuc :: Euclid -> f a -> f a
-  patRep :: Integer -> f a -> f a
-  patFast, patSlow :: f Rational -> f a -> f a
-  patFastBy, patSlowBy :: Rational -> f a -> f a
-  patDeg :: f Rational -> f a -> f a
-  patDegBy :: Rational -> f a -> f a
-
-instance (Monoid b) => Pattern (Pat b) where
-  patPure = mkPat . PatPure
-  patEmpty = mkPat PatSilence
-  patPar = mkPatGroup GroupTypePar
-  patAlt = mkPatGroup GroupTypeAlt
-  patRand = mkPatGroup GroupTypeRand
-  patSeq = mkPatSeq
-  patEuc = mkPatMod . ModTypeEuclid
-  patRep = mkPatRep
-  patFast = mkPatSpeed SpeedDirFast
-  patSlow = mkPatSpeed SpeedDirSlow
-  patFastBy = patFast . patPure
-  patSlowBy = patSlow . patPure
-  patDeg = mkPatDeg
-  patDegBy = patDeg . patPure
-
--- TODO figure this out
---
--- ur
---   :: (Pattern f, Ord k)
---   => Pat (Select k Ident)
---   -> [(k, f a)]
---   -> [(Ident, f a -> f a)]
---   -> f a
--- ur p0 xs ys = go (Map.fromList xs) (Map.fromList ys) p0

@@ -21,6 +21,7 @@ import Control.Exception (Exception)
 import Control.Monad (guard, when)
 import Control.Monad.Fix (fix)
 import Data.Char (isAlpha, isAlphaNum, isSpace)
+import Data.Default (Default (..))
 import Data.Ratio (denominator, numerator)
 import Data.Sequence (Seq (..))
 import Data.Sequence qualified as Seq
@@ -51,13 +52,28 @@ instance Exception ParseErr
 
 type P = L.Parser ParseErr
 
--- | The location in the source text
-newtype Loc = Loc {unLoc :: L.Span Int}
-  deriving stock (Show)
-  deriving newtype (Eq, Ord)
+-- | The location in the source text (real text span or virtual location)
+data Loc
+  = LocSpan !(L.Span Int)
+  | LocVirt
+  deriving stock (Eq, Ord, Show)
+
+spanUnion :: L.Span Int -> L.Span Int -> L.Span Int
+spanUnion (L.Span a1 b1) (L.Span a2 b2) = L.Span (min a1 a2) (max b1 b2)
 
 instance Semigroup Loc where
-  Loc (L.Span a1 b1) <> Loc (L.Span a2 b2) = Loc (L.Span (min a1 a2) (max b1 b2))
+  l1 <> l2 =
+    case l1 of
+      LocSpan s1 -> case l2 of
+        LocSpan s2 -> LocSpan (spanUnion s1 s2)
+        LocVirt -> l1
+      LocVirt -> l2
+
+instance Monoid Loc where
+  mempty = LocVirt
+
+instance Default Loc where
+  def = LocVirt
 
 annoP :: P a -> P (Anno Loc a)
 annoP pa = do
@@ -71,7 +87,7 @@ annoP pa = do
       endSpaces = T.takeWhileEnd isSpace consumed
       x1' = x1 + T.length startSpaces
       x2' = x2 - T.length endSpaces
-  pure (Anno (Loc (L.Span x1' x2')) a)
+  pure (Anno (LocSpan (L.Span x1' x2')) a)
 
 mayAnnoP :: P (Maybe a) -> P (Maybe (Anno Loc a))
 mayAnnoP pa = do

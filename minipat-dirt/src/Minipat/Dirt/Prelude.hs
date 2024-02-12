@@ -13,11 +13,12 @@ import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
 import Looksee qualified as L
-import Minipat.Ast (Ident (..), Pattern (..), Select (..))
+import Minipat.Ast (Ident (..), Select (..))
 import Minipat.Dirt.Attrs (Attr (..), Attrs, DatumProxy (..), IsAttrs (..))
-import Minipat.Dirt.Notes
+import Minipat.Dirt.Notes (ChordName, Note (..), OctNote (..), Octave (..), convChordName, convNoteName, octToNote)
 import Minipat.Eval (evalPat)
-import Minipat.Parser (P, identP, selectP)
+import Minipat.Parser (Loc, P, identP, selectP)
+import Minipat.Pattern (Pattern (..), PatternUnwrap)
 import Minipat.Stream (Stream (..), streamInnerBind)
 
 -- Start with some private parsing stuff
@@ -31,10 +32,10 @@ datumP = \case
   DatumProxyString -> fmap unIdent identP
 
 -- TODO figure out out to propagate error
-parsePat :: (Pattern f) => P a -> Text -> f a
+parsePat :: (PatternUnwrap Loc f) => P a -> Text -> f a
 parsePat p = either (pure patEmpty) id . evalPat p
 
-datumPat :: (Pattern f) => DatumProxy a -> Text -> f a
+datumPat :: (PatternUnwrap Loc f) => DatumProxy a -> Text -> f a
 datumPat = parsePat . datumP
 
 octNoteP :: P OctNote
@@ -79,7 +80,7 @@ pI k = fmap (Attr k . fromIntegral)
 attrPat :: (Pattern f) => Text -> f a -> f (Attr a)
 attrPat k = fmap (Attr k)
 
-datumAttrPat :: (Pattern f) => DatumProxy a -> Text -> Text -> f (Attr a)
+datumAttrPat :: (PatternUnwrap Loc f) => DatumProxy a -> Text -> Text -> f (Attr a)
 datumAttrPat dp k = attrPat k . datumPat dp
 
 -- Specific combinators
@@ -96,11 +97,11 @@ instance IsAttrs Sound where
 soundP :: P Sound
 soundP = fmap (\(Select so mn) -> Sound so mn) (selectP identP noteP)
 
-sound, s :: (Pattern f) => Text -> f Sound
+sound, s :: (PatternUnwrap Loc f) => Text -> f Sound
 sound = parsePat soundP
 s = sound
 
-note, n :: (Pattern f) => Text -> f Note
+note, n :: (PatternUnwrap Loc f) => Text -> f Note
 note = parsePat noteP
 n = note
 
@@ -120,7 +121,7 @@ arpMap = Map.fromList [("up", ArpUp), ("down", ArpDown)]
 arpP :: P Arp
 arpP = ordP arpMap (fmap unIdent identP)
 
-arp :: (Pattern f) => Text -> f Arp
+arp :: (PatternUnwrap Loc f) => Text -> f Arp
 arp = parsePat arpP
 
 -- strum :: Stream Arp -> Stream Chord -> Stream Note

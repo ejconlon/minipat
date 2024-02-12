@@ -29,6 +29,7 @@ library
       Minipat.Interp
       Minipat.Norm
       Minipat.Parser
+      Minipat.Pattern
       Minipat.Print
       Minipat.Rand
       Minipat.Rewrite
@@ -74,6 +75,7 @@ library
       base >=4.12 && <5
     , bowtie ==0.3.*
     , containers ==0.6.*
+    , data-default ==0.7.*
     , heaps ==0.4.*
     , looksee ==0.5.*
     , mtl ==2.3.*
@@ -126,6 +128,7 @@ test-suite minipat-test
       base >=4.12 && <5
     , bowtie ==0.3.*
     , containers ==0.6.*
+    , data-default ==0.7.*
     , daytripper ==0.3.*
     , heaps ==0.4.*
     , looksee ==0.5.*
