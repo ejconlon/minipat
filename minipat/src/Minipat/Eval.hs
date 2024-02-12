@@ -1,6 +1,7 @@
 -- | Taking textual patterns all the way to streams
 module Minipat.Eval
-  ( evalPat
+  ( PatternEval
+  , evalPat
   )
 where
 
@@ -12,8 +13,10 @@ import Minipat.Norm (normPat)
 import Minipat.Parser (Loc, P, topPatP)
 import Minipat.Pattern (PatternUnwrap)
 
+type PatternEval = PatternUnwrap Loc
+
 -- | The canonical way to parse, normalize, and interpret patterns as streams
-evalPat :: (PatternUnwrap Loc f) => P a -> Text -> Either SomeException (f a)
+evalPat :: (PatternEval f) => P a -> Text -> Either SomeException (f a)
 evalPat p t = do
   pat <- either (Left . SomeException) Right (parse (topPatP p) t)
   let pat' = normPat pat
