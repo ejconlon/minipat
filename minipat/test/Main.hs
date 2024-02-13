@@ -23,8 +23,9 @@ import Minipat.Eval (evalPat)
 import Minipat.Interp (interpPat)
 import Minipat.Norm (normPat)
 import Minipat.Parser (Loc, P, ParseErr, factorP, identP, identPatP, selectIdentPatP)
+import Minipat.Pattern (Pattern (..))
 import Minipat.Print (prettyShow)
-import Minipat.Stream (Ev (..), streamRun)
+import Minipat.Stream (Ev (..), Stream, streamRun)
 import Minipat.Time (Arc (..), CycleTime (..), Span (..))
 import Minipat.Ur (ur)
 import Prettyprinter qualified as P
@@ -91,6 +92,9 @@ tspatP = fmap convTPat (selectIdentPatP intP)
 
 parsePat :: Text -> IO (Pat Loc Ident)
 parsePat = either throwIO pure . parse identPatP
+
+parseStream :: Text -> IO (Stream Ident)
+parseStream = either throwIO pure . evalPat identP
 
 parseTPat :: Text -> IO (TPat Ident)
 parseTPat = fmap convTPat . parsePat
@@ -746,16 +750,24 @@ testPatReprCases =
         )
       ]
 
+newtype Xform = Xform {unXform :: forall f. (Pattern f) => f Ident -> f Ident}
+
+runXform :: (Pattern f) => Xform -> f Ident -> f Ident
+runXform (Xform f) = f
+
 runUrCase
-  :: (TestName, Integer, Text, [(Ident, Text)], [(Ident, Pat Loc Ident -> Pat Loc Ident)], Maybe Text, [Ev Ident])
+  :: (TestName, Integer, Text, [(Ident, Text)], [(Ident, Xform)], Maybe Text, [Ev Ident])
   -> TestTree
 runUrCase (n, inpLen, inpPat, inpSubPats, inpSubXforms, mayExpectStr, expectEvs) = testCase n $ do
   inpSubPats' <- traverse (bitraverse pure parsePat) inpSubPats
-  actualPat :: Pat Loc Ident <- either throwIO pure (ur (fromInteger inpLen) inpPat inpSubPats' inpSubXforms)
+  let inpSubXforms' = fmap (second runXform) inpSubXforms
+  actualPat :: Pat Loc Ident <- either throwIO pure (ur (fromInteger inpLen) inpPat inpSubPats' inpSubXforms')
   for_ mayExpectStr $ \expectStr -> do
     let actualStr = prettyShow actualPat
     actualStr @?= expectStr
-  actualStream <- either throwIO pure (interpPat (normPat actualPat))
+  inpSubPats'' <- traverse (bitraverse pure parseStream) inpSubPats
+  let inpSubXforms'' = fmap (second runXform) inpSubXforms
+  actualStream :: Stream Ident <- either throwIO pure (ur (fromInteger inpLen) inpPat inpSubPats'' inpSubXforms'')
   let arc = Arc 0 (fromInteger inpLen)
       actualEvs = streamRun actualStream arc
   actualEvs @?= expectEvs
@@ -776,41 +788,31 @@ testUr =
           [ ev 0 1 "x"
           ]
         )
-        -- , ( "more"
-        --   , 2
-        --   , "a b:x"
-        --   , [("a", "x"), ("b", "y")]
-        --   , [("x", patFastBy 2)]
-        --   , Just "[x y y]"
-        --   , [ ev 0 1 "x"
-        --     , ev 1 (3 % 2) "y"
-        --     , ev 2 (5 % 2) "y"
-        --     ]
-        --   )
+      ,
+        ( "double"
+        , 2
+        , "a"
+        , [("a", "x")]
+        , []
+        , Just "x/2"
+        ,
+          [ ev 0 2 "x"
+          ]
+        )
+      ,
+        ( "more"
+        , 1
+        , "a b:x"
+        , [("a", "x"), ("b", "y")]
+        , [("x", Xform (patFastBy 2))]
+        , Just "[x y*2]"
+        ,
+          [ ev 0 (1 % 2) "x"
+          , ev (1 % 2) (3 % 4) "y"
+          , ev (3 % 4) 1 "y"
+          ]
+        )
       ]
-
--- testUr :: TestTree
--- testUr = testCase "ur" $ do
---   -- let ep = ur @_ @String 3 "a b:x c" [("a", "1"), ("b", "2"), ("c", "3")] [("x", patFastBy 2)]
---   --     expectedEvs =
---   --       [ ev 0 1 "1"
---   --       , ev 1 (3 % 2) "2"
---   --       , ev (3 % 2) 2 "2"
---   --       , ev 2 3 "3"
---   --       ]
---   -- let arc = Arc 0 3
---   let inpLen = 1
---       inpPat = "a"
---       inpSubPats = [("a", "x")]
---       inpSubXforms = []
---       expectedEvs :: [Ev Ident] =
---         [ ev 0 1 "x"
---         ]
---       expectStr = "x"
---   inpSubPats' <- traverse (bitraverse pure parsePat) inpSubPats
---   actualPat :: Pat Loc Ident <- either throwIO pure (ur inpLen inpPat inpSubPats' inpSubXforms)
---   let actualStr = prettyShow actualPat
---   actualStr @?= expectStr
 
 main :: IO ()
 main = do

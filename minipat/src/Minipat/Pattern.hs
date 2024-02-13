@@ -107,7 +107,7 @@ class (Functor f, Monad (PatM f), Default (PatA f)) => Pattern f where
   patFastBy', patSlowBy' :: Rational -> f a -> PatM f (f a)
   patFastBy, patSlowBy :: Rational -> f a -> f a
   patFastBy r = patCon . patFastBy' r
-  patSlowBy r = patCon . patFastBy' r
+  patSlowBy r = patCon . patSlowBy' r
 
   patDeg' :: f Rational -> f a -> PatM f (f a)
   patDeg :: f Rational -> f a -> f a
