@@ -11,18 +11,21 @@ import Control.Exception (throwIO)
 import Control.Monad (void)
 import Data.Bifunctor (first)
 import Data.Either (isLeft, isRight)
+import Data.Foldable (for_)
 import Data.Maybe (fromMaybe)
 import Data.Ratio ((%))
 import Data.Sequence (Seq (..))
 import Data.Text (Text)
 import Looksee (Err, intP, parse)
 import Minipat.Ast
+import Minipat.Eval (evalPat)
 import Minipat.Interp (interpPat)
 import Minipat.Norm (normPat)
-import Minipat.Parser (P, ParseErr, factorP, identP, identPatP, selectIdentPatP)
+import Minipat.Parser (Loc, P, ParseErr, factorP, identP, identPatP, selectIdentPatP)
 import Minipat.Print (prettyShow)
 import Minipat.Stream (Ev (..), streamRun)
 import Minipat.Time (Arc (..), CycleTime (..), Span (..))
+import Minipat.Ur (ur)
 import Prettyprinter qualified as P
 import System.IO (BufferMode (..), hSetBuffering, stdout)
 import Test.Daytripper
@@ -399,11 +402,9 @@ testPatNormCases =
 
 runPatInterpCase :: (TestName, Maybe Arc, Text, [Ev Ident]) -> TestTree
 runPatInterpCase (n, mayArc, patStr, evs) = testCase n $ do
-  pat <- either throwIO pure (parse tpatP patStr)
-  let pat' = normPat pat
-  pat'' <- either throwIO pure (interpPat pat')
+  pat <- either throwIO pure (evalPat identP patStr)
   let arc = fromMaybe (Arc 0 1) mayArc
-      actualEvs = streamRun pat'' arc
+      actualEvs = streamRun pat arc
   actualEvs @?= evs
 
 ev :: Rational -> Rational -> x -> Ev x
@@ -683,6 +684,52 @@ testPatInterpCases =
         )
       ]
 
+runPatReprCase :: (TestName, Text, Maybe (TPat Ident), Maybe Text) -> TestTree
+runPatReprCase (n, patStr, mayRePat, mayReStr) = testCase n $ do
+  pat :: Pat Loc Ident <- either throwIO pure (evalPat identP patStr)
+  actualPat :: Pat Loc Ident <- either throwIO pure (interpPat pat)
+  for_ mayRePat (first (const ()) actualPat @?=)
+  let actualStr = prettyShow actualPat
+      expectStr = fromMaybe patStr mayReStr
+  actualStr @?= expectStr
+
+testPatReprCases :: TestTree
+testPatReprCases =
+  testGroup "pat repr cases" $
+    fmap
+      runPatReprCase
+      [
+        ( "pure"
+        , "x"
+        , Just (mkTPat (PatPure "x"))
+        , Nothing
+        )
+      ,
+        ( "seq"
+        , "[x y]"
+        , Nothing -- Just (mkTPat (PatPure "x"))
+        , Nothing
+        )
+      ]
+
+testUr :: TestTree
+testUr = testCase "ur" $ do
+  -- let ep = ur @_ @String 3 "a b:x c" [("a", "1"), ("b", "2"), ("c", "3")] [("x", patFastBy 2)]
+  --     expectedEvs =
+  --       [ ev 0 1 "1"
+  --       , ev 1 (3 % 2) "2"
+  --       , ev (3 % 2) 2 "2"
+  --       , ev 2 3 "3"
+  --       ]
+  let ep = ur @_ @String 1 "a a" [("a", "1")] []
+      expectedEvs =
+        [ ev 0 1 "1"
+        ]
+  pat <- either throwIO pure ep
+  -- let actualEvs = streamRun pat (Arc 0 3)
+  let actualEvs = streamRun pat (Arc 0 1)
+  actualEvs @?= expectedEvs
+
 main :: IO ()
 main = do
   hSetBuffering stdout LineBuffering
@@ -692,4 +739,7 @@ main = do
       [ testParseCases
       , testPatNormCases
       , testPatInterpCases
+      -- TODO fix these
+      -- , testUr
+      -- , testPatReprCases
       ]

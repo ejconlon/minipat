@@ -10,7 +10,7 @@ import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Typeable (Typeable)
 import Minipat.Ast (Ident, Pat, Select (..))
-import Minipat.Eval (evalPat)
+import Minipat.Eval (PatternEval, evalPat)
 import Minipat.Interp (InterpErr, customInterpPat)
 import Minipat.Parser (Loc, identP, selectP)
 import Minipat.Pattern (Pattern (..), PatternUnwrap (..))
@@ -24,7 +24,7 @@ data UrErr k
 instance (Show k, Typeable k) => Exception (UrErr k)
 
 ur
-  :: (PatternUnwrap Loc f)
+  :: (PatternEval f)
   => CycleDelta
   -> Text
   -> [(Ident, f a)]
