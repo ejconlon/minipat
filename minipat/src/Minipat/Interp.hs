@@ -52,6 +52,9 @@ construct = peeksRw . patUnwrap'
 construct1 :: (PatternUnwrap b f) => PatM f (f x) -> Rw b e (f x, Rational)
 construct1 = fmap (,1) . construct
 
+guardFastBy :: (Pattern f) => Rational -> f x -> f x
+guardFastBy r p = if r == 1 then p else patFastBy r p
+
 goInterp
   :: (PatternUnwrap b f)
   => (a -> Either e (PatM f (f c)))
@@ -66,10 +69,10 @@ goInterp useValue = \case
       GroupTypeSeq _ -> construct1 (patSeq' els)
       GroupTypePar -> construct1 (patPar' (fmap fst els))
       GroupTypeRand ->
-        let els'' = fmap (\(el, w) -> patFastBy w el) els
+        let els'' = fmap (\(el, w) -> guardFastBy w el) els
         in  construct1 (patRand' els'')
       GroupTypeAlt ->
-        let els'' = fmap (\(el, w) -> patFastBy w el) els
+        let els'' = fmap (\(el, w) -> guardFastBy w el) els
         in  construct1 (patAlt' els'')
   PatMod (Mod (el, w) md) -> do
     case md of

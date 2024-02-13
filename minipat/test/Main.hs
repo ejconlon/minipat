@@ -9,7 +9,8 @@ where
 import Bowtie (pattern JotP)
 import Control.Exception (throwIO)
 import Control.Monad (void)
-import Data.Bifunctor (first)
+import Data.Bifunctor (Bifunctor (..))
+import Data.Bitraversable (Bitraversable (..))
 import Data.Either (isLeft, isRight)
 import Data.Foldable (for_)
 import Data.Maybe (fromMaybe)
@@ -79,11 +80,20 @@ mkTPat = Pat . JotP ()
 mkUnTPat :: PatF () a (UnPat () a) -> UnTPat a
 mkUnTPat = unPat . mkTPat
 
+convTPat :: Pat Loc a -> TPat a
+convTPat = first (const ())
+
 tpatP :: P (TPat Ident)
-tpatP = fmap (first (const ())) identPatP
+tpatP = fmap convTPat identPatP
 
 tspatP :: P (TPat (Select Integer Ident))
-tspatP = fmap (first (const ())) (selectIdentPatP intP)
+tspatP = fmap convTPat (selectIdentPatP intP)
+
+parsePat :: Text -> IO (Pat Loc Ident)
+parsePat = either throwIO pure . parse identPatP
+
+parseTPat :: Text -> IO (TPat Ident)
+parseTPat = fmap convTPat . parsePat
 
 xPatIdent, yPatIdent :: UnTPat Ident
 xPatIdent = mkUnTPat (PatPure (Ident "x"))
@@ -327,7 +337,7 @@ testParseCases =
 
 runPatNormCase :: (TestName, Text, Pat () Ident) -> TestTree
 runPatNormCase (n, patStr, npat) = testCase n $ do
-  pat <- either throwIO pure (parse tpatP patStr)
+  pat <- parseTPat patStr
   let pat' = normPat pat
   pat' @?= npat
 
@@ -736,23 +746,71 @@ testPatReprCases =
         )
       ]
 
+runUrCase
+  :: (TestName, Integer, Text, [(Ident, Text)], [(Ident, Pat Loc Ident -> Pat Loc Ident)], Maybe Text, [Ev Ident])
+  -> TestTree
+runUrCase (n, inpLen, inpPat, inpSubPats, inpSubXforms, mayExpectStr, expectEvs) = testCase n $ do
+  inpSubPats' <- traverse (bitraverse pure parsePat) inpSubPats
+  actualPat :: Pat Loc Ident <- either throwIO pure (ur (fromInteger inpLen) inpPat inpSubPats' inpSubXforms)
+  for_ mayExpectStr $ \expectStr -> do
+    let actualStr = prettyShow actualPat
+    actualStr @?= expectStr
+  actualStream <- either throwIO pure (interpPat (normPat actualPat))
+  let arc = Arc 0 (fromInteger inpLen)
+      actualEvs = streamRun actualStream arc
+  actualEvs @?= expectEvs
+
 testUr :: TestTree
-testUr = testCase "ur" $ do
-  -- let ep = ur @_ @String 3 "a b:x c" [("a", "1"), ("b", "2"), ("c", "3")] [("x", patFastBy 2)]
-  --     expectedEvs =
-  --       [ ev 0 1 "1"
-  --       , ev 1 (3 % 2) "2"
-  --       , ev (3 % 2) 2 "2"
-  --       , ev 2 3 "3"
-  --       ]
-  let ep = ur @_ @String 1 "a a" [("a", "1")] []
-      expectedEvs =
-        [ ev 0 1 "1"
-        ]
-  pat <- either throwIO pure ep
-  -- let actualEvs = streamRun pat (Arc 0 3)
-  let actualEvs = streamRun pat (Arc 0 1)
-  actualEvs @?= expectedEvs
+testUr =
+  testGroup "ur" $
+    fmap
+      runUrCase
+      [
+        ( "simple"
+        , 1
+        , "a"
+        , [("a", "x")]
+        , []
+        , Just "x"
+        ,
+          [ ev 0 1 "x"
+          ]
+        )
+        -- , ( "more"
+        --   , 2
+        --   , "a b:x"
+        --   , [("a", "x"), ("b", "y")]
+        --   , [("x", patFastBy 2)]
+        --   , Just "[x y y]"
+        --   , [ ev 0 1 "x"
+        --     , ev 1 (3 % 2) "y"
+        --     , ev 2 (5 % 2) "y"
+        --     ]
+        --   )
+      ]
+
+-- testUr :: TestTree
+-- testUr = testCase "ur" $ do
+--   -- let ep = ur @_ @String 3 "a b:x c" [("a", "1"), ("b", "2"), ("c", "3")] [("x", patFastBy 2)]
+--   --     expectedEvs =
+--   --       [ ev 0 1 "1"
+--   --       , ev 1 (3 % 2) "2"
+--   --       , ev (3 % 2) 2 "2"
+--   --       , ev 2 3 "3"
+--   --       ]
+--   -- let arc = Arc 0 3
+--   let inpLen = 1
+--       inpPat = "a"
+--       inpSubPats = [("a", "x")]
+--       inpSubXforms = []
+--       expectedEvs :: [Ev Ident] =
+--         [ ev 0 1 "x"
+--         ]
+--       expectStr = "x"
+--   inpSubPats' <- traverse (bitraverse pure parsePat) inpSubPats
+--   actualPat :: Pat Loc Ident <- either throwIO pure (ur inpLen inpPat inpSubPats' inpSubXforms)
+--   let actualStr = prettyShow actualPat
+--   actualStr @?= expectStr
 
 main :: IO ()
 main = do
@@ -764,6 +822,5 @@ main = do
       , testPatNormCases
       , testPatInterpCases
       , testPatReprCases
-      -- TODO fix this
-      -- , testUr
+      , testUr
       ]

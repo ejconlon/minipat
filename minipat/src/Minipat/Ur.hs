@@ -67,4 +67,6 @@ urInterp
   -> (k -> Maybe (f a))
   -> (Ident -> Maybe (f a -> f a))
   -> Either (AnnoErr b (InterpErr (UrErr k))) (f a)
-urInterp del pat findPat findXform = fmap (patSlowBy (unCycleDelta del)) (customInterpPat (urUse findPat findXform) pat)
+urInterp (CycleDelta del) pat findPat findXform =
+  let x = customInterpPat (urUse findPat findXform) pat
+  in  if del == 1 then x else fmap (patSlowBy del) x
