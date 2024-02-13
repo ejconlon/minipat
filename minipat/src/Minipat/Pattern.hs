@@ -34,7 +34,7 @@ mkPatGroup :: GroupType -> Seq (Pat b a) -> Reader b (Pat b a)
 mkPatGroup gt = \case
   Empty -> mkPat PatSilence
   x :<| Empty -> pure x
-  xs -> mkPat (PatGroup (Group 0 gt (fmap unPat xs)))
+  xs -> mkPat (PatGroup (Group 1 gt (fmap unPat xs)))
 
 mkPatMod :: ModType b -> Pat b a -> Reader b (Pat b a)
 mkPatMod mt (Pat pa) = mkPat (PatMod (Mod pa mt))
@@ -54,8 +54,8 @@ mkPatSeq = \case
   (x, _) :<| Empty -> pure x
   xs ->
     let w = sum (fmap snd (toList xs))
-        adjust (x, t) = unPat (patFastBy (t / w) x)
-    in  mkPat (PatGroup (Group 0 (GroupTypeSeq SeqPresSpace) (fmap adjust xs)))
+        adjust (x, _) = unPat x
+    in  mkPat (PatGroup (Group 1 (GroupTypeSeq SeqPresSpace) (fmap adjust xs)))
 
 -- | 'Pat' and 'Stream' can be constructed abstractly with this
 class (Functor f, Monad (PatM f), Default (PatA f)) => Pattern f where

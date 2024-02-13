@@ -144,7 +144,11 @@ instance Pretty Factor where
 
 -- | Make a 'Factor' representing the given 'Rational'
 factorFromRational :: Rational -> Factor
-factorFromRational = FactorRational RationalPresDec
+factorFromRational f =
+  let (q, r) = quotRem (numerator f) (denominator f)
+  in  if r == 0
+        then FactorInteger q
+        else FactorRational RationalPresDec f
 
 factorUnary :: (forall a. (Num a) => a -> a) -> Factor -> Factor
 factorUnary f = \case

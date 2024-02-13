@@ -705,9 +705,33 @@ testPatReprCases =
         , Nothing
         )
       ,
-        ( "seq"
+        ( "seq 1"
+        , "[x]"
+        , Just (mkTPat (PatPure "x"))
+        , Just "x"
+        )
+      ,
+        ( "seq 2"
         , "[x y]"
-        , Nothing -- Just (mkTPat (PatPure "x"))
+        , Nothing
+        , Nothing
+        )
+      ,
+        ( "fast"
+        , "x*2"
+        , Nothing
+        , Nothing
+        )
+      ,
+        ( "slow"
+        , "x/2"
+        , Nothing
+        , Nothing
+        )
+      ,
+        ( "seq fast"
+        , "[x*2 y]"
+        , Nothing
         , Nothing
         )
       ]
@@ -739,7 +763,7 @@ main = do
       [ testParseCases
       , testPatNormCases
       , testPatInterpCases
-      -- TODO fix these
+      , testPatReprCases
+      -- TODO fix this
       -- , testUr
-      -- , testPatReprCases
       ]
