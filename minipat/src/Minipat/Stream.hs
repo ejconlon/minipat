@@ -41,20 +41,20 @@ module Minipat.Stream
   , streamRand
   , streamAlt
   , streamPar
+  , streamSwitch
+  , streamPieces
   )
 where
 
+import Control.Applicative (Alternative (..))
 import Control.Monad (ap)
-import Control.Monad.Identity (Identity (..))
 import Data.Foldable (foldMap', foldl', toList)
 import Data.Heap (Entry (..), Heap)
 import Data.Heap qualified as H
 import Data.Semigroup (Semigroup (..))
 import Data.Sequence (Seq (..))
 import Data.Sequence qualified as Seq
-import Data.String (IsString (..))
 import Minipat.Ast (Euclid (..))
-import Minipat.Pattern (Pattern (..), PatternUnwrap (..))
 import Minipat.Rand (arcSeed, randFrac, randInt, spanSeed)
 import Minipat.Time
   ( Arc (..)
@@ -160,21 +160,9 @@ instance Monoid (Stream a) where
   mempty = Stream (const mempty)
   mconcat ss = Stream (\arc -> mconcat (fmap (`unStream` arc) ss))
 
--- TODO alt should be invariant under shifts, but that is expensive
--- -- | 'empty', like 'mempty', is the empty stream
--- instance Alternative Stream where
---   empty = mempty
---   Stream k1 <|> Stream k2 = Stream (foldl' merge mempty . spanSplit) where
---     merge t0 (_, Span arc _) =
---       let t1 = k1 arc
---           t2 = if tapeNull t1 then k2 arc else t1
---       in t0 <> t2
-
-instance (IsString s) => IsString (Stream s) where
-  fromString = pure . fromString
-
--- LAW TO VERIFY
--- forall p a. streamRun p a == spanSplit a >>= \(_, a') -> fmap (_) (streamRun p a')
+instance Alternative Stream where
+  empty = mempty
+  (<|>) = (<>)
 
 streamFilter :: (a -> Bool) -> Stream a -> Stream a
 streamFilter f (Stream k) = Stream (tapeFilter f . k)
@@ -212,11 +200,11 @@ streamFast, streamSlow :: Stream Rational -> Stream a -> Stream a
 streamFast = streamAdjust streamFastBy
 streamSlow = streamAdjust streamSlowBy
 
-streamEarlyBy, streamLateBy :: CycleTime -> Stream a -> Stream a
-streamEarlyBy t = streamTimeMapInv id (subtract t)
-streamLateBy t = streamTimeMapInv id (+ t)
+streamEarlyBy, streamLateBy :: CycleDelta -> Stream a -> Stream a
+streamEarlyBy (CycleDelta t) = streamTimeMapInv id (CycleTime . subtract t . unCycleTime)
+streamLateBy (CycleDelta t) = streamTimeMapInv id (CycleTime . (+ t) . unCycleTime)
 
-streamEarly, streamLate :: Stream CycleTime -> Stream a -> Stream a
+streamEarly, streamLate :: Stream CycleDelta -> Stream a -> Stream a
 streamEarly = streamAdjust streamEarlyBy
 streamLate = streamAdjust streamLateBy
 
@@ -309,25 +297,3 @@ streamPieces x = \case
 --
 -- streamInteg :: Num n => Stream n -> Stream n
 -- streamInteg = undefined
-
-instance Pattern Stream where
-  type PatM Stream = Identity
-  type PatA Stream = ()
-  patCon' = const . runIdentity
-  patPure' = Identity . pure
-  patEmpty' = Identity mempty
-  patPar' = Identity . streamPar
-  patAlt' = Identity . streamAlt
-  patRand' = Identity . streamRand
-  patSeq' = Identity . streamSeq
-  patEuc' e = Identity . streamEuc e
-  patRep' r = Identity . streamRep r
-  patFast' p = Identity . streamFast p
-  patSlow' p = Identity . streamSlow p
-  patFastBy' r = Identity . streamFastBy r
-  patSlowBy' r = Identity . streamSlowBy r
-  patDeg' p = Identity . streamDeg p
-  patDegBy' r = Identity . streamDegBy r
-
-instance PatternUnwrap b Stream where
-  patUnwrap' = const . runIdentity

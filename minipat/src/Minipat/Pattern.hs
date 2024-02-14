@@ -5,9 +5,9 @@ module Minipat.Pattern
 where
 
 import Bowtie (pattern JotP)
+import Control.Monad.Identity (Identity (..))
 import Control.Monad.Reader (Reader, asks, runReader)
 import Data.Default (Default (..))
-import Data.Foldable (toList)
 import Data.Kind (Type)
 import Data.Sequence (Seq (..))
 import Minipat.Ast
@@ -26,6 +26,7 @@ import Minipat.Ast
   , UnPat
   , factorFromRational
   )
+import Minipat.Stream
 
 mkPat :: PatF b a (UnPat b a) -> Reader b (Pat b a)
 mkPat pf = asks (\b -> Pat (JotP b pf))
@@ -39,8 +40,21 @@ mkPatGroup gt = \case
 mkPatMod :: ModType b -> Pat b a -> Reader b (Pat b a)
 mkPatMod mt (Pat pa) = mkPat (PatMod (Mod pa mt))
 
+mkPatSpeedBy :: (Default b) => SpeedDir -> Rational -> Pat b a -> Reader b (Pat b a)
+mkPatSpeedBy sd f p =
+  if f == 1
+    then pure p
+    else mkPatSpeed sd (patPure f) p
+
 mkPatSpeed :: SpeedDir -> Pat b Rational -> Pat b a -> Reader b (Pat b a)
 mkPatSpeed sd pf = mkPatMod (ModTypeSpeed (Speed sd (fmap factorFromRational pf)))
+
+mkPatDegBy :: (Default b) => Rational -> Pat b a -> Reader b (Pat b a)
+mkPatDegBy f p =
+  if
+    | f <= 0 -> patEmpty'
+    | f >= 1 -> pure p
+    | otherwise -> mkPatDeg (patPure f) p
 
 mkPatDeg :: Pat b Rational -> Pat b a -> Reader b (Pat b a)
 mkPatDeg pf = mkPatMod (ModTypeDegrade (Degrade (Just (fmap factorFromRational pf))))
@@ -48,13 +62,12 @@ mkPatDeg pf = mkPatMod (ModTypeDegrade (Degrade (Just (fmap factorFromRational p
 mkPatRep :: Integer -> Pat b a -> Reader b (Pat b a)
 mkPatRep n = mkPatMod (ModTypeReplicate (Replicate (Just n)))
 
-mkPatSeq :: (Default b) => Seq (Pat b a, Rational) -> Reader b (Pat b a)
+mkPatSeq :: Seq (Pat b a, Rational) -> Reader b (Pat b a)
 mkPatSeq = \case
   Empty -> mkPat PatSilence
   (x, _) :<| Empty -> pure x
   xs ->
-    let w = sum (fmap snd (toList xs))
-        adjust (x, _) = unPat x
+    let adjust = unPat . fst
     in  mkPat (PatGroup (Group 1 (GroupTypeSeq SeqPresSpace) (fmap adjust xs)))
 
 -- | 'Pat' and 'Stream' can be constructed abstractly with this
@@ -135,10 +148,32 @@ instance (Default b) => Pattern (Pat b) where
   patRep' = mkPatRep
   patFast' = mkPatSpeed SpeedDirFast
   patSlow' = mkPatSpeed SpeedDirSlow
-  patFastBy' = patFast' . patPure -- patFast . patPure
-  patSlowBy' = patSlow' . patPure -- patSlow . patPure
+  patFastBy' = mkPatSpeedBy SpeedDirFast
+  patSlowBy' = mkPatSpeedBy SpeedDirSlow
   patDeg' = mkPatDeg
-  patDegBy' = patDeg' . patPure
+  patDegBy' = mkPatDegBy
 
 instance (Default b) => PatternUnwrap b (Pat b) where
   patUnwrap' = patCon'
+
+instance Pattern Stream where
+  type PatM Stream = Identity
+  type PatA Stream = ()
+  patCon' = const . runIdentity
+  patPure' = Identity . pure
+  patEmpty' = Identity mempty
+  patPar' = Identity . streamPar
+  patAlt' = Identity . streamAlt
+  patRand' = Identity . streamRand
+  patSeq' = Identity . streamSeq
+  patEuc' e = Identity . streamEuc e
+  patRep' r = Identity . streamRep r
+  patFast' p = Identity . streamFast p
+  patSlow' p = Identity . streamSlow p
+  patFastBy' r = Identity . streamFastBy r
+  patSlowBy' r = Identity . streamSlowBy r
+  patDeg' p = Identity . streamDeg p
+  patDegBy' r = Identity . streamDegBy r
+
+instance PatternUnwrap b Stream where
+  patUnwrap' = const . runIdentity

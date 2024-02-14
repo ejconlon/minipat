@@ -27,12 +27,12 @@ library
       Minipat.Dirt.Attrs
       Minipat.Dirt.Boot
       Minipat.Dirt.Core
-      Minipat.Dirt.EStream
       Minipat.Dirt.Logger
       Minipat.Dirt.Notes
       Minipat.Dirt.Osc
       Minipat.Dirt.Prelude
       Minipat.Dirt.Resources
+      Minipat.Dirt.Strip
       Minipat.Dirt.Test
   other-modules:
       Paths_minipat_dirt
