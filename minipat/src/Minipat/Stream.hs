@@ -50,7 +50,7 @@ import Data.Foldable (foldMap', foldl', toList)
 import Data.Heap (Entry (..), Heap)
 import Data.Heap qualified as H
 import Data.Semigroup (Semigroup (..))
-import Data.Sequence (Seq)
+import Data.Sequence (Seq (..))
 import Data.Sequence qualified as Seq
 import Data.String (IsString (..))
 import Minipat.Ast (Euclid (..))
@@ -284,6 +284,18 @@ streamAlt ss =
 
 streamPar :: Seq (Stream a) -> Stream a
 streamPar = foldl' (<>) mempty
+
+streamSwitch :: Stream a -> CycleTime -> Stream a -> Stream a
+streamSwitch sa t sb = Stream $ \arc@(Arc s e) ->
+  if
+    | t <= s -> unStream sb arc
+    | t >= e -> unStream sa arc
+    | otherwise -> unStream sa (Arc s t) <> unStream sb (Arc t e)
+
+streamPieces :: Stream a -> Seq (CycleTime, Stream a) -> Stream a
+streamPieces x = \case
+  Empty -> x
+  (t, x') :<| xs' -> streamSwitch x t (streamPieces x' xs')
 
 -- TODO move to module with continuous primitives
 -- fnSine :: Rational -> Time -> Double
