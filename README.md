@@ -1,9 +1,10 @@
 # minipat
 
-A mini pattern language extracted from Tidal
+A mini pattern language for music, like Tidal
 
 ## TODO
 
+* rotL, seqP, etc
 * Finish Midi notes/chords/arps
 * Strongly typed `Attrs`
 * Implement polymeters
@@ -16,5 +17,5 @@ A mini pattern language extracted from Tidal
   * `every`
   * `squiz`
   * `range`
-* Impement `Alternative` for `Stream`
+* Impement `Alternative` for `Stream`?
 

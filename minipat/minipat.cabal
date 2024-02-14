@@ -6,7 +6,7 @@ cabal-version: 1.12
 
 name:           minipat
 version:        0.1.0
-synopsis:       A mini pattern language extracted from Tidal
+synopsis:       A mini pattern language for music, like Tidal
 description:    Please see the README on GitHub at <https://github.com/ejconlon/minipat#readme>
 homepage:       https://github.com/ejconlon/minipat#readme
 bug-reports:    https://github.com/ejconlon/minipat/issues

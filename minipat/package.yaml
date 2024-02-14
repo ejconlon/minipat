@@ -6,7 +6,7 @@ license: BSD3
 author: Eric Conlon
 maintainer: ejconlon@gmail.com
 copyright: (c) 2024 Eric Conlon
-synopsis: A mini pattern language extracted from Tidal
+synopsis: A mini pattern language for music, like Tidal
 description: Please see the README on GitHub at <https://github.com/ejconlon/minipat#readme>
 tested-with: GHC == 9.6.3
 

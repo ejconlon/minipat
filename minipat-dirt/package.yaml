@@ -6,7 +6,7 @@ license: BSD3
 author: Eric Conlon
 maintainer: ejconlon@gmail.com
 copyright: (c) 2024 Eric Conlon
-synopsis: Supercollider integration for minipat
+synopsis: SuperDirt integration for minipat
 description: Please see the README on GitHub at <https://github.com/ejconlon/minipat#readme>
 tested-with: GHC == 9.6.4
 

@@ -6,7 +6,7 @@ cabal-version: 1.12
 
 name:           minipat-dirt
 version:        0.1.0
-synopsis:       Supercollider integration for minipat
+synopsis:       SuperDirt integration for minipat
 description:    Please see the README on GitHub at <https://github.com/ejconlon/minipat#readme>
 homepage:       https://github.com/ejconlon/minipat#readme
 bug-reports:    https://github.com/ejconlon/minipat/issues
