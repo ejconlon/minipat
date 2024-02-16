@@ -32,9 +32,6 @@ instance Alternative EStream where
   empty = mempty
   (<|>) = (<>)
 
--- estreamCast :: EStream a -> EStream a
--- estreamCast = coerce
-
 estreamMap :: (Stream a -> Stream b) -> EStream a -> EStream b
 estreamMap f (EStream s) = EStream (fmap f s)
 
@@ -73,7 +70,7 @@ estreamDeg :: EStream Rational -> EStream a -> EStream a
 estreamDeg = estreamLiftA2 streamDeg
 
 estreamSeq :: Seq (EStream a, Rational) -> EStream a
-estreamSeq = error "TODO"
+estreamSeq = EStream . fmap streamSeq . traverse (\(EStream e, r) -> fmap (,r) e)
 
 estreamRep :: Integer -> EStream a -> EStream a
 estreamRep = estreamMap . streamRep
@@ -85,16 +82,16 @@ estreamEuc :: Euclid -> EStream a -> EStream a
 estreamEuc = estreamMap . streamEuc
 
 estreamRand :: Seq (EStream a) -> EStream a
-estreamRand = error "TODO"
+estreamRand = EStream . fmap streamRand . traverse unEStream
 
 estreamAlt :: Seq (EStream a) -> EStream a
-estreamAlt = error "TODO"
+estreamAlt = EStream . fmap streamAlt . traverse unEStream
 
 estreamPar :: Seq (EStream a) -> EStream a
-estreamPar = error "TODO"
+estreamPar = EStream . fmap streamPar . traverse unEStream
 
 estreamSwitch :: EStream a -> CycleTime -> EStream a -> EStream a
-estreamSwitch = error "TODO"
+estreamSwitch e1 t = estreamLiftA2 (`streamSwitch` t) e1
 
 estreamPieces :: EStream a -> Seq (CycleTime, EStream a) -> EStream a
-estreamPieces = error "TODO"
+estreamPieces e1 = EStream . liftA2 streamPieces (unEStream e1) . traverse (\(t, EStream e) -> fmap (t,) e)
