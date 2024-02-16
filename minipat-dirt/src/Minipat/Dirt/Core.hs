@@ -16,7 +16,7 @@ import Control.Concurrent.STM.TQueue
   , writeTQueue
   )
 import Control.Concurrent.STM.TVar (TVar, modifyTVar', newTVarIO, readTVar, readTVarIO, stateTVar, writeTVar)
-import Control.Exception (Exception, SomeException, bracket, mask_, onException, throwIO)
+import Control.Exception (Exception (..), SomeException, bracket, mask_, onException, throwIO)
 import Control.Monad (unless, void)
 import Control.Monad.IO.Class (liftIO)
 import Dahdit.Midi.Osc (Datum (..), Packet)
@@ -204,7 +204,7 @@ updateOrbits st f = atomically $ do
 setOrbit :: St -> Integer -> EStream Attrs -> IO ()
 setOrbit st o es =
   case unEStream es of
-    Left e -> throwIO e
+    Left e -> putStrLn (displayException e)
     Right s -> updateOrbits st (Map.insert o s)
 
 clearOrbit :: St -> Integer -> IO ()
@@ -245,7 +245,7 @@ handshake st = bracket acq rel (const (pure ()))
 peek :: (Show a) => St -> EStream a -> IO ()
 peek st es =
   case unEStream es of
-    Left e -> throwIO e
+    Left e -> putStrLn (displayException e)
     Right s -> do
       cyc <- fmap fromIntegral (getCycle st)
       let arc = Arc cyc (cyc + 1)

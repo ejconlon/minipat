@@ -7,6 +7,7 @@ module Minipat.Parser
   , P
   , ParseErr (..)
   , PPat
+  , parseNice
   , topPatP
   , identPatP
   , selectIdentPatP
@@ -17,7 +18,7 @@ module Minipat.Parser
 where
 
 import Bowtie (Anno (..), Jot (..), annoJot, pattern JotP)
-import Control.Exception (Exception)
+import Control.Exception (Exception (..))
 import Control.Monad (guard, when)
 import Control.Monad.Fix (fix)
 import Data.Char (isAlpha, isAlphaNum, isSpace)
@@ -25,6 +26,7 @@ import Data.Default (Default (..))
 import Data.Ratio (denominator, numerator)
 import Data.Sequence (Seq (..))
 import Data.Sequence qualified as Seq
+import Data.Text (Text)
 import Data.Text qualified as T
 import Looksee qualified as L
 import Minipat.Ast
@@ -51,6 +53,18 @@ instance L.HasErrMessage ParseErr where
 instance Exception ParseErr
 
 type P = L.Parser ParseErr
+
+data NiceErr = NiceErr
+  { neErr :: !(L.Err ParseErr)
+  , neInput :: !Text
+  }
+  deriving stock (Eq, Ord, Show)
+
+instance Exception NiceErr where
+  displayException (NiceErr e t) = "Parse error:\n" ++ T.unpack (L.renderE "<input>" t e)
+
+parseNice :: P a -> Text -> Either NiceErr a
+parseNice p t = either (Left . (`NiceErr` t)) Right (L.parse p t)
 
 -- | The location in the source text (real text span or virtual location)
 data Loc
