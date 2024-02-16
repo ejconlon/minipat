@@ -2,6 +2,8 @@
 
 module Minipat.EStream where
 
+-- TODO explicit exports
+
 import Control.Applicative (Alternative (..))
 import Control.Exception (Exception, SomeException (..))
 import Data.Kind (Type)
@@ -10,7 +12,7 @@ import Data.Sequence (Seq)
 import Minipat.Ast (Euclid)
 import Minipat.Stream
 import Minipat.Stream qualified as S
-import Minipat.Time (CycleDelta, CycleTime)
+import Minipat.Time (CycleDelta, CycleTime, MergeStrat)
 
 -- Tracks errors in stream creation for later logging
 newtype EStream (a :: Type) = EStream {unEStream :: Either SomeException (Stream a)}
@@ -35,11 +37,14 @@ instance Alternative EStream where
 estreamMap :: (Stream a -> Stream b) -> EStream a -> EStream b
 estreamMap f (EStream s) = EStream (fmap f s)
 
-estreamLiftA2 :: (Stream a -> Stream b -> Stream b) -> EStream a -> EStream b -> EStream b
+estreamLiftA2 :: (Stream a -> Stream b -> Stream c) -> EStream a -> EStream b -> EStream c
 estreamLiftA2 f (EStream s1) (EStream s2) = EStream (liftA2 f s1 s2)
 
 estreamBind :: EStream a -> (Stream a -> EStream b) -> EStream b
 estreamBind (EStream c) f = EStream (c >>= unEStream . f)
+
+estreamApply :: MergeStrat -> (a -> b -> c) -> EStream a -> EStream b -> EStream c
+estreamApply ms = estreamLiftA2 . streamApply ms
 
 estreamThrow :: (Exception e) => e -> EStream a
 estreamThrow = EStream . Left . SomeException

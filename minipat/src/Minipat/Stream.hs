@@ -19,9 +19,8 @@ module Minipat.Stream
   , tapeFromList
   , Stream (..)
   , streamFilter
-  , streamInnerBind
-  , streamOuterBind
-  , streamMixedBind
+  , streamBind
+  , streamApply
   , streamRun
   , streamAdjust
   , streamSeq
@@ -153,7 +152,7 @@ instance Applicative Stream where
   (<*>) = ap
 
 instance Monad Stream where
-  (>>=) = streamMixedBind
+  (>>=) = streamBind MergeStratMixed
 
 -- | '(<>)' is parallel composition of streams
 instance Semigroup (Stream a) where
@@ -182,29 +181,11 @@ streamBindWith g pa f = Stream $ \arc ->
 streamBind :: MergeStrat -> Stream a -> (a -> Stream b) -> Stream b
 streamBind = streamBindWith . arcMerge
 
-streamInnerBind :: Stream a -> (a -> Stream b) -> Stream b
-streamInnerBind = streamBind MergeStratInner
-
-streamOuterBind :: Stream a -> (a -> Stream b) -> Stream b
-streamOuterBind = streamBind MergeStratOuter
-
-streamMixedBind :: Stream a -> (a -> Stream b) -> Stream b
-streamMixedBind = streamBind MergeStratMixed
-
 streamApplyWith :: (Maybe Arc -> Maybe Arc -> Maybe Arc) -> (a -> b -> c) -> Stream a -> Stream b -> Stream c
-streamApplyWith = error "TODO"
+streamApplyWith g f pa = streamBindWith g (fmap f pa) . flip fmap
 
 streamApply :: MergeStrat -> (a -> b -> c) -> Stream a -> Stream b -> Stream c
 streamApply = streamApplyWith . arcMerge
-
-streamInnerApply :: (a -> b -> c) -> Stream a -> Stream b -> Stream c
-streamInnerApply = streamApply MergeStratInner
-
-streamOuterApply :: (a -> b -> c) -> Stream a -> Stream b -> Stream c
-streamOuterApply = streamApply MergeStratOuter
-
-streamMixedApply :: (a -> b -> c) -> Stream a -> Stream b -> Stream c
-streamMixedApply = streamApply MergeStratMixed
 
 streamRun :: Stream a -> Arc -> [Ev a]
 streamRun pa arc = tapeToList (unStream pa arc)
@@ -213,7 +194,7 @@ streamTimeMapInv :: (CycleTime -> CycleTime) -> (CycleTime -> CycleTime) -> Stre
 streamTimeMapInv onTape onArc (Stream k) = Stream (tapeTimeMapMono onTape . k . arcTimeMapMono onArc)
 
 streamAdjust :: (a -> Stream b -> Stream c) -> Stream a -> Stream b -> Stream c
-streamAdjust f pa pb = streamInnerBind pa (`f` pb)
+streamAdjust f pa pb = streamBind MergeStratInner pa (`f` pb)
 
 streamFastBy, streamSlowBy :: Rational -> Stream a -> Stream a
 streamFastBy t = streamTimeMapInv (CycleTime . (/ t) . unCycleTime) (CycleTime . (* t) . unCycleTime)

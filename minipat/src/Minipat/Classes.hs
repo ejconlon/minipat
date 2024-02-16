@@ -30,7 +30,7 @@ import Minipat.Ast
   )
 import Minipat.EStream
 import Minipat.Stream
-import Minipat.Time (CycleDelta, CycleTime)
+import Minipat.Time (CycleDelta, CycleTime, MergeStrat (..))
 
 mkPat :: PatF b a (UnPat b a) -> Reader b (Pat b a)
 mkPat pf = asks (\b -> Pat (JotP b pf))
@@ -205,6 +205,13 @@ instance PatternUnwrap b EStream where
   patUnwrap' = const . runIdentity
 
 class (Alternative f, Pattern f) => Flow f where
+  flowApply :: MergeStrat -> (a -> b -> c) -> f a -> f b -> f c
+  flowInnerApply :: (a -> b -> c) -> f a -> f b -> f c
+  flowInnerApply = flowApply MergeStratInner
+  flowOuterApply :: (a -> b -> c) -> f a -> f b -> f c
+  flowOuterApply = flowApply MergeStratOuter
+  flowMixedApply :: (a -> b -> c) -> f a -> f b -> f c
+  flowMixedApply = flowApply MergeStratMixed
   flowFilter :: (a -> Bool) -> f a -> f a
   flowEarlyBy, flowLateBy :: CycleDelta -> f a -> f a
   flowEarly, flowLate :: f CycleDelta -> f a -> f a
@@ -212,6 +219,7 @@ class (Alternative f, Pattern f) => Flow f where
   flowPieces :: f a -> Seq (CycleTime, f a) -> f a
 
 instance Flow Stream where
+  flowApply = streamApply
   flowFilter = streamFilter
   flowEarlyBy = streamEarlyBy
   flowLateBy = streamLateBy
@@ -221,6 +229,7 @@ instance Flow Stream where
   flowPieces = streamPieces
 
 instance Flow EStream where
+  flowApply = estreamApply
   flowFilter = estreamFilter
   flowEarlyBy = estreamEarlyBy
   flowLateBy = estreamLateBy

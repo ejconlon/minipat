@@ -14,12 +14,11 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Looksee qualified as L
 import Minipat.Ast (Ident (..), Select (..))
-import Minipat.Classes (Pattern (..))
+import Minipat.Classes (Flow (..), Pattern (..))
 import Minipat.Dirt.Attrs (Attr (..), Attrs, DatumProxy (..), IsAttrs (..))
 import Minipat.Dirt.Notes (ChordName, Note (..), OctNote (..), Octave (..), convChordName, convNoteName, octToNote)
 import Minipat.Eval (PatternEval, evalPat)
 import Minipat.Parser (P, identP, selectP)
-import Minipat.Stream (Stream (..), streamInnerBind)
 
 -- Start with some private parsing stuff
 
@@ -66,9 +65,8 @@ ordP m pa =
 
 -- General combinators
 
-setIn, (#) :: (IsAttrs a, IsAttrs b) => Stream a -> Stream b -> Stream Attrs
-setIn p1 p2 = streamInnerBind p1 $ \m1 ->
-  let a1 = toAttrs m1 in fmap (\m2 -> toAttrs m2 <> a1) p2
+setIn, (#) :: (Flow f, IsAttrs a, IsAttrs b) => f a -> f b -> f Attrs
+setIn = flowInnerApply (\m1 m2 -> toAttrs m2 <> toAttrs m1)
 (#) = setIn
 
 pF :: (Pattern f, Real a) => Text -> f a -> f (Attr Float)
