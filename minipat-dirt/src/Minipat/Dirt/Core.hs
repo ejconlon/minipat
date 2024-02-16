@@ -34,6 +34,7 @@ import Minipat.Dirt.Attrs (Attrs)
 import Minipat.Dirt.Logger (LogAction, logError, logInfo, newLogger)
 import Minipat.Dirt.Osc (PlayEnv (..), PlayErr, Timed (..), convertTape, handshakePacket, playPacket)
 import Minipat.Dirt.Resources (RelVar, acquireAsync, relVarAcquire, relVarDispose, relVarInit)
+import Minipat.EStream (EStream (..))
 import Minipat.Print (prettyPrint)
 import Minipat.Stream (Stream (..), streamRun)
 import Minipat.Time (Arc (..), bpmToCps, cpsToBpm)
@@ -122,6 +123,7 @@ data Domain = Domain
   , domAhead :: !(TVar TimeDelta)
   , domPlaying :: !(TVar Bool)
   , domCycle :: !(TVar Integer)
+  , domAbsCycle :: !(TVar Integer)
   , domOrbits :: !(TVar (Map Integer (Stream Attrs)))
   , domStream :: !(TVar (Stream Attrs))
   , domQueue :: !(TQueue (Timed Packet))
@@ -134,6 +136,7 @@ newDomain =
     <$> newTVarIO 0
     <*> newTVarIO 0
     <*> newTVarIO False
+    <*> newTVarIO 0
     <*> newTVarIO 0
     <*> newTVarIO mempty
     <*> newTVarIO mempty
@@ -169,6 +172,9 @@ getStream = readTVarIO . domStream . stDom
 getCycle :: St -> IO Integer
 getCycle = readTVarIO . domCycle . stDom
 
+getAbsCycle :: St -> IO Integer
+getAbsCycle = readTVarIO . domAbsCycle . stDom
+
 getTempo :: St -> IO Rational
 getTempo = fmap (cpsToBpm 4) . getCps
 
@@ -197,6 +203,13 @@ updateOrbits st f = atomically $ do
 
 setOrbit :: St -> Integer -> Stream Attrs -> IO ()
 setOrbit st o s = updateOrbits st (Map.insert o s)
+
+-- TODO Move to this one
+setOrbit' :: St -> Integer -> EStream Attrs -> IO ()
+setOrbit' st o es =
+  case unEStream es of
+    Left e -> throwIO e
+    Right s -> updateOrbits st (Map.insert o s)
 
 clearOrbit :: St -> Integer -> IO ()
 clearOrbit st o = updateOrbits st (Map.delete o)
@@ -262,7 +275,9 @@ genEventsSTM dom now = do
   pure (penv, mpevs)
 
 advanceCycleSTM :: Domain -> STM ()
-advanceCycleSTM dom = modifyTVar' (domCycle dom) (+ 1)
+advanceCycleSTM dom = do
+  modifyTVar' (domCycle dom) (+ 1)
+  modifyTVar' (domAbsCycle dom) (+ 1)
 
 data OscConn = OscConn
   { ocTargetAddr :: !NS.SockAddr
