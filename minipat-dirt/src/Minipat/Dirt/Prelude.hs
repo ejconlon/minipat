@@ -14,10 +14,11 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Looksee qualified as L
 import Minipat.Ast (Ident (..), Select (..))
-import Minipat.Classes (Flow (..), Pattern (..))
+import Minipat.Classes (Flow (..))
 import Minipat.Dirt.Attrs (Attr (..), Attrs, DatumProxy (..), IsAttrs (..))
 import Minipat.Dirt.Notes (ChordName, Note (..), OctNote (..), Octave (..), convChordName, convNoteName, octToNote)
-import Minipat.Eval (PatternEval, evalPat)
+import Minipat.EStream (EStream (..))
+import Minipat.Eval (evalPat)
 import Minipat.Parser (P, identP, selectP)
 
 -- Start with some private parsing stuff
@@ -31,10 +32,10 @@ datumP = \case
   DatumProxyString -> fmap unIdent identP
 
 -- TODO figure out out to propagate error
-parsePat :: (PatternEval f) => P a -> Text -> f a
-parsePat p = either (pure patEmpty) id . evalPat p
+parsePat :: P a -> Text -> EStream a
+parsePat p = EStream . evalPat p
 
-datumPat :: (PatternEval f) => DatumProxy a -> Text -> f a
+datumPat :: DatumProxy a -> Text -> EStream a
 datumPat = parsePat . datumP
 
 octNoteP :: P OctNote
@@ -65,20 +66,20 @@ ordP m pa =
 
 -- General combinators
 
-setIn, (#) :: (Flow f, IsAttrs a, IsAttrs b) => f a -> f b -> f Attrs
+setIn, (#) :: (IsAttrs a, IsAttrs b) => EStream a -> EStream b -> EStream Attrs
 setIn = flowInnerApply (\m1 m2 -> toAttrs m2 <> toAttrs m1)
 (#) = setIn
 
-pF :: (Pattern f, Real a) => Text -> f a -> f (Attr Float)
+pF :: (Real a) => Text -> EStream a -> EStream (Attr Float)
 pF k = fmap (Attr k . realToFrac)
 
-pI :: (Pattern f, Integral a) => Text -> f a -> f (Attr Int32)
+pI :: (Integral a) => Text -> EStream a -> EStream (Attr Int32)
 pI k = fmap (Attr k . fromIntegral)
 
-attrPat :: (Pattern f) => Text -> f a -> f (Attr a)
+attrPat :: Text -> EStream a -> EStream (Attr a)
 attrPat k = fmap (Attr k)
 
-datumAttrPat :: (PatternEval f) => DatumProxy a -> Text -> Text -> f (Attr a)
+datumAttrPat :: DatumProxy a -> Text -> Text -> EStream (Attr a)
 datumAttrPat dp k = attrPat k . datumPat dp
 
 -- Specific combinators
@@ -95,11 +96,11 @@ instance IsAttrs Sound where
 soundP :: P Sound
 soundP = fmap (\(Select so mn) -> Sound so mn) (selectP identP noteP)
 
-sound, s :: (PatternEval f) => Text -> f Sound
+sound, s :: Text -> EStream Sound
 sound = parsePat soundP
 s = sound
 
-note, n :: (PatternEval f) => Text -> f Note
+note, n :: Text -> EStream Note
 note = parsePat noteP
 n = note
 
@@ -119,10 +120,10 @@ arpMap = Map.fromList [("up", ArpUp), ("down", ArpDown)]
 arpP :: P Arp
 arpP = ordP arpMap (fmap unIdent identP)
 
-arp :: (PatternEval f) => Text -> f Arp
+arp :: Text -> EStream Arp
 arp = parsePat arpP
 
--- strum :: Stream Arp -> Stream Chord -> Stream Note
+-- strum :: f Arp -> f Chord -> f Note
 -- strum arps chords = undefined
 
 -- Params
@@ -159,7 +160,7 @@ accelerate
   , sustain
   , tremolodepth
   , tremolorate
-    :: (Pattern f, Real a) => f a -> f (Attr Float)
+    :: (Real a) => EStream a -> EStream (Attr Float)
 accelerate = pF "accelerate"
 attack = pF "attack"
 bandf = pF "bandf"
@@ -211,7 +212,7 @@ accel
   , sz
   , tremdp
   , tremr
-    :: (Pattern f, Real a) => f a -> f (Attr Float)
+    :: (Real a) => EStream a -> EStream (Attr Float)
 att = attack
 bpf = bandf
 bpq = bandq

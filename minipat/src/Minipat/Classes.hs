@@ -7,7 +7,6 @@ where
 
 import Bowtie (pattern JotP)
 import Control.Applicative (Alternative (..))
-import Control.Monad.Identity (Identity (..))
 import Control.Monad.Reader (Reader, asks, runReader)
 import Data.Default (Default (..))
 import Data.Kind (Type)
@@ -28,8 +27,6 @@ import Minipat.Ast
   , UnPat
   , factorFromRational
   )
-import Minipat.EStream
-import Minipat.Stream
 import Minipat.Time (CycleDelta, CycleTime, MergeStrat (..))
 
 mkPat :: PatF b a (UnPat b a) -> Reader b (Pat b a)
@@ -134,10 +131,6 @@ class (Functor f, Monad (PatM f), Default (PatA f)) => Pattern f where
   patDegBy :: Rational -> f a -> f a
   patDegBy r = patCon . patDegBy' r
 
--- | Sometimes you can construct patterns with other types of annotations.
-class (Pattern f) => PatternUnwrap b f where
-  patUnwrap' :: PatM f (f a) -> b -> f a
-
 instance (Default b) => Pattern (Pat b) where
   type PatM (Pat b) = Reader b
   type PatA (Pat b) = b
@@ -157,52 +150,12 @@ instance (Default b) => Pattern (Pat b) where
   patDeg' = mkPatDeg
   patDegBy' = mkPatDegBy
 
+-- | Sometimes you can construct patterns with other types of annotations.
+class (Pattern f) => PatternUnwrap b f where
+  patUnwrap' :: PatM f (f a) -> b -> f a
+
 instance (Default b) => PatternUnwrap b (Pat b) where
   patUnwrap' = patCon'
-
-instance Pattern Stream where
-  type PatM Stream = Identity
-  type PatA Stream = ()
-  patCon' = const . runIdentity
-  patPure' = Identity . pure
-  patEmpty' = Identity mempty
-  patPar' = Identity . streamPar
-  patAlt' = Identity . streamAlt
-  patRand' = Identity . streamRand
-  patSeq' = Identity . streamSeq
-  patEuc' e = Identity . streamEuc e
-  patRep' r = Identity . streamRep r
-  patFast' p = Identity . streamFast p
-  patSlow' p = Identity . streamSlow p
-  patFastBy' r = Identity . streamFastBy r
-  patSlowBy' r = Identity . streamSlowBy r
-  patDeg' p = Identity . streamDeg p
-  patDegBy' r = Identity . streamDegBy r
-
-instance PatternUnwrap b Stream where
-  patUnwrap' = const . runIdentity
-
-instance Pattern EStream where
-  type PatM EStream = Identity
-  type PatA EStream = ()
-  patCon' = const . runIdentity
-  patPure' = Identity . pure
-  patEmpty' = Identity mempty
-  patPar' = Identity . estreamPar
-  patAlt' = Identity . estreamAlt
-  patRand' = Identity . estreamRand
-  patSeq' = Identity . estreamSeq
-  patEuc' e = Identity . estreamEuc e
-  patRep' r = Identity . estreamRep r
-  patFast' p = Identity . estreamFast p
-  patSlow' p = Identity . estreamSlow p
-  patFastBy' r = Identity . estreamFastBy r
-  patSlowBy' r = Identity . estreamSlowBy r
-  patDeg' p = Identity . estreamDeg p
-  patDegBy' r = Identity . estreamDegBy r
-
-instance PatternUnwrap b EStream where
-  patUnwrap' = const . runIdentity
 
 class (Alternative f, Pattern f) => Flow f where
   flowApply :: MergeStrat -> (a -> b -> c) -> f a -> f b -> f c
@@ -217,23 +170,3 @@ class (Alternative f, Pattern f) => Flow f where
   flowEarly, flowLate :: f CycleDelta -> f a -> f a
   flowSwitch :: f a -> CycleTime -> f a -> f a
   flowPieces :: f a -> Seq (CycleTime, f a) -> f a
-
-instance Flow Stream where
-  flowApply = streamApply
-  flowFilter = streamFilter
-  flowEarlyBy = streamEarlyBy
-  flowLateBy = streamLateBy
-  flowEarly = streamEarly
-  flowLate = streamLate
-  flowSwitch = streamSwitch
-  flowPieces = streamPieces
-
-instance Flow EStream where
-  flowApply = estreamApply
-  flowFilter = estreamFilter
-  flowEarlyBy = estreamEarlyBy
-  flowLateBy = estreamLateBy
-  flowEarly = estreamEarly
-  flowLate = estreamLate
-  flowSwitch = estreamSwitch
-  flowPieces = estreamPieces

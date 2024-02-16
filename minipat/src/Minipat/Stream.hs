@@ -47,6 +47,7 @@ where
 
 import Control.Applicative (Alternative (..))
 import Control.Monad (ap)
+import Control.Monad.Identity (Identity (..))
 import Data.Foldable (foldMap', foldl', toList)
 import Data.Heap (Entry (..), Heap)
 import Data.Heap qualified as H
@@ -54,6 +55,7 @@ import Data.Semigroup (Semigroup (..))
 import Data.Sequence (Seq (..))
 import Data.Sequence qualified as Seq
 import Minipat.Ast (Euclid (..))
+import Minipat.Classes (Flow (..), Pattern (..), PatternUnwrap (..))
 import Minipat.Rand (arcSeed, randFrac, randInt, spanSeed)
 import Minipat.Time
   ( Arc (..)
@@ -296,3 +298,35 @@ streamPieces x = \case
 --
 -- streamSine :: (Floating a, Fractional a) => Rational -> Stream a
 -- streamSine = streamCont . fnSine
+
+instance Pattern Stream where
+  type PatM Stream = Identity
+  type PatA Stream = ()
+  patCon' = const . runIdentity
+  patPure' = Identity . pure
+  patEmpty' = Identity mempty
+  patPar' = Identity . streamPar
+  patAlt' = Identity . streamAlt
+  patRand' = Identity . streamRand
+  patSeq' = Identity . streamSeq
+  patEuc' e = Identity . streamEuc e
+  patRep' r = Identity . streamRep r
+  patFast' p = Identity . streamFast p
+  patSlow' p = Identity . streamSlow p
+  patFastBy' r = Identity . streamFastBy r
+  patSlowBy' r = Identity . streamSlowBy r
+  patDeg' p = Identity . streamDeg p
+  patDegBy' r = Identity . streamDegBy r
+
+instance PatternUnwrap b Stream where
+  patUnwrap' = const . runIdentity
+
+instance Flow Stream where
+  flowApply = streamApply
+  flowFilter = streamFilter
+  flowEarlyBy = streamEarlyBy
+  flowLateBy = streamLateBy
+  flowEarly = streamEarly
+  flowLate = streamLate
+  flowSwitch = streamSwitch
+  flowPieces = streamPieces

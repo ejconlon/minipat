@@ -75,7 +75,7 @@ stop = setPlaying False
 handshake :: (Dirt) => IO ()
 handshake = C.handshake dirt
 
-peek :: (Dirt, Show a) => Stream a -> IO ()
+peek :: (Dirt, Show a) => EStream a -> IO ()
 peek = C.peek dirt
 
 d0, d1, d2, d3, d4, d5, d6, d7 :: (Dirt) => EStream Attrs -> IO ()

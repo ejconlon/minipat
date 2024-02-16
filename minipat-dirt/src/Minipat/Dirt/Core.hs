@@ -242,13 +242,16 @@ handshake st = bracket acq rel (const (pure ()))
       else logError (stLogger st) "... handshake FAILED"
     setPlaying st ok
 
-peek :: (Show a) => St -> Stream a -> IO ()
-peek st s = do
-  cyc <- fmap fromIntegral (getCycle st)
-  let arc = Arc cyc (cyc + 1)
-      evs = streamRun s arc
-  prettyPrint arc
-  for_ evs (prettyPrint . fmap show)
+peek :: (Show a) => St -> EStream a -> IO ()
+peek st es =
+  case unEStream es of
+    Left e -> throwIO e
+    Right s -> do
+      cyc <- fmap fromIntegral (getCycle st)
+      let arc = Arc cyc (cyc + 1)
+          evs = streamRun s arc
+      prettyPrint arc
+      for_ evs (prettyPrint . fmap show)
 
 clearAllOrbitsSTM :: Domain -> STM ()
 clearAllOrbitsSTM dom = do

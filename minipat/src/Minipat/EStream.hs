@@ -6,10 +6,12 @@ module Minipat.EStream where
 
 import Control.Applicative (Alternative (..))
 import Control.Exception (Exception, SomeException (..))
+import Control.Monad.Identity (Identity (..))
 import Data.Kind (Type)
 import Data.Semigroup (Semigroup (..))
 import Data.Sequence (Seq)
 import Minipat.Ast (Euclid)
+import Minipat.Classes (Flow (..), Pattern (..), PatternUnwrap (..))
 import Minipat.Stream
 import Minipat.Stream qualified as S
 import Minipat.Time (CycleDelta, CycleTime, MergeStrat)
@@ -100,3 +102,35 @@ estreamSwitch e1 t = estreamLiftA2 (`streamSwitch` t) e1
 
 estreamPieces :: EStream a -> Seq (CycleTime, EStream a) -> EStream a
 estreamPieces e1 = EStream . liftA2 streamPieces (unEStream e1) . traverse (\(t, EStream e) -> fmap (t,) e)
+
+instance Pattern EStream where
+  type PatM EStream = Identity
+  type PatA EStream = ()
+  patCon' = const . runIdentity
+  patPure' = Identity . pure
+  patEmpty' = Identity mempty
+  patPar' = Identity . estreamPar
+  patAlt' = Identity . estreamAlt
+  patRand' = Identity . estreamRand
+  patSeq' = Identity . estreamSeq
+  patEuc' e = Identity . estreamEuc e
+  patRep' r = Identity . estreamRep r
+  patFast' p = Identity . estreamFast p
+  patSlow' p = Identity . estreamSlow p
+  patFastBy' r = Identity . estreamFastBy r
+  patSlowBy' r = Identity . estreamSlowBy r
+  patDeg' p = Identity . estreamDeg p
+  patDegBy' r = Identity . estreamDegBy r
+
+instance PatternUnwrap b EStream where
+  patUnwrap' = const . runIdentity
+
+instance Flow EStream where
+  flowApply = estreamApply
+  flowFilter = estreamFilter
+  flowEarlyBy = estreamEarlyBy
+  flowLateBy = estreamLateBy
+  flowEarly = estreamEarly
+  flowLate = estreamLate
+  flowSwitch = estreamSwitch
+  flowPieces = estreamPieces
