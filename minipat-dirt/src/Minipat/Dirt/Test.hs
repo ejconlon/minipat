@@ -8,6 +8,7 @@ import Dahdit.Midi.Osc (Datum (..))
 import Data.Foldable (for_)
 import Data.Ratio ((%))
 import Data.Sequence (Seq)
+import Minipat.Classes (patFastBy)
 import Minipat.Dirt.Attrs (Attrs, attrs)
 import Minipat.Dirt.Core
   ( OscConn
@@ -21,7 +22,7 @@ import Minipat.Dirt.Core
   , withSt
   )
 import Minipat.Dirt.Osc (PlayEnv (..), PlayErr, Timed (..), convertTape, handshakePacket, playPacket)
-import Minipat.Stream (Ev (..), streamFastBy, tapeSingleton)
+import Minipat.Stream (Ev (..), tapeSingleton)
 import Minipat.Time (Arc (..), Span (..))
 import Nanotime (TimeLike (..), threadDelayDelta, timeDeltaFromFracSecs)
 
@@ -80,7 +81,7 @@ testReal = do
             [ ("sound", DatumString "cpu")
             , ("orbit", DatumInt32 0)
             ]
-    setOrbit st 0 (streamFastBy 4 (pure m))
+    setOrbit st 0 (patFastBy 4 (pure m))
     setPlaying st True
     threadDelayDelta (timeDeltaFromFracSecs @Double 6)
     setTempo st 180

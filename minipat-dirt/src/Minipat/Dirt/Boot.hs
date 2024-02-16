@@ -5,6 +5,7 @@ module Minipat.Dirt.Boot where
 import Minipat.Dirt.Attrs (Attrs)
 import Minipat.Dirt.Core qualified as C
 import Minipat.Dirt.Logger qualified as L
+import Minipat.EStream (EStream)
 import Minipat.Stream (Stream)
 import Nanotime (TimeDelta)
 
@@ -50,7 +51,7 @@ setCycle = C.setCycle dirt
 setTempo :: (Dirt) => Rational -> IO ()
 setTempo = C.setTempo dirt
 
-setOrbit :: (Dirt) => Integer -> Stream Attrs -> IO ()
+setOrbit :: (Dirt) => Integer -> EStream Attrs -> IO ()
 setOrbit = C.setOrbit dirt
 
 clearOrbit :: (Dirt) => Integer -> IO ()
@@ -77,7 +78,7 @@ handshake = C.handshake dirt
 peek :: (Dirt, Show a) => Stream a -> IO ()
 peek = C.peek dirt
 
-d0, d1, d2, d3, d4, d5, d6, d7 :: (Dirt) => Stream Attrs -> IO ()
+d0, d1, d2, d3, d4, d5, d6, d7 :: (Dirt) => EStream Attrs -> IO ()
 d0 = setOrbit 0
 d1 = setOrbit 1
 d2 = setOrbit 2

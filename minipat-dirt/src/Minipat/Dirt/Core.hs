@@ -201,12 +201,8 @@ updateOrbits st f = atomically $ do
   let z = foldl' (\x (o, y) -> x <> fmap (Map.insert "orbit" (DatumInt32 (fromIntegral o))) y) mempty (Map.toList m')
   writeTVar (domStream dom) z
 
-setOrbit :: St -> Integer -> Stream Attrs -> IO ()
-setOrbit st o s = updateOrbits st (Map.insert o s)
-
--- TODO Move to this one
-setOrbit' :: St -> Integer -> EStream Attrs -> IO ()
-setOrbit' st o es =
+setOrbit :: St -> Integer -> EStream Attrs -> IO ()
+setOrbit st o es =
   case unEStream es of
     Left e -> throwIO e
     Right s -> updateOrbits st (Map.insert o s)
