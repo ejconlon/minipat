@@ -1,10 +1,12 @@
-module Minipat.Pattern
+module Minipat.Classes
   ( Pattern (..)
   , PatternUnwrap (..)
+  , Flow (..)
   )
 where
 
 import Bowtie (pattern JotP)
+import Control.Applicative (Alternative (..))
 import Control.Monad.Identity (Identity (..))
 import Control.Monad.Reader (Reader, asks, runReader)
 import Data.Default (Default (..))
@@ -26,7 +28,9 @@ import Minipat.Ast
   , UnPat
   , factorFromRational
   )
+import Minipat.EStream
 import Minipat.Stream
+import Minipat.Time (CycleDelta, CycleTime)
 
 mkPat :: PatF b a (UnPat b a) -> Reader b (Pat b a)
 mkPat pf = asks (\b -> Pat (JotP b pf))
@@ -177,3 +181,50 @@ instance Pattern Stream where
 
 instance PatternUnwrap b Stream where
   patUnwrap' = const . runIdentity
+
+instance Pattern EStream where
+  type PatM EStream = Identity
+  type PatA EStream = ()
+  patCon' = const . runIdentity
+  patPure' = Identity . pure
+  patEmpty' = Identity mempty
+  patPar' = Identity . estreamPar
+  patAlt' = Identity . estreamAlt
+  patRand' = Identity . estreamRand
+  patSeq' = Identity . estreamSeq
+  patEuc' e = Identity . estreamEuc e
+  patRep' r = Identity . estreamRep r
+  patFast' p = Identity . estreamFast p
+  patSlow' p = Identity . estreamSlow p
+  patFastBy' r = Identity . estreamFastBy r
+  patSlowBy' r = Identity . estreamSlowBy r
+  patDeg' p = Identity . estreamDeg p
+  patDegBy' r = Identity . estreamDegBy r
+
+instance PatternUnwrap b EStream where
+  patUnwrap' = const . runIdentity
+
+class (Alternative f, Pattern f) => Flow f where
+  flowFilter :: (a -> Bool) -> f a -> f a
+  flowEarlyBy, flowLateBy :: CycleDelta -> f a -> f a
+  flowEarly, flowLate :: f CycleDelta -> f a -> f a
+  flowSwitch :: f a -> CycleTime -> f a -> f a
+  flowPieces :: f a -> Seq (CycleTime, f a) -> f a
+
+instance Flow Stream where
+  flowFilter = streamFilter
+  flowEarlyBy = streamEarlyBy
+  flowLateBy = streamLateBy
+  flowEarly = streamEarly
+  flowLate = streamLate
+  flowSwitch = streamSwitch
+  flowPieces = streamPieces
+
+instance Flow EStream where
+  flowFilter = estreamFilter
+  flowEarlyBy = estreamEarlyBy
+  flowLateBy = estreamLateBy
+  flowEarly = estreamEarly
+  flowLate = estreamLate
+  flowSwitch = estreamSwitch
+  flowPieces = estreamPieces

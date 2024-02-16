@@ -8,10 +8,10 @@ where
 import Control.Exception (SomeException (..))
 import Data.Text (Text)
 import Looksee (parse)
+import Minipat.Classes (PatternUnwrap)
 import Minipat.Interp (interpPat)
 import Minipat.Norm (normPat)
 import Minipat.Parser (Loc, P, topPatP)
-import Minipat.Pattern (PatternUnwrap)
 
 type PatternEval = PatternUnwrap Loc
 

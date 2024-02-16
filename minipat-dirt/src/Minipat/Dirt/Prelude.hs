@@ -14,11 +14,11 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Looksee qualified as L
 import Minipat.Ast (Ident (..), Select (..))
+import Minipat.Classes (Pattern (..))
 import Minipat.Dirt.Attrs (Attr (..), Attrs, DatumProxy (..), IsAttrs (..))
 import Minipat.Dirt.Notes (ChordName, Note (..), OctNote (..), Octave (..), convChordName, convNoteName, octToNote)
 import Minipat.Eval (PatternEval, evalPat)
 import Minipat.Parser (P, identP, selectP)
-import Minipat.Pattern (Pattern (..))
 import Minipat.Stream (Stream (..), streamInnerBind)
 
 -- Start with some private parsing stuff

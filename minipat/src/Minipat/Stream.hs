@@ -93,6 +93,10 @@ instance Functor Tape where
 tapeNull :: Tape a -> Bool
 tapeNull = H.null . unTape
 
+-- TODO Actually sample at the given rate
+tapeCont :: Integer -> (CycleTime -> a) -> Arc -> Tape a
+tapeCont _ f arc = tapeSingleton (evCont f arc)
+
 tapeFilter :: (a -> Bool) -> Tape a -> Tape a
 tapeFilter f = Tape . H.filter (\(Entry _ a) -> f a) . unTape
 
@@ -235,8 +239,9 @@ streamRep n s = Stream $ \arc ->
         in  mconcat (fmap (\k -> tapeLateBy (fromIntegral k) t) [0 .. n - 1])
   in  mconcat (fmap go1 (spanSplit arc))
 
-streamCont :: (CycleTime -> a) -> Stream a
-streamCont f = Stream (tapeSingleton . evCont f)
+-- | Continuous function sampled a given number of times over each cycle
+streamCont :: Integer -> (CycleTime -> a) -> Stream a
+streamCont sr f = Stream (tapeCont sr f)
 
 -- TODO implement this more efficiently than just concatenation?
 streamEuc :: Euclid -> Stream a -> Stream a
@@ -286,14 +291,8 @@ streamPieces x = \case
   (t, x') :<| xs' -> streamSwitch x t (streamPieces x' xs')
 
 -- TODO move to module with continuous primitives
--- fnSine :: Rational -> Time -> Double
--- fnSine freq t = sin (2 * pi * fromRational (freq * t))
+-- fnSine :: (Floating a, Fractional a) :: Rational -> CycleTime -> a
+-- fnSine freq t = sin (2 * pi * fromRational (freq * unCycleTime t))
 --
--- streamSine :: Rational -> Stream Double
+-- streamSine :: (Floating a, Fractional a) => Rational -> Stream a
 -- streamSine = streamCont . fnSine
-
--- streamDeriv :: Num n => Stream n -> Stream n
--- streamDeriv = undefined
---
--- streamInteg :: Num n => Stream n -> Stream n
--- streamInteg = undefined

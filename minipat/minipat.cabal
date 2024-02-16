@@ -25,12 +25,12 @@ source-repository head
 library
   exposed-modules:
       Minipat.Ast
+      Minipat.Classes
+      Minipat.EStream
       Minipat.Eval
-      Minipat.Flow
       Minipat.Interp
       Minipat.Norm
       Minipat.Parser
-      Minipat.Pattern
       Minipat.Print
       Minipat.Rand
       Minipat.Rewrite

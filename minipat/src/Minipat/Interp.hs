@@ -30,7 +30,7 @@ import Minipat.Ast
   , SpeedDir (..)
   , factorValue
   )
-import Minipat.Pattern (PatM, Pattern (..), PatternUnwrap (..))
+import Minipat.Classes (PatM, Pattern (..), PatternUnwrap (..))
 import Minipat.Rewrite (patRw)
 
 -- | An error interpreting a 'Pat' as a 'Stream'
