@@ -13,6 +13,8 @@ module Minipat.Time
   , arcIntersect
   , arcMid
   , arcTimeMapMono
+  , MergeStrat (..)
+  , arcMerge
   , Span (..)
   , spanCover
   , spanSplit
@@ -83,6 +85,20 @@ arcMid (Arc s e) = cycTimeMid s e
 -- | Map a monotonic function over cycle times
 arcTimeMapMono :: (CycleTime -> CycleTime) -> Arc -> Arc
 arcTimeMapMono f (Arc s e) = Arc (f s) (f e)
+
+-- | Strategy for merging arcs
+data MergeStrat
+  = MergeStratInner
+  | MergeStratOuter
+  | MergeStratMixed
+  deriving stock (Eq, Ord, Show, Enum, Bounded)
+
+-- | Merges arcs according to the given strategy
+arcMerge :: MergeStrat -> Maybe Arc -> Maybe Arc -> Maybe Arc
+arcMerge = \case
+  MergeStratInner -> (\_ x -> x)
+  MergeStratOuter -> const
+  MergeStratMixed -> liftA2 arcIntersect
 
 data Span = Span
   { spanActive :: !Arc

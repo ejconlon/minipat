@@ -21,7 +21,7 @@ module Minipat.Stream
   , streamFilter
   , streamInnerBind
   , streamOuterBind
-  , streamMixBind
+  , streamMixedBind
   , streamRun
   , streamAdjust
   , streamSeq
@@ -61,8 +61,9 @@ import Minipat.Time
   , Cycle (..)
   , CycleDelta (..)
   , CycleTime (..)
+  , MergeStrat (..)
   , Span (..)
-  , arcIntersect
+  , arcMerge
   , arcTimeMapMono
   , spanSplit
   , spanTimeMapMono
@@ -152,7 +153,7 @@ instance Applicative Stream where
   (<*>) = ap
 
 instance Monad Stream where
-  (>>=) = streamMixBind
+  (>>=) = streamMixedBind
 
 -- | '(<>)' is parallel composition of streams
 instance Semigroup (Stream a) where
@@ -178,14 +179,32 @@ streamBindWith g pa f = Stream $ \arc ->
         let tb = unStream (f a) ac
         in  tapeWholeMapMono (g wh) tb
 
+streamBind :: MergeStrat -> Stream a -> (a -> Stream b) -> Stream b
+streamBind = streamBindWith . arcMerge
+
 streamInnerBind :: Stream a -> (a -> Stream b) -> Stream b
-streamInnerBind = streamBindWith (\_ x -> x)
+streamInnerBind = streamBind MergeStratInner
 
 streamOuterBind :: Stream a -> (a -> Stream b) -> Stream b
-streamOuterBind = streamBindWith const
+streamOuterBind = streamBind MergeStratOuter
 
-streamMixBind :: Stream a -> (a -> Stream b) -> Stream b
-streamMixBind = streamBindWith (liftA2 arcIntersect)
+streamMixedBind :: Stream a -> (a -> Stream b) -> Stream b
+streamMixedBind = streamBind MergeStratMixed
+
+streamApplyWith :: (Maybe Arc -> Maybe Arc -> Maybe Arc) -> (a -> b -> c) -> Stream a -> Stream b -> Stream c
+streamApplyWith = error "TODO"
+
+streamApply :: MergeStrat -> (a -> b -> c) -> Stream a -> Stream b -> Stream c
+streamApply = streamApplyWith . arcMerge
+
+streamInnerApply :: (a -> b -> c) -> Stream a -> Stream b -> Stream c
+streamInnerApply = streamApply MergeStratInner
+
+streamOuterApply :: (a -> b -> c) -> Stream a -> Stream b -> Stream c
+streamOuterApply = streamApply MergeStratOuter
+
+streamMixedApply :: (a -> b -> c) -> Stream a -> Stream b -> Stream c
+streamMixedApply = streamApply MergeStratMixed
 
 streamRun :: Stream a -> Arc -> [Ev a]
 streamRun pa arc = tapeToList (unStream pa arc)
