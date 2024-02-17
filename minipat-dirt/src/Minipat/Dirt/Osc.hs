@@ -17,14 +17,15 @@ import Control.Monad.Except (throwError)
 import Dahdit.Midi.Osc (Datum (..), Msg (..), Packet (..))
 import Dahdit.Midi.OscAddr (RawAddrPat)
 import Data.Foldable (foldl')
-import Data.Map.Strict qualified as Map
 import Data.Sequence (Seq (..))
 import Data.Sequence qualified as Seq
 import Data.Text (Text)
-import Minipat.Dirt.Attrs (Attrs, IsAttrs (..))
+import Minipat.Dirt.Attrs (Attrs, IsAttrs (..), attrsDelete, attrsInsert, attrsLookup, attrsToList)
 import Minipat.Stream (Ev (..), Tape, tapeToList)
 import Minipat.Time (CycleDelta (..), CycleTime (..), Span, spanCycle, spanDelta)
-import Nanotime (PosixTime, TimeDelta (..), addTime, timeDeltaFromFracSecs, timeDeltaToNanos)
+import Nanotime (PosixTime (..), TimeDelta (..), addTime, timeDeltaFromFracSecs, timeDeltaToNanos)
+import Prettyprinter (Pretty (..))
+import Prettyprinter qualified as P
 
 data Timed a = Timed
   { timedKey :: !PosixTime
@@ -32,14 +33,16 @@ data Timed a = Timed
   }
   deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
 
+instance (Pretty a) => Pretty (Timed a) where
+  pretty (Timed k v) = P.hsep [pretty (unPosixTime k), pretty v]
+
 namedPayload :: Attrs -> Seq Datum
-namedPayload = foldl' go Empty . Map.toList
+namedPayload = foldl' go Empty . attrsToList
  where
   go !acc (k, v) = acc :|> DatumString k :|> v
 
 data PlayErr
   = PlayErrDupe !Text
-  | PlayErrLate
   | PlayErrCont
   deriving stock (Eq, Ord, Show)
 
@@ -49,17 +52,17 @@ type M = Either PlayErr
 
 insertSafe :: Text -> Datum -> Attrs -> M Attrs
 insertSafe k v m =
-  case Map.lookup k m of
-    Nothing -> pure (Map.insert k v m)
+  case attrsLookup k m of
+    Nothing -> pure (attrsInsert k v m)
     Just _ -> throwError (PlayErrDupe k)
 
 replaceAliases :: [(Text, Text)] -> Attrs -> M Attrs
 replaceAliases as m0 = foldM go m0 as
  where
   go !m (x, y) = do
-    case Map.lookup x m of
+    case attrsLookup x m of
       Nothing -> pure m
-      Just v -> insertSafe y v (Map.delete x m)
+      Just v -> insertSafe y v (attrsDelete x m)
 
 -- Useful params:
 -- sound - string, req - name of sound
@@ -93,15 +96,12 @@ playAliases =
   , ("s", "sound")
   ]
 
-spanCycleM :: Span -> M CycleTime
-spanCycleM = maybe (throwError PlayErrLate) pure . spanCycle
-
 spanDeltaM :: Span -> M CycleDelta
 spanDeltaM = maybe (throwError PlayErrCont) pure . spanDelta
 
 data PlayEnv = PlayEnv
   { peStart :: !PosixTime
-  , peCycle :: !Integer
+  , peCycle :: !CycleTime
   , peCps :: !Rational
   }
   deriving stock (Eq, Ord, Show)
@@ -111,20 +111,31 @@ timeDeltaToMicros td =
   let (_, ns) = timeDeltaToNanos td
   in  fromIntegral ns / 1000
 
-convertEvent :: (IsAttrs a) => PlayEnv -> Ev a -> M (Timed Attrs)
-convertEvent (PlayEnv startTime startCyc cps) (Ev sp dat) = do
-  targetCyc <- fmap unCycleTime (spanCycleM sp)
-  let cycOffset = targetCyc - fromInteger startCyc
-      onset = addTime startTime (timeDeltaFromFracSecs (cycOffset / cps))
-  deltaCyc <- fmap unCycleDelta (spanDeltaM sp)
-  let deltaTime = timeDeltaToMicros (timeDeltaFromFracSecs (deltaCyc / cps))
-  dat' <- replaceAliases playAliases (toAttrs dat)
-  dat'' <- insertSafe "delta" (DatumFloat deltaTime) dat'
-  dat''' <- insertSafe "cps" (DatumFloat (realToFrac cps)) dat''
-  pure (Timed onset dat''')
+convertEvent :: (IsAttrs a) => PlayEnv -> Ev a -> M (Maybe (Timed Attrs))
+convertEvent (PlayEnv startTime startCyc cps) (Ev sp dat) =
+  case spanCycle sp of
+    Nothing ->
+      -- Only emit start events
+      pure Nothing
+    Just targetCyc -> do
+      let cycOffset = targetCyc - startCyc
+          onset = addTime startTime (timeDeltaFromFracSecs (unCycleTime cycOffset / cps))
+      deltaCyc <- fmap unCycleDelta (spanDeltaM sp)
+      let deltaTime = timeDeltaToMicros (timeDeltaFromFracSecs (deltaCyc / cps))
+      dat' <- replaceAliases playAliases (toAttrs dat)
+      dat'' <- insertSafe "delta" (DatumFloat deltaTime) dat'
+      dat''' <- insertSafe "cps" (DatumFloat (realToFrac cps)) dat''
+      pure (Just (Timed onset dat'''))
+
+traverseMaybe :: (Monad m) => (a -> m (Maybe b)) -> Seq a -> m (Seq b)
+traverseMaybe f = go Empty
+ where
+  go !acc = \case
+    Empty -> pure acc
+    a :<| as' -> f a >>= maybe (go acc as') (\b -> go (acc :|> b) as')
 
 convertTape :: (IsAttrs a) => PlayEnv -> Tape a -> M (Seq (Timed Attrs))
-convertTape penv = traverse (convertEvent penv) . Seq.fromList . tapeToList
+convertTape penv = traverseMaybe (convertEvent penv) . Seq.fromList . tapeToList
 
 playAddr :: RawAddrPat
 playAddr = "/dirt/play"

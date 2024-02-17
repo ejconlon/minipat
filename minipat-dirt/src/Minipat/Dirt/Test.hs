@@ -9,7 +9,7 @@ import Data.Foldable (for_)
 import Data.Ratio ((%))
 import Data.Sequence (Seq)
 import Minipat.Classes (patFastBy)
-import Minipat.Dirt.Attrs (Attrs, attrs)
+import Minipat.Dirt.Attrs (Attrs, attrsFromList)
 import Minipat.Dirt.Core
   ( OscConn
   , Resources (..)
@@ -64,7 +64,7 @@ testPlay = do
           convertTape penv $
             tapeSingleton $
               Ev (Span (Arc 0 1) (Just (Arc 0 1))) $
-                attrs
+                attrsFromList
                   [ ("sound", DatumString "tabla")
                   , ("orbit", DatumInt32 0)
                   ]
@@ -77,7 +77,7 @@ testReal = do
   withSt $ \st -> do
     withMVar (stRes st) (sendHandshake . resConn)
     let m =
-          attrs
+          attrsFromList
             [ ("sound", DatumString "cpu")
             , ("orbit", DatumInt32 0)
             ]

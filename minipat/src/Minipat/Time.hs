@@ -9,6 +9,8 @@ module Minipat.Time
   , cycTimeCeil
   , cycTimeMid
   , Arc (..)
+  , arcWiden
+  , arcRelevant
   , arcUnion
   , arcIntersect
   , arcMid
@@ -69,6 +71,12 @@ data Arc = Arc {arcStart :: !CycleTime, arcEnd :: !CycleTime}
 
 instance Pretty Arc where
   pretty (Arc s e) = prettyTup s e
+
+arcWiden :: Arc -> Arc
+arcWiden (Arc s e) = Arc (fromInteger (floor (unCycleTime s))) (fromInteger (floor (unCycleTime e) + 1))
+
+arcRelevant :: Arc -> Arc -> Bool
+arcRelevant (Arc s1 e1) (Arc s2 e2) = s2 < e1 && (e2 > s1 || (s2 == s1 && e2 == s1))
 
 arcUnion :: Arc -> Arc -> Arc
 arcUnion (Arc s1 e1) (Arc s2 e2) = Arc (min s1 s2) (max e1 e2)

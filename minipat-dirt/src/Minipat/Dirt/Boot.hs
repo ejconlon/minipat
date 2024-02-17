@@ -8,6 +8,7 @@ import Minipat.Dirt.Logger qualified as L
 import Minipat.EStream (EStream)
 import Minipat.Stream (Stream)
 import Nanotime (TimeDelta)
+import Prettyprinter (Pretty)
 
 class Dirt where
   dirt :: C.St
@@ -20,6 +21,9 @@ initialize = do
 
 dispose :: (Dirt) => IO ()
 dispose = C.disposeSt dirt
+
+getDebug :: (Dirt) => IO Bool
+getDebug = C.getDebug dirt
 
 getCps :: (Dirt) => IO Rational
 getCps = C.getCps dirt
@@ -38,6 +42,9 @@ getCycle = C.getCycle dirt
 
 getTempo :: (Dirt) => IO Rational
 getTempo = C.getTempo dirt
+
+setDebug :: (Dirt) => Bool -> IO ()
+setDebug = C.setDebug dirt
 
 setCps :: (Dirt) => Rational -> IO ()
 setCps = C.setCps dirt
@@ -75,7 +82,10 @@ stop = setPlaying False
 handshake :: (Dirt) => IO ()
 handshake = C.handshake dirt
 
-peek :: (Dirt, Show a) => EStream a -> IO ()
+checkTasks :: (Dirt) => IO ()
+checkTasks = C.checkTasks dirt
+
+peek :: (Dirt, Pretty a) => EStream a -> IO ()
 peek = C.peek dirt
 
 d :: (Dirt, IsAttrs a) => Integer -> EStream a -> IO ()

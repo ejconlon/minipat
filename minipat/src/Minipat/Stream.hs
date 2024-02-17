@@ -17,7 +17,7 @@ module Minipat.Stream
   , tapeToList
   , tapeConcatMap
   , tapeFromList
-  , Stream (..)
+  , Stream
   , streamFilter
   , streamBind
   , streamApply
@@ -51,6 +51,7 @@ import Control.Monad.Identity (Identity (..))
 import Data.Foldable (foldMap', foldl', toList)
 import Data.Heap (Entry (..), Heap)
 import Data.Heap qualified as H
+import Data.Maybe (mapMaybe)
 import Data.Semigroup (Semigroup (..))
 import Data.Sequence (Seq (..))
 import Data.Sequence qualified as Seq
@@ -64,8 +65,11 @@ import Minipat.Time
   , CycleTime (..)
   , MergeStrat (..)
   , Span (..)
+  , arcIntersect
   , arcMerge
+  , arcRelevant
   , arcTimeMapMono
+  , arcWiden
   , spanSplit
   , spanTimeMapMono
   , spanWholeMapMono
@@ -144,6 +148,15 @@ tapeConcatMap f = mconcat . fmap f . tapeToList
 tapeFromList :: [Ev a] -> Tape a
 tapeFromList = Tape . H.fromList . fmap (\(Ev s a) -> Entry s a)
 
+-- Keep only relevant events (narrowing active arcs)
+tapeRelevant :: Arc -> Tape a -> Tape a
+tapeRelevant ref = Tape . H.fromList . mapMaybe go . toList . unTape
+ where
+  go (Entry s a) =
+    if arcRelevant ref (spanActive s)
+      then Just (Entry (s {spanActive = arcIntersect ref (spanActive s)}) a)
+      else Nothing
+
 newtype Stream a = Stream {unStream :: Arc -> Tape a}
 
 instance Functor Stream where
@@ -159,12 +172,12 @@ instance Monad Stream where
 -- | '(<>)' is parallel composition of streams
 instance Semigroup (Stream a) where
   Stream k1 <> Stream k2 = Stream (\arc -> k1 arc <> k2 arc)
-  sconcat ss = Stream (\arc -> sconcat (fmap (`unStream` arc) ss))
+  sconcat ss = Stream (\arc -> sconcat (fmap (`streamRun` arc) ss))
 
 -- | 'mempty' is the empty stream
 instance Monoid (Stream a) where
   mempty = Stream (const mempty)
-  mconcat ss = Stream (\arc -> mconcat (fmap (`unStream` arc) ss))
+  mconcat ss = Stream (\arc -> mconcat (fmap (`streamRun` arc) ss))
 
 instance Alternative Stream where
   empty = mempty
@@ -175,9 +188,9 @@ streamFilter f (Stream k) = Stream (tapeFilter f . k)
 
 streamBindWith :: (Maybe Arc -> Maybe Arc -> Maybe Arc) -> Stream a -> (a -> Stream b) -> Stream b
 streamBindWith g pa f = Stream $ \arc ->
-  let ta = unStream pa arc
+  let ta = streamRun pa arc
   in  flip tapeConcatMap ta $ \(Ev (Span ac wh) a) ->
-        let tb = unStream (f a) ac
+        let tb = streamRun (f a) ac
         in  tapeWholeMapMono (g wh) tb
 
 streamBind :: MergeStrat -> Stream a -> (a -> Stream b) -> Stream b
@@ -189,8 +202,12 @@ streamApplyWith g f pa = streamBindWith g (fmap f pa) . flip fmap
 streamApply :: MergeStrat -> (a -> b -> c) -> Stream a -> Stream b -> Stream c
 streamApply = streamApplyWith . arcMerge
 
-streamRun :: Stream a -> Arc -> [Ev a]
-streamRun pa arc = tapeToList (unStream pa arc)
+streamRun :: Stream a -> Arc -> Tape a
+streamRun pa arc =
+  let arc' = arcWiden arc
+  in  if arc' == arc
+        then unStream pa arc
+        else tapeRelevant arc (unStream pa arc')
 
 streamTimeMapInv :: (CycleTime -> CycleTime) -> (CycleTime -> CycleTime) -> Stream a -> Stream a
 streamTimeMapInv onTape onArc (Stream k) = Stream (tapeTimeMapMono onTape . k . arcTimeMapMono onArc)
@@ -228,7 +245,7 @@ streamSeq ss = Stream $ \arc ->
       go1 (i, Span subArc _) = tapeFastBy i w (snd (go2 i subArc))
       go2 i subArc = foldl' (go3 i subArc) (0, mempty) ss
       go3 i subArc (!o, !t) (p, v) =
-        (o + v, t <> tapeLateBy (CycleDelta o) (tapeSlowBy i v (unStream p subArc)))
+        (o + v, t <> tapeLateBy (CycleDelta o) (tapeSlowBy i v (streamRun p subArc)))
   in  mconcat (fmap go1 (spanSplit arc))
 
 streamRep :: Integer -> Stream a -> Stream a
@@ -237,7 +254,7 @@ streamRep n s = Stream $ \arc ->
   -- shift and concatenate n times, then speed everything up to fit into one cycle
   let go1 (i, Span subArc _) = tapeFastBy i (fromInteger n) (go2 subArc)
       go2 subArc =
-        let t = unStream s subArc
+        let t = streamRun s subArc
         in  mconcat (fmap (\k -> tapeLateBy (fromIntegral k) t) [0 .. n - 1])
   in  mconcat (fmap go1 (spanSplit arc))
 
@@ -265,7 +282,7 @@ streamRand ss =
         let s = arcSeed arc
             i = randInt l s
             t = Seq.index ss i
-        in  unStream t arc
+        in  streamRun t arc
   in  Stream (foldMap' (f . spanActive . snd) . spanSplit)
 
 streamAlt :: Seq (Stream a) -> Stream a
@@ -274,7 +291,7 @@ streamAlt ss =
       f z arc =
         let i = mod (fromInteger (unCycle z)) l
             t = Seq.index ss i
-        in  unStream t arc
+        in  streamRun t arc
   in  Stream (foldMap' (\(z, sp) -> f z (spanActive sp)) . spanSplit)
 
 streamPar :: Seq (Stream a) -> Stream a
@@ -283,9 +300,9 @@ streamPar = foldl' (<>) mempty
 streamSwitch :: Stream a -> CycleTime -> Stream a -> Stream a
 streamSwitch sa t sb = Stream $ \arc@(Arc s e) ->
   if
-    | t <= s -> unStream sb arc
-    | t >= e -> unStream sa arc
-    | otherwise -> unStream sa (Arc s t) <> unStream sb (Arc t e)
+    | t <= s -> streamRun sb arc
+    | t >= e -> streamRun sa arc
+    | otherwise -> streamRun sa (Arc s t) <> streamRun sb (Arc t e)
 
 streamPieces :: Stream a -> Seq (CycleTime, Stream a) -> Stream a
 streamPieces x = \case

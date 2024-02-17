@@ -25,7 +25,7 @@ import Minipat.Interp (interpPat)
 import Minipat.Norm (normPat)
 import Minipat.Parser (Loc, P, ParseErr, factorP, identP, identPatP, selectIdentPatP)
 import Minipat.Print (prettyShow)
-import Minipat.Stream (Ev (..), Stream, streamRun)
+import Minipat.Stream (Ev (..), Stream, streamRun, tapeToList)
 import Minipat.Time (Arc (..), CycleTime (..), Span (..))
 import Minipat.Ur (ur)
 import Prettyprinter qualified as P
@@ -418,7 +418,7 @@ runPatInterpCase :: (TestName, Maybe Arc, Text, [Ev Ident]) -> TestTree
 runPatInterpCase (n, mayArc, patStr, evs) = testCase n $ do
   pat <- either throwIO pure (evalPat identP patStr)
   let arc = fromMaybe (Arc 0 1) mayArc
-      actualEvs = streamRun pat arc
+      actualEvs = tapeToList (streamRun pat arc)
   actualEvs @?= evs
 
 ev :: Rational -> Rational -> x -> Ev x
@@ -643,8 +643,8 @@ testPatInterpCases =
         , "[x , y , z]"
         ,
           [ ev 0 1 "x"
-          , ev 0 1 "z"
           , ev 0 1 "y"
+          , ev 0 1 "z"
           ] -- Note this order is arbitrary, just comes from heap behavior
         )
       ,
@@ -769,7 +769,7 @@ runUrCase (n, inpLen, inpPat, inpSubPats, inpSubXforms, mayExpectStr, expectEvs)
   let inpSubXforms'' = fmap (second runXform) inpSubXforms
   actualStream :: Stream Ident <- either throwIO pure (ur (fromInteger inpLen) inpPat inpSubPats'' inpSubXforms'')
   let arc = Arc 0 (fromInteger inpLen)
-      actualEvs = streamRun actualStream arc
+      actualEvs = tapeToList (streamRun actualStream arc)
   actualEvs @?= expectEvs
 
 testUr :: TestTree

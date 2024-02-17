@@ -3,7 +3,9 @@
 -- | General utils for pretty-printing
 module Minipat.Print
   ( prettyShow
+  , prettyShowAll
   , prettyPrint
+  , prettyPrintAll
   , prettyTup
   , prettyRat
   , pretty
@@ -15,6 +17,7 @@ module Minipat.Print
   )
 where
 
+import Data.Foldable (toList)
 import Data.Ratio (denominator, numerator)
 import Data.Text (Text)
 import Data.Text.IO qualified as TIO
@@ -22,11 +25,20 @@ import Prettyprinter (Doc, Pretty (..))
 import Prettyprinter qualified as P
 import Prettyprinter.Render.Text qualified as PRT
 
+punctuated :: (Foldable f, Pretty a) => Text -> f a -> Doc ann
+punctuated t = P.hcat . P.punctuate (pretty t) . fmap pretty . toList
+
 prettyShow :: (Pretty a) => a -> Text
 prettyShow = PRT.renderStrict . P.layoutCompact . pretty
 
+prettyShowAll :: (Foldable f, Pretty a) => Text -> f a -> Text
+prettyShowAll t = PRT.renderStrict . P.layoutCompact . punctuated t
+
 prettyPrint :: (Pretty a) => a -> IO ()
 prettyPrint = TIO.putStrLn . prettyShow
+
+prettyPrintAll :: (Foldable f, Pretty a) => Text -> f a -> IO ()
+prettyPrintAll t = TIO.putStrLn . prettyShowAll t
 
 prettyTup :: (Pretty a) => a -> a -> Doc ann
 prettyTup el1 el2 = "(" <> pretty el1 <> ", " <> pretty el2 <> ")"

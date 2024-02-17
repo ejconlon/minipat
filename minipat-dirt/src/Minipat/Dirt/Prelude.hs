@@ -38,12 +38,13 @@ import Data.Text qualified as T
 import Looksee qualified as L
 import Minipat.Ast (Ident (..), Select (..))
 import Minipat.Classes (Flow (..))
-import Minipat.Dirt.Attrs (Attr (..), Attrs, DatumProxy (..), IsAttrs (..))
+import Minipat.Dirt.Attrs (Attr (..), Attrs, DatumProxy (..), IsAttrs (..), attrsInsert, attrsMerge)
 import Minipat.Dirt.Notes (ChordName, Note (..), OctNote (..), Octave (..), convChordName, convNoteName, octToNote)
 import Minipat.EStream
 import Minipat.Eval (evalPat)
 import Minipat.Parser (P, identP, selectP)
 import Minipat.Time (CycleDelta, CycleTime)
+import Prettyprinter (Pretty (..))
 
 type S = EStream
 
@@ -92,7 +93,7 @@ ordP m pa =
 -- General combinators
 
 setIn, (#) :: (IsAttrs a, IsAttrs b) => S a -> S b -> S Attrs
-setIn = flowInnerApply (\m1 m2 -> toAttrs m2 <> toAttrs m1)
+setIn = flowInnerApply attrsMerge
 (#) = setIn
 
 attrPat :: Text -> S a -> S (Attr a)
@@ -109,8 +110,11 @@ data Sound = Sound
   }
   deriving stock (Eq, Ord, Show)
 
+instance Pretty Sound where
+  pretty (Sound so mn) = pretty so <> maybe mempty ((":" <>) . pretty) mn
+
 instance IsAttrs Sound where
-  toAttrs (Sound so mn) = Map.insert "sound" (DatumString (unIdent so)) (maybe Map.empty toAttrs mn)
+  toAttrs (Sound so mn) = attrsInsert "sound" (DatumString (unIdent so)) (maybe mempty toAttrs mn)
 
 soundP :: P Sound
 soundP = fmap (\(Select so mn) -> Sound so mn) (selectP identP noteP)

@@ -113,7 +113,7 @@ octNoteIsMidi (OctNote moct nn) =
 -- converting to/from MIDI values.
 newtype Note = Note {unNote :: Integer}
   deriving stock (Show)
-  deriving newtype (Eq, Ord)
+  deriving newtype (Eq, Ord, Pretty)
 
 c5MidiNum :: Integer
 c5MidiNum = 72
