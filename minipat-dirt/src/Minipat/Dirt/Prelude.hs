@@ -23,6 +23,8 @@ module Minipat.Dirt.Prelude
   , slowList
   , fastAppend
   , slowAppend
+  , alt
+  , rand
   )
 where
 
@@ -185,6 +187,12 @@ fastAppend s1 s2 = estreamSeq [(s1, 1), (s2, 1)]
 
 slowAppend :: S a -> S a -> S a
 slowAppend s1 s2 = slowBy 2 (fastAppend s1 s2)
+
+alt :: Seq (S a) -> S a
+alt = estreamAlt
+
+rand :: Seq (S a) -> S a
+rand = estreamRand
 
 -- TODO
 -- seqPLoop :: Seq (CycleTime, CycleTime, S a) -> S a
