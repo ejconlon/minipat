@@ -11,6 +11,7 @@ import Data.Ratio ((%))
 import Data.Sequence (Seq)
 import Data.Sequence qualified as Seq
 import Minipat.Dirt.Boot
+import Minipat.Dirt.Params
 import Minipat.Dirt.Prelude
 
 dirtInst <- initialize

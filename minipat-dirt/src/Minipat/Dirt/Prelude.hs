@@ -1,15 +1,38 @@
+{-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Minipat.Dirt.Prelude where
-
--- TODO Explicit exports
+module Minipat.Dirt.Prelude
+  ( S
+  , setIn
+  , (#)
+  , note
+  , n
+  , sound
+  , s
+  , arp
+  , fast
+  , slow
+  , fastBy
+  , slowBy
+  , lateBy
+  , earlyBy
+  , layout
+  , fastCat
+  , slowCat
+  , fastList
+  , slowList
+  , fastAppend
+  , slowAppend
+  )
+where
 
 import Control.Applicative (Alternative (..))
 import Dahdit.Midi.Osc (Datum (..))
 import Data.Char (isAlpha, isAlphaNum)
-import Data.Int (Int32)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
+import Data.Sequence (Seq)
+import Data.Sequence qualified as Seq
 import Data.Text (Text)
 import Data.Text qualified as T
 import Looksee qualified as L
@@ -17,9 +40,12 @@ import Minipat.Ast (Ident (..), Select (..))
 import Minipat.Classes (Flow (..))
 import Minipat.Dirt.Attrs (Attr (..), Attrs, DatumProxy (..), IsAttrs (..))
 import Minipat.Dirt.Notes (ChordName, Note (..), OctNote (..), Octave (..), convChordName, convNoteName, octToNote)
-import Minipat.EStream (EStream (..))
+import Minipat.EStream
 import Minipat.Eval (evalPat)
 import Minipat.Parser (P, identP, selectP)
+import Minipat.Time (CycleDelta, CycleTime)
+
+type S = EStream
 
 -- Start with some private parsing stuff
 
@@ -31,11 +57,10 @@ datumP = \case
   DatumProxyDouble -> fmap realToFrac L.sciP
   DatumProxyString -> fmap unIdent identP
 
--- TODO figure out out to propagate error
-parsePat :: P a -> Text -> EStream a
+parsePat :: P a -> Text -> S a
 parsePat p = EStream . evalPat p
 
-datumPat :: DatumProxy a -> Text -> EStream a
+datumPat :: DatumProxy a -> Text -> S a
 datumPat = parsePat . datumP
 
 octNoteP :: P OctNote
@@ -66,20 +91,14 @@ ordP m pa =
 
 -- General combinators
 
-setIn, (#) :: (IsAttrs a, IsAttrs b) => EStream a -> EStream b -> EStream Attrs
+setIn, (#) :: (IsAttrs a, IsAttrs b) => S a -> S b -> S Attrs
 setIn = flowInnerApply (\m1 m2 -> toAttrs m2 <> toAttrs m1)
 (#) = setIn
 
-pF :: (Real a) => Text -> EStream a -> EStream (Attr Float)
-pF k = fmap (Attr k . realToFrac)
-
-pI :: (Integral a) => Text -> EStream a -> EStream (Attr Int32)
-pI k = fmap (Attr k . fromIntegral)
-
-attrPat :: Text -> EStream a -> EStream (Attr a)
+attrPat :: Text -> S a -> S (Attr a)
 attrPat k = fmap (Attr k)
 
-datumAttrPat :: DatumProxy a -> Text -> Text -> EStream (Attr a)
+datumAttrPat :: DatumProxy a -> Text -> Text -> S (Attr a)
 datumAttrPat dp k = attrPat k . datumPat dp
 
 -- Specific combinators
@@ -96,11 +115,11 @@ instance IsAttrs Sound where
 soundP :: P Sound
 soundP = fmap (\(Select so mn) -> Sound so mn) (selectP identP noteP)
 
-sound, s :: Text -> EStream Sound
+sound, s :: Text -> S Sound
 sound = parsePat soundP
 s = sound
 
-note, n :: Text -> EStream Note
+note, n :: Text -> S Note
 note = parsePat noteP
 n = note
 
@@ -110,7 +129,8 @@ data Chord = Chord
   }
   deriving stock (Eq, Ord, Show)
 
--- chord :: Pattern f =>
+-- TODO
+-- chord, c :: Text -> S Chord
 
 data Arp = ArpUp | ArpDown deriving stock (Eq, Ord, Show, Enum, Bounded)
 
@@ -120,122 +140,56 @@ arpMap = Map.fromList [("up", ArpUp), ("down", ArpDown)]
 arpP :: P Arp
 arpP = ordP arpMap (fmap unIdent identP)
 
-arp :: Text -> EStream Arp
+arp :: Text -> S Arp
 arp = parsePat arpP
 
--- strum :: f Arp -> f Chord -> f Note
+-- TODO
+-- strum :: S Arp -> S Chord -> S Note
 -- strum arps chords = undefined
 
--- Params
+-- Shorthands
 
--- TODO check these are all float, not int
--- Basic effect parameters
-accelerate
-  , attack
-  , bandf
-  , bandq
-  , cutoff
-  , delay
-  , delayfeedback
-  , delaytime
-  , distort
-  , djf
-  , dry
-  , hcutoff
-  , hold
-  , hresonance
-  , legato
-  , leslie
-  , lrate
-  , lsize
-  , pan
-  , phaserdepth
-  , phaserrate
-  , release
-  , resonance
-  , room
-  , size
-  , slide
-  , squiz
-  , sustain
-  , tremolodepth
-  , tremolorate
-    :: (Real a) => EStream a -> EStream (Attr Float)
-accelerate = pF "accelerate"
-attack = pF "attack"
-bandf = pF "bandf"
-bandq = pF "bandq"
-cutoff = pF "cutoff"
-delay = pF "delay"
-delayfeedback = pF "delayfeedback"
-delaytime = pF "delaytime"
-distort = pF "distort"
-djf = pF "djf"
-dry = pF "dry"
-hcutoff = pF "hcutoff"
-hold = pF "hold"
-hresonance = pF "hresonance"
-legato = pF "legato"
-leslie = pF "leslie"
-lrate = pF "lrate"
-lsize = pF "lsize"
-pan = pF "pan"
-phaserdepth = pF "phaserdepth"
-phaserrate = pF "phaserrate"
-release = pF "release"
-resonance = pF "resonance"
-room = pF "room"
-size = pF "size"
-slide = pF "slide"
-squiz = pF "squiz"
-sustain = pF "sustain"
-tremolodepth = pF "tremolodepth"
-tremolorate = pF "tremolorate"
+fast, slow :: S Rational -> S a -> S a
+fast = estreamFast
+slow = estreamSlow
 
--- Shorthand for those effect parameters
-accel
-  , att
-  , bpf
-  , bpq
-  , delayfb
-  , delayt
-  , dist
-  , hpf
-  , hpq
-  , leg
-  , lpf
-  , lpq
-  , phasdp
-  , phasr
-  , rel
-  , res
-  , sz
-  , tremdp
-  , tremr
-    :: (Real a) => EStream a -> EStream (Attr Float)
-att = attack
-bpf = bandf
-bpq = bandq
-delayfb = delayfeedback
-delayt = delaytime
-dist = distort
-hpf = hcutoff
-hpq = hresonance
-leg = legato
-lpf = cutoff
-lpq = resonance
-phasdp = phaserdepth
-phasr = phaserrate
-rel = release
-res = resonance
-sz = size
-tremdp = tremolodepth
-tremr = tremolorate
-accel = accelerate
+fastBy, slowBy :: Rational -> S a -> S a
+fastBy = estreamFastBy
+slowBy = estreamSlowBy
 
--- TODO add these?
--- , ("o", "orbit")
--- , ("midi", "midinote")
--- , ("ts", "timescale")
--- , ("n", "midinote")
--- , ("oct", "octave")
+lateBy, earlyBy :: CycleDelta -> S a -> S a
+lateBy = estreamLateBy
+earlyBy = estreamEarlyBy
+
+layout :: Seq (CycleTime, CycleTime, S a) -> S a
+layout = estreamPar . fmap (\(start, end, stream) -> estreamPieces mempty [(start, stream), (end, mempty)])
+
+fastCat :: Seq (S a) -> S a
+fastCat = estreamSeq . fmap (,1)
+
+slowCat :: Seq (S a) -> S a
+slowCat ss = slowBy (fromIntegral (Seq.length ss)) (fastCat ss)
+
+fastList :: Seq a -> S a
+fastList = fastCat . fmap pure
+
+slowList :: Seq a -> S a
+slowList as = slowBy (fromIntegral (Seq.length as)) (fastList as)
+
+fastAppend :: S a -> S a -> S a
+fastAppend s1 s2 = estreamSeq [(s1, 1), (s2, 1)]
+
+slowAppend :: S a -> S a -> S a
+slowAppend s1 s2 = slowBy 2 (fastAppend s1 s2)
+
+-- TODO
+-- seqPLoop :: Seq (CycleTime, CycleTime, S a) -> S a
+-- rev :: S a -> S a
+-- swingBy :: Rational -> S a -> S a
+-- swing :: S Rational -> S a -> S a
+-- echo
+-- off
+-- timeCat
+-- randCat
+-- wrandCat
+-- wedge
