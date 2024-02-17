@@ -2,7 +2,7 @@
 
 module Minipat.Dirt.Boot where
 
-import Minipat.Dirt.Attrs (Attrs)
+import Minipat.Dirt.Attrs (Attrs, IsAttrs (..))
 import Minipat.Dirt.Core qualified as C
 import Minipat.Dirt.Logger qualified as L
 import Minipat.EStream (EStream)
@@ -78,12 +78,15 @@ handshake = C.handshake dirt
 peek :: (Dirt, Show a) => EStream a -> IO ()
 peek = C.peek dirt
 
-d0, d1, d2, d3, d4, d5, d6, d7 :: (Dirt) => EStream Attrs -> IO ()
-d0 = setOrbit 0
-d1 = setOrbit 1
-d2 = setOrbit 2
-d3 = setOrbit 3
-d4 = setOrbit 4
-d5 = setOrbit 5
-d6 = setOrbit 6
-d7 = setOrbit 7
+d :: (Dirt, IsAttrs a) => Integer -> EStream a -> IO ()
+d i = setOrbit i . fmap toAttrs
+
+d0, d1, d2, d3, d4, d5, d6, d7 :: (Dirt) => (IsAttrs a) => EStream a -> IO ()
+d0 = d 0
+d1 = d 1
+d2 = d 2
+d3 = d 3
+d4 = d 4
+d5 = d 5
+d6 = d 6
+d7 = d 7
