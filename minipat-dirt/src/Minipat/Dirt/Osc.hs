@@ -1,8 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Minipat.Dirt.Osc
-  ( Timed (..)
-  , PlayErr (..)
+  ( PlayErr (..)
   , PlayEnv (..)
   , convertEvent
   , convertTape
@@ -21,20 +20,10 @@ import Data.Sequence (Seq (..))
 import Data.Sequence qualified as Seq
 import Data.Text (Text)
 import Minipat.Dirt.Attrs (Attrs, IsAttrs (..), attrsDelete, attrsInsert, attrsLookup, attrsToList)
+import Minipat.Dirt.Resources (Timed (..))
 import Minipat.Stream (Ev (..), Tape, tapeToList)
 import Minipat.Time (CycleDelta (..), CycleTime (..), Span, spanCycle, spanDelta)
 import Nanotime (PosixTime (..), TimeDelta (..), addTime, timeDeltaFromFracSecs, timeDeltaToNanos)
-import Prettyprinter (Pretty (..))
-import Prettyprinter qualified as P
-
-data Timed a = Timed
-  { timedKey :: !PosixTime
-  , timedVal :: !a
-  }
-  deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
-
-instance (Pretty a) => Pretty (Timed a) where
-  pretty (Timed k v) = P.hsep [pretty (unPosixTime k), pretty v]
 
 namedPayload :: Attrs -> Seq Datum
 namedPayload = foldl' go Empty . attrsToList

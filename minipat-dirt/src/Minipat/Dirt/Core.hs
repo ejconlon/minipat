@@ -5,16 +5,8 @@ module Minipat.Dirt.Core where
 import Control.Concurrent (forkFinally)
 import Control.Concurrent.Async (Async, async, cancel, poll, waitCatch)
 import Control.Concurrent.MVar (MVar, newEmptyMVar, putMVar, tryTakeMVar, withMVar)
-import Control.Concurrent.STM (STM, atomically, retry)
-import Control.Concurrent.STM.TQueue
-  ( TQueue
-  , flushTQueue
-  , newTQueueIO
-  , peekTQueue
-  , readTQueue
-  , tryPeekTQueue
-  , writeTQueue
-  )
+import Control.Concurrent.STM (STM, atomically)
+import Control.Concurrent.STM.TQueue (TQueue, flushTQueue, newTQueueIO, writeTQueue)
 import Control.Concurrent.STM.TVar (TVar, modifyTVar', newTVarIO, readTVar, readTVarIO, stateTVar, writeTVar)
 import Control.Exception (Exception (..), SomeException, bracket, mask_, onException, throwIO)
 import Control.Monad (unless, void, when)
@@ -24,7 +16,6 @@ import Dahdit.Network (Conn (..), HostPort (..), resolveAddr, runDecoder, runEnc
 import Data.Acquire (Acquire)
 import Data.Either (isRight)
 import Data.Foldable (foldl', for_)
-import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Ratio ((%))
@@ -34,8 +25,8 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Minipat.Dirt.Attrs (Attrs, attrsInsert)
 import Minipat.Dirt.Logger (LogAction, logDebug, logError, logInfo, logWarn, newLogger)
-import Minipat.Dirt.Osc (PlayEnv (..), PlayErr, Timed (..), convertTape, handshakePacket, playPacket)
-import Minipat.Dirt.Resources (RelVar, acquireAsync, relVarAcquire, relVarDispose, relVarInit)
+import Minipat.Dirt.Osc (PlayEnv (..), PlayErr, convertTape, handshakePacket, playPacket)
+import Minipat.Dirt.Resources (RelVar, Timed (..), acquireAwait, acquireLoop, relVarAcquire, relVarDispose, relVarInit)
 import Minipat.EStream (EStream (..))
 import Minipat.Print (prettyPrint, prettyPrintAll, prettyShow, prettyShowAll)
 import Minipat.Stream (Stream, streamRun, tapeToList)
@@ -44,65 +35,11 @@ import Nanotime
   ( PosixTime (..)
   , TimeDelta
   , TimeLike (..)
-  , awaitDelta
   , threadDelayDelta
   , timeDeltaFromFracSecs
   )
 import Network.Socket qualified as NS
 import Prettyprinter (Pretty)
-
-newtype NonPosTimeDeltaErr = NonPosTimeDeltaErr TimeDelta
-  deriving stock (Eq, Ord, Show)
-
-instance Exception NonPosTimeDeltaErr
-
-awaitTime :: TimeDelta -> IORef PosixTime -> IO PosixTime
-awaitTime delta timeVar = do
-  lastTime <- readIORef timeVar
-  nextTime <-
-    if lastTime == PosixTime 0
-      then currentTime
-      else awaitDelta lastTime delta
-  writeIORef timeVar nextTime
-  pure nextTime
-
-acquireLoop :: TVar TimeDelta -> (PosixTime -> IO ()) -> Acquire (Async ())
-acquireLoop deltaVar act = do
-  timeVar <- liftIO (newIORef (PosixTime 0))
-  let act' = do
-        delta <- readTVarIO deltaVar
-        unless (delta > 0) (throwIO (NonPosTimeDeltaErr delta))
-        time <- awaitTime delta timeVar
-        act time
-        act'
-  acquireAsync act'
-
-acquireAwait :: TVar Bool -> TQueue (Timed a) -> (Timed a -> IO ()) -> Acquire (Async ())
-acquireAwait runVar queue act =
-  let act' = do
-        -- Peek at the first entry and await it
-        time <- atomically $ do
-          run <- readTVar runVar
-          if run
-            then fmap timedKey (peekTQueue queue)
-            else retry
-        now <- currentTime @PosixTime
-        threadDelayDelta (diffTime time now)
-        -- If it's still there (not cleared), act on it
-        mtimed <- atomically $ do
-          run <- readTVar runVar
-          if run
-            then do
-              mtimed <- tryPeekTQueue queue
-              case mtimed of
-                Just timed
-                  | timedKey timed == time ->
-                      mtimed <$ readTQueue queue
-                _ -> pure Nothing
-            else pure Nothing
-        maybe (pure ()) act mtimed
-        act'
-  in  acquireAsync act'
 
 data Env = Env
   { envTargetHp :: !HostPort

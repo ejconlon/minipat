@@ -21,7 +21,8 @@ import Minipat.Dirt.Core
   , setTempo
   , withSt
   )
-import Minipat.Dirt.Osc (PlayEnv (..), PlayErr, Timed (..), convertTape, handshakePacket, playPacket)
+import Minipat.Dirt.Osc (PlayEnv (..), PlayErr, convertTape, handshakePacket, playPacket)
+import Minipat.Dirt.Resources (Timed (..))
 import Minipat.Stream (Ev (..), tapeSingleton)
 import Minipat.Time (Arc (..), Span (..))
 import Nanotime (TimeLike (..), threadDelayDelta, timeDeltaFromFracSecs)
