@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+-- | Controls for the live system
 module Minipat.Dirt.Boot where
 
 import Minipat.Dirt.Attrs (Attrs, IsAttrs (..))
@@ -10,8 +11,8 @@ import Minipat.Stream (Stream)
 import Nanotime (TimeDelta)
 import Prettyprinter (Pretty)
 
-class Dirt where
-  dirt :: C.St
+class Minipat where
+  minipat :: C.St
 
 initialize :: IO C.St
 initialize = do
@@ -19,79 +20,80 @@ initialize = do
   L.logInfo logger "Initializing"
   C.initSt logger C.defaultEnv
 
-dispose :: (Dirt) => IO ()
-dispose = C.disposeSt dirt
+dispose :: (Minipat) => IO ()
+dispose = C.disposeSt minipat
 
-getDebug :: (Dirt) => IO Bool
-getDebug = C.getDebug dirt
+getDebug :: (Minipat) => IO Bool
+getDebug = C.getDebug minipat
 
-getCps :: (Dirt) => IO Rational
-getCps = C.getCps dirt
+getCps :: (Minipat) => IO Rational
+getCps = C.getCps minipat
 
-getAhead :: (Dirt) => IO TimeDelta
-getAhead = C.getAhead dirt
+getAhead :: (Minipat) => IO TimeDelta
+getAhead = C.getAhead minipat
 
-getPlaying :: (Dirt) => IO Bool
-getPlaying = C.getPlaying dirt
+getPlaying :: (Minipat) => IO Bool
+getPlaying = C.getPlaying minipat
 
-getStream :: (Dirt) => IO (Stream Attrs)
-getStream = C.getStream dirt
+getStream :: (Minipat) => IO (Stream Attrs)
+getStream = C.getStream minipat
 
-getCycle :: (Dirt) => IO Integer
-getCycle = C.getCycle dirt
+getCycle :: (Minipat) => IO Integer
+getCycle = C.getCycle minipat
 
-getTempo :: (Dirt) => IO Rational
-getTempo = C.getTempo dirt
+getTempo :: (Minipat) => IO Rational
+getTempo = C.getTempo minipat
 
-setDebug :: (Dirt) => Bool -> IO ()
-setDebug = C.setDebug dirt
+setDebug :: (Minipat) => Bool -> IO ()
+setDebug = C.setDebug minipat
 
-setCps :: (Dirt) => Rational -> IO ()
-setCps = C.setCps dirt
+setCps :: (Minipat) => Rational -> IO ()
+setCps = C.setCps minipat
 
-setPlaying :: (Dirt) => Bool -> IO ()
-setPlaying = C.setPlaying dirt
+setPlaying :: (Minipat) => Bool -> IO ()
+setPlaying = C.setPlaying minipat
 
-setCycle :: (Dirt) => Integer -> IO ()
-setCycle = C.setCycle dirt
+setCycle :: (Minipat) => Integer -> IO ()
+setCycle = C.setCycle minipat
 
-setTempo :: (Dirt) => Rational -> IO ()
-setTempo = C.setTempo dirt
+setTempo :: (Minipat) => Rational -> IO ()
+setTempo = C.setTempo minipat
 
-setOrbit :: (Dirt) => Integer -> EStream Attrs -> IO ()
-setOrbit = C.setOrbit dirt
+setOrbit :: (Minipat) => Integer -> EStream Attrs -> IO ()
+setOrbit = C.setOrbit minipat
 
-clearOrbit :: (Dirt) => Integer -> IO ()
-clearOrbit = C.clearOrbit dirt
+clearOrbit :: (Minipat) => Integer -> IO ()
+clearOrbit = C.clearOrbit minipat
 
-clearAllOrbits :: (Dirt) => IO ()
-clearAllOrbits = C.clearAllOrbits dirt
+clearAllOrbits :: (Minipat) => IO ()
+clearAllOrbits = C.clearAllOrbits minipat
 
-hush :: (Dirt) => IO ()
-hush = C.hush dirt
+hush :: (Minipat) => IO ()
+hush = C.hush minipat
 
-panic :: (Dirt) => IO ()
-panic = C.panic dirt
+panic :: (Minipat) => IO ()
+panic = C.panic minipat
 
-play :: (Dirt) => IO ()
+play :: (Minipat) => IO ()
 play = setPlaying True
 
-stop :: (Dirt) => IO ()
+stop :: (Minipat) => IO ()
 stop = setPlaying False
 
-handshake :: (Dirt) => IO ()
-handshake = C.handshake dirt
+handshake :: (Minipat) => IO ()
+handshake = C.handshake minipat
 
-checkTasks :: (Dirt) => IO ()
-checkTasks = C.checkTasks dirt
+checkTasks :: (Minipat) => IO ()
+checkTasks = C.checkTasks minipat
 
-peek :: (Dirt, Pretty a) => EStream a -> IO ()
-peek = C.peek dirt
+-- | Prints the stream's events that would be generated in the current cycle
+peek :: (Minipat, Pretty a) => EStream a -> IO ()
+peek = C.peek minipat
 
-d :: (Dirt, IsAttrs a) => Integer -> EStream a -> IO ()
+d :: (Minipat, IsAttrs a) => Integer -> EStream a -> IO ()
 d i = setOrbit i . fmap toAttrs
 
-d0, d1, d2, d3, d4, d5, d6, d7 :: (Dirt) => (IsAttrs a) => EStream a -> IO ()
+d0, d1, d2, d3, d4, d5, d6, d7 :: (Minipat, IsAttrs a) => EStream a -> IO ()
 d0 = d 0
 d1 = d 1
 d2 = d 2

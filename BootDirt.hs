@@ -10,12 +10,18 @@ import Data.Map.Strict qualified as Map
 import Data.Ratio ((%))
 import Data.Sequence (Seq)
 import Data.Sequence qualified as Seq
-import Minipat.Dirt.Boot
-import Minipat.Dirt.Params
 import Minipat.Dirt.Prelude
 
-dirtInst <- initialize
+putStrLn "==== Minipat ==============================================="
+putStrLn "Quit with Ctrl-d or `:quit`"
+putStrLn "Clear stream with `hush` or stop with `panic`"
+putStrLn "List available functions with `:browse Minipat.Dirt.Prelude`"
+putStrLn "Show documentation with `:doc someFunctionName`"
+putStrLn "============================================================"
 
-instance Dirt where dirt = dirtInst
+minipatInst <- initialize
+
+instance Minipat where minipat = minipatInst
 
 handshake
+

@@ -26,6 +26,7 @@ library
   exposed-modules:
       Minipat.Dirt.Attrs
       Minipat.Dirt.Boot
+      Minipat.Dirt.Combinators
       Minipat.Dirt.Core
       Minipat.Dirt.Logger
       Minipat.Dirt.Notes
