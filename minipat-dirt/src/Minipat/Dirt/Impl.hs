@@ -4,6 +4,7 @@
 module Minipat.Dirt.Impl
   ( DirtEnv (..)
   , defaultDirtEnv
+  , DirtData
   , DirtSt
   , dirtImpl
   , handshake
@@ -46,9 +47,11 @@ data OscConn = OscConn
   , ocListenConn :: !(Conn NS.SockAddr)
   }
 
-type DirtSt = St DirtEnv OscConn
+type DirtData = OscConn
 
-dirtInit :: LogAction -> RelVar -> DirtEnv -> IO OscConn
+type DirtSt = St DirtEnv DirtData
+
+dirtInit :: LogAction -> RelVar -> DirtEnv -> IO DirtData
 dirtInit _ rv (DirtEnv targetHp listenHp _) = do
   targetAddr <- resolveAddr targetHp
   relVarAcquire rv $ do

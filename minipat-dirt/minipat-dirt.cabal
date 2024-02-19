@@ -26,9 +26,9 @@ library
   exposed-modules:
       Minipat.Dirt.Boot
       Minipat.Dirt.Impl
-      Minipat.Dirt.Prelude
       Minipat.Dirt.Test
       Minipat.Live.Attrs
+      Minipat.Live.Boot
       Minipat.Live.Combinators
       Minipat.Live.Core
       Minipat.Live.Logger

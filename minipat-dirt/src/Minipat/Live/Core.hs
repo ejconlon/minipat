@@ -9,8 +9,10 @@ module Minipat.Live.Core
   , St
   , stLogger
   , stEnv
-  , initSt
+  , initAsyncSt
+  , initSyncSt
   , disposeSt
+  , stepSt
   , withData
   , getDebug
   , getCps
@@ -152,10 +154,14 @@ reinitDomain ce dom = atomically $ do
   writeTVar (domStream dom) mempty
   clearEventsSTM dom
 
+data Tasks = Tasks
+  { taskGen :: !(Async ())
+  , taskSend :: !(Async ())
+  }
+
 data Resources d = Resources
   { resRel :: !RelVar
-  , resGenTask :: !(Async ())
-  , resSendTask :: !(Async ())
+  , resTasks :: !(Maybe Tasks)
   , resData :: !d
   }
 
@@ -170,17 +176,32 @@ data St i d = St
 newSt :: LogAction -> Impl i d -> Env i -> IO (St i d)
 newSt logger impl env = St logger impl env <$> initDomain (envCommon env) <*> newEmptyMVar
 
-initRes :: St i d -> IO ()
-initRes st = do
+initRes :: Bool -> St i d -> IO ()
+initRes isSync st = do
   disposeSt st
   relVarUse $ \rv -> do
     dat <- implInit (stImpl st) (stLogger st) rv (envImpl (stEnv st))
-    genTask <- relVarAcquire rv (acqGenTask st)
-    sendTask <- relVarAcquire rv (acqSendTask st)
-    putMVar (stRes st) (Resources rv genTask sendTask dat)
+    tasks <-
+      if isSync
+        then pure Nothing
+        else do
+          genTask <- relVarAcquire rv (acqGenTask st)
+          sendTask <- relVarAcquire rv (acqSendTask st)
+          pure (Just (Tasks genTask sendTask))
+    putMVar (stRes st) (Resources rv tasks dat)
 
-initSt :: LogAction -> Impl i d -> Env i -> IO (St i d)
-initSt logger impl env = newSt logger impl env >>= \st -> st <$ initRes st
+initSt :: Bool -> LogAction -> Impl i d -> Env i -> IO (St i d)
+initSt isSync logger impl env = newSt logger impl env >>= \st -> st <$ initRes isSync st
+
+initAsyncSt :: LogAction -> Impl i d -> Env i -> IO (St i d)
+initAsyncSt = initSt False
+
+initSyncSt :: LogAction -> Impl i d -> Env i -> IO (St i d)
+initSyncSt = initSt True
+
+stepSt :: St i d -> PosixTime -> IO (Seq (Timed Attrs), PosixTime)
+stepSt _st _now = do
+  error "TODO"
 
 disposeSt :: St i d -> IO ()
 disposeSt st = mask_ (tryTakeMVar (stRes st) >>= maybe (pure ()) (relVarDispose . resRel))
@@ -324,10 +345,13 @@ logAsyncState logger name task = do
 
 checkTasks :: St i d -> IO ()
 checkTasks st =
-  withMVar (stRes st) $ \res -> do
+  withMVar (stRes st) $ \res ->
     let logger = stLogger st
-    logAsyncState logger "gen" (resGenTask res)
-    logAsyncState logger "send" (resSendTask res)
+    in  case resTasks res of
+          Nothing -> logInfo logger "No tasks running"
+          Just tasks -> do
+            logAsyncState logger "gen" (taskGen tasks)
+            logAsyncState logger "send" (taskSend tasks)
 
 logEvents :: (Pretty a) => LogAction -> Domain -> Seq (Timed a) -> IO ()
 logEvents logger dom pevs =
