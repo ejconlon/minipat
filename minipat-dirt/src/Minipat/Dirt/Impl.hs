@@ -28,7 +28,7 @@ import Data.Map.Strict qualified as Map
 import Data.Ratio ((%))
 import Data.Sequence (Seq (..))
 import Data.Text qualified as T
-import Minipat.Live.Attrs (Attrs, attrsDefault, attrsToList)
+import Minipat.Live.Attrs (Attrs, attrsToList)
 import Minipat.Live.Core (Domain (..), Env (..), Impl (..), St (..), advanceCycleSTM, logEvents, setPlaying, withData)
 import Minipat.Live.Logger (LogAction, logError, logInfo)
 import Minipat.Live.Osc (PlayEnv (..), PlayErr, convertTape)
@@ -64,9 +64,9 @@ acqConn (DirtEnv targetHp listenHp _) = do
   conn <- udpServerConn Nothing listenHp
   pure (OscConn targetAddr conn)
 
-type DirtSt = St DirtEnv OscConn Attrs Packet
+type DirtSt = St DirtEnv OscConn Packet
 
-dirtImpl :: Impl DirtEnv OscConn Attrs Packet
+dirtImpl :: Impl DirtEnv OscConn Packet
 dirtImpl =
   Impl
     { implSpawn = \logger dom rv de -> do
@@ -75,10 +75,9 @@ dirtImpl =
         sendTask <- relVarAcquire rv (acqSendTask conn dom)
         let tasks = Map.fromList [("gen", genTask), ("send", sendTask)]
         pure (tasks, conn)
-    , implAddOrbit = attrsDefault "orbit" . DatumInt32 . fromInteger
     }
 
-genEventsSTM :: Domain Attrs Packet -> PosixTime -> STM (PlayEnv, Either PlayErr (Seq (Timed Attrs)))
+genEventsSTM :: Domain Packet -> PosixTime -> STM (PlayEnv, Either PlayErr (Seq (Timed Attrs)))
 genEventsSTM dom now = do
   ahead <- readTVar (domAhead dom)
   cps <- readTVar (domCps dom)
@@ -94,7 +93,7 @@ genEventsSTM dom now = do
       mpevs = convertTape penv tape
   pure (penv, mpevs)
 
-doGen :: LogAction -> Domain Attrs Packet -> PosixTime -> IO ()
+doGen :: LogAction -> Domain Packet -> PosixTime -> IO ()
 doGen logger dom now = do
   mr <- atomically $ do
     playing <- readTVar (domPlaying dom)
@@ -113,7 +112,7 @@ doGen logger dom now = do
             advanceCycleSTM dom
             for_ pevs (writeTQueue (domQueue dom) . fmap playPacket)
 
-acqGenTask :: LogAction -> Domain Attrs Packet -> Acquire (Async ())
+acqGenTask :: LogAction -> Domain Packet -> Acquire (Async ())
 acqGenTask logger dom = acquireLoop (domAhead dom) (doGen logger dom)
 
 sendPacket :: OscConn -> Packet -> IO ()
@@ -122,7 +121,7 @@ sendPacket (OscConn targetAddr (Conn _ enc)) = runEncoder enc targetAddr
 doSend :: OscConn -> Timed Packet -> IO ()
 doSend conn = sendPacket conn . timedVal
 
-acqSendTask :: OscConn -> Domain Attrs Packet -> Acquire (Async ())
+acqSendTask :: OscConn -> Domain Packet -> Acquire (Async ())
 acqSendTask conn dom = acquireAwait (domPlaying dom) (domQueue dom) (doSend conn)
 
 withTimeout :: TimeDelta -> IO a -> IO (Either SomeException a)
