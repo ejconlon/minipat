@@ -5,6 +5,7 @@ ghc-options:
 
 packages:
 - minipat
+- minipat-live
 - minipat-dirt
 
 extra-deps:

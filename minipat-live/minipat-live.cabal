@@ -4,9 +4,9 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 
-name:           minipat-dirt
+name:           minipat-live
 version:        0.1.0
-synopsis:       SuperDirt integration for minipat
+synopsis:       Live coding for Minipat
 description:    Please see the README on GitHub at <https://github.com/ejconlon/minipat#readme>
 homepage:       https://github.com/ejconlon/minipat#readme
 bug-reports:    https://github.com/ejconlon/minipat/issues
@@ -24,11 +24,17 @@ source-repository head
 
 library
   exposed-modules:
-      Minipat.Dirt.Boot
-      Minipat.Dirt.Impl
-      Minipat.Dirt.Test
+      Minipat.Live.Attrs
+      Minipat.Live.Boot
+      Minipat.Live.Combinators
+      Minipat.Live.Core
+      Minipat.Live.Logger
+      Minipat.Live.Notes
+      Minipat.Live.Osc
+      Minipat.Live.Params
+      Minipat.Live.Resources
   other-modules:
-      Paths_minipat_dirt
+      Paths_minipat_live
   hs-source-dirs:
       src
   default-extensions:
@@ -72,7 +78,6 @@ library
     , little-logger ==1.0.*
     , looksee ==0.5.*
     , minipat ==0.1.*
-    , minipat-live ==0.1.*
     , mtl ==2.3.*
     , nanotime ==0.3.*
     , network ==3.1.*
