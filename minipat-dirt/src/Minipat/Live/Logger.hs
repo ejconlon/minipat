@@ -2,6 +2,7 @@ module Minipat.Live.Logger
   ( LogAction
   , LogLevel (..)
   , newLogger
+  , nullLogger
   , logLvl
   , logDebug
   , logInfo
@@ -19,6 +20,9 @@ newLogger = do
   let logger = defaultLogAction
   lock <- newMVar ()
   pure (LogAction (\loc src lvl msg -> withMVar lock (\_ -> unLogAction logger loc src lvl msg)))
+
+nullLogger :: LogAction
+nullLogger = LogAction (\_ _ _ _ -> pure ())
 
 logLvl :: LogAction -> LogLevel -> Text -> IO ()
 logLvl logger lvl msg = runLogActionM (logOtherN lvl msg) logger
