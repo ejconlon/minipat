@@ -12,8 +12,8 @@ module Minipat.Live.Core
   , initAsyncSt
   , initSyncSt
   , disposeSt
-  , stepSt
-  , multiStepSt
+  , stepGenSt
+  , stepSendSt
   , withData
   , getDebug
   , getCps
@@ -200,36 +200,24 @@ initAsyncSt = initSt False
 initSyncSt :: LogAction -> Impl i d -> Env i -> IO (St i d)
 initSyncSt = initSt True
 
-stepSt :: St i d -> PosixTime -> IO (CycleTime, PosixTime)
-stepSt st now = do
+stepGenSt :: St i d -> PosixTime -> IO (CycleTime, PosixTime)
+stepGenSt st now = do
   let dom = stDom st
-      wd = withData st
-      send = implSend (stImpl st) (stLogger st) wd
   doGen (stLogger st) dom now
-  (events, nextCycTime, ahead) <- atomically $ do
-    events <- flushTQueue (domEvents dom)
+  (nextCycTime, ahead) <- atomically $ do
     nextCycTime <- getCycleTimeSTM dom
     ahead <- readTVar (domAhead dom)
-    pure (events, nextCycTime, ahead)
-  for_ events send
+    pure (nextCycTime, ahead)
   let nextNow = addTime now ahead
   pure (nextCycTime, nextNow)
 
-multiStepSt :: St i d -> Integer -> PosixTime -> IO (CycleTime, PosixTime)
-multiStepSt st numCycs now0 = go
- where
-  go = do
-    cyc0 <- getCycleTime st
-    if numCycs <= 0
-      then pure (cyc0, now0)
-      else do
-        let end = cyc0 + fromInteger numCycs
-        loop end now0
-  loop end now = do
-    p@(cyc, next) <- stepSt st now
-    if cyc >= end
-      then pure p
-      else loop end next
+stepSendSt :: St i d -> IO ()
+stepSendSt st = do
+  let dom = stDom st
+      wd = withData st
+      send = implSend (stImpl st) (stLogger st) wd
+  events <- atomically (flushTQueue (domEvents dom))
+  for_ events send
 
 disposeSt :: St i d -> IO ()
 disposeSt st = mask_ (tryTakeMVar (stRes st) >>= maybe (pure ()) (relVarDispose . resRel))
