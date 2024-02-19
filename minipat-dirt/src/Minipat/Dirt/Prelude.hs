@@ -1,11 +1,11 @@
 -- | Re-exports desirable modules for live coding
 module Minipat.Dirt.Prelude
   ( module Minipat.Dirt.Boot
-  , module Minipat.Dirt.Combinators
-  , module Minipat.Dirt.Params
+  , module Minipat.Live.Combinators
+  , module Minipat.Live.Params
   )
 where
 
 import Minipat.Dirt.Boot
-import Minipat.Dirt.Combinators
-import Minipat.Dirt.Params
+import Minipat.Live.Combinators
+import Minipat.Live.Params

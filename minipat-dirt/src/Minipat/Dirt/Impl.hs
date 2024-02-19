@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Minipat.Dirt.DirtCore
+-- | Superdirt-specific implementation
+module Minipat.Dirt.Impl
   ( DirtEnv (..)
   , defaultDirtEnv
   , DirtSt
@@ -17,20 +18,21 @@ import Control.Concurrent.STM.TVar (readTVar, readTVarIO)
 import Control.Exception (SomeException, bracket, throwIO)
 import Control.Monad (when)
 import Control.Monad.IO.Class (liftIO)
-import Dahdit.Midi.Osc (Datum (..), Packet)
+import Dahdit.Midi.Osc (Datum (..), Msg (..), Packet (..))
+import Dahdit.Midi.OscAddr (RawAddrPat)
 import Dahdit.Network (Conn (..), HostPort (..), resolveAddr, runDecoder, runEncoder, udpServerConn)
 import Data.Acquire (Acquire)
 import Data.Either (isRight)
-import Data.Foldable (for_)
+import Data.Foldable (foldl', for_)
 import Data.Map.Strict qualified as Map
 import Data.Ratio ((%))
-import Data.Sequence (Seq)
+import Data.Sequence (Seq (..))
 import Data.Text qualified as T
-import Minipat.Dirt.Attrs (Attrs, attrsDefault)
-import Minipat.Dirt.Core (Domain (..), Env (..), Impl (..), St (..), advanceCycleSTM, logEvents, setPlaying, withData)
-import Minipat.Dirt.Logger (LogAction, logError, logInfo)
-import Minipat.Dirt.Osc (PlayEnv (..), PlayErr, convertTape, handshakePacket, playPacket)
-import Minipat.Dirt.Resources (Timed (..), acquireAwait, acquireLoop, relVarAcquire)
+import Minipat.Live.Attrs (Attrs, attrsDefault, attrsToList)
+import Minipat.Live.Core (Domain (..), Env (..), Impl (..), St (..), advanceCycleSTM, logEvents, setPlaying, withData)
+import Minipat.Live.Logger (LogAction, logError, logInfo)
+import Minipat.Live.Osc (PlayEnv (..), PlayErr, convertTape)
+import Minipat.Live.Resources (Timed (..), acquireAwait, acquireLoop, relVarAcquire)
 import Minipat.Stream (streamRun)
 import Minipat.Time (Arc (..), CycleTime (..))
 import Nanotime (PosixTime, TimeDelta, addTime, threadDelayDelta, timeDeltaFromFracSecs)
@@ -150,3 +152,20 @@ handshake st = bracket acq rel (const (pure ()))
       then logInfo logger "... handshake succeeded"
       else logError logger "... handshake FAILED"
     setPlaying st ok
+
+namedPayload :: Attrs -> Seq Datum
+namedPayload = foldl' go Empty . attrsToList
+ where
+  go !acc (k, v) = acc :|> DatumString k :|> v
+
+playAddr :: RawAddrPat
+playAddr = "/dirt/play"
+
+playPacket :: Attrs -> Packet
+playPacket ats = PacketMsg (Msg playAddr (namedPayload ats))
+
+handshakeAddr :: RawAddrPat
+handshakeAddr = "/dirt/handshake"
+
+handshakePacket :: Packet
+handshakePacket = PacketMsg (Msg handshakeAddr Empty)

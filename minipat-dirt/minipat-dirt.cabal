@@ -24,18 +24,18 @@ source-repository head
 
 library
   exposed-modules:
-      Minipat.Dirt.Attrs
       Minipat.Dirt.Boot
-      Minipat.Dirt.Combinators
-      Minipat.Dirt.Core
-      Minipat.Dirt.DirtCore
-      Minipat.Dirt.Logger
-      Minipat.Dirt.Notes
-      Minipat.Dirt.Osc
-      Minipat.Dirt.Params
+      Minipat.Dirt.Impl
       Minipat.Dirt.Prelude
-      Minipat.Dirt.Resources
       Minipat.Dirt.Test
+      Minipat.Live.Attrs
+      Minipat.Live.Combinators
+      Minipat.Live.Core
+      Minipat.Live.Logger
+      Minipat.Live.Notes
+      Minipat.Live.Osc
+      Minipat.Live.Params
+      Minipat.Live.Resources
   other-modules:
       Paths_minipat_dirt
   hs-source-dirs:

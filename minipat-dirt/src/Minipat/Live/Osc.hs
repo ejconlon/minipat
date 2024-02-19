@@ -1,34 +1,25 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Minipat.Dirt.Osc
+module Minipat.Live.Osc
   ( PlayErr (..)
   , PlayEnv (..)
   , convertEvent
   , convertTape
-  , playPacket
-  , handshakePacket
   )
 where
 
 import Control.Exception (Exception)
 import Control.Monad (foldM)
 import Control.Monad.Except (throwError)
-import Dahdit.Midi.Osc (Datum (..), Msg (..), Packet (..))
-import Dahdit.Midi.OscAddr (RawAddrPat)
-import Data.Foldable (foldl')
+import Dahdit.Midi.Osc (Datum (..))
 import Data.Sequence (Seq (..))
 import Data.Sequence qualified as Seq
 import Data.Text (Text)
-import Minipat.Dirt.Attrs (Attrs, IsAttrs (..), attrsDelete, attrsInsert, attrsLookup, attrsToList)
-import Minipat.Dirt.Resources (Timed (..))
+import Minipat.Live.Attrs (Attrs, IsAttrs (..), attrsDelete, attrsInsert, attrsLookup)
+import Minipat.Live.Resources (Timed (..))
 import Minipat.Stream (Ev (..), Tape, tapeToList)
 import Minipat.Time (CycleDelta (..), CycleTime (..), Span, spanCycle, spanDelta)
 import Nanotime (PosixTime (..), TimeDelta (..), addTime, timeDeltaFromFracSecs, timeDeltaToNanos)
-
-namedPayload :: Attrs -> Seq Datum
-namedPayload = foldl' go Empty . attrsToList
- where
-  go !acc (k, v) = acc :|> DatumString k :|> v
 
 data PlayErr
   = PlayErrDupe !Text
@@ -59,6 +50,7 @@ replaceAliases as m0 = foldM go m0 as
 -- cps - float, given - current cps
 -- cycle - float, given - event start in cycle time
 -- delta - float, given - microsecond length of event
+-- TODO add more aliases for params
 playAliases :: [(Text, Text)]
 playAliases =
   [ ("lpf", "cutoff")
@@ -125,15 +117,3 @@ traverseMaybe f = go Empty
 
 convertTape :: (IsAttrs a) => PlayEnv -> Tape a -> M (Seq (Timed Attrs))
 convertTape penv = traverseMaybe (convertEvent penv) . Seq.fromList . tapeToList
-
-playAddr :: RawAddrPat
-playAddr = "/dirt/play"
-
-playPacket :: Attrs -> Packet
-playPacket ats = PacketMsg (Msg playAddr (namedPayload ats))
-
-handshakeAddr :: RawAddrPat
-handshakeAddr = "/dirt/handshake"
-
-handshakePacket :: Packet
-handshakePacket = PacketMsg (Msg handshakeAddr Empty)

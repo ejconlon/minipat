@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Minipat.Dirt.Notes where
+module Minipat.Live.Notes where
 
 import Data.Maybe (fromMaybe)
 import Data.Sequence (Seq)

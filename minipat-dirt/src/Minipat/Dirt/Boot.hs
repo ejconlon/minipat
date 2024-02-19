@@ -3,11 +3,11 @@
 -- | Controls for the live system
 module Minipat.Dirt.Boot where
 
-import Minipat.Dirt.Attrs (Attrs, IsAttrs (..))
-import Minipat.Dirt.Core qualified as C
-import Minipat.Dirt.DirtCore qualified as D
-import Minipat.Dirt.Logger qualified as L
+import Minipat.Dirt.Impl qualified as D
 import Minipat.EStream (EStream)
+import Minipat.Live.Attrs (Attrs, IsAttrs (..))
+import Minipat.Live.Core qualified as C
+import Minipat.Live.Logger qualified as L
 import Minipat.Stream (Stream)
 import Nanotime (TimeDelta)
 import Prettyprinter (Pretty)

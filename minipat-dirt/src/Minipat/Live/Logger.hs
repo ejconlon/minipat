@@ -1,4 +1,4 @@
-module Minipat.Dirt.Logger
+module Minipat.Live.Logger
   ( LogAction
   , LogLevel (..)
   , newLogger

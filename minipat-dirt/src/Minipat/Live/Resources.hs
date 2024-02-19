@@ -1,4 +1,4 @@
-module Minipat.Dirt.Resources
+module Minipat.Live.Resources
   ( RelVar
   , relVarInit
   , relVarDispose

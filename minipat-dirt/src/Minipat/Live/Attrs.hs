@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Minipat.Dirt.Attrs
+module Minipat.Live.Attrs
   ( DatumProxy (..)
   , datumProxyType
   , Attr (..)
@@ -23,7 +23,7 @@ import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Minipat.Ast (Ident (..))
-import Minipat.Dirt.Notes (Note (..))
+import Minipat.Live.Notes (Note (..))
 import Prettyprinter (Doc, Pretty (..))
 import Prettyprinter qualified as P
 

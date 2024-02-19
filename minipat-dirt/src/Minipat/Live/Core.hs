@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Minipat.Dirt.Core where
+module Minipat.Live.Core where
 
 import Control.Concurrent.Async (Async, poll)
 import Control.Concurrent.MVar (MVar, newEmptyMVar, putMVar, tryTakeMVar, withMVar)
@@ -17,9 +17,9 @@ import Data.Sequence (Seq)
 import Data.Sequence qualified as Seq
 import Data.Text (Text)
 import Data.Text qualified as T
-import Minipat.Dirt.Logger (LogAction, logDebug, logError, logInfo, logWarn)
-import Minipat.Dirt.Resources (RelVar, Timed (..), relVarDispose, relVarUse)
 import Minipat.EStream (EStream (..))
+import Minipat.Live.Logger (LogAction, logDebug, logError, logInfo, logWarn)
+import Minipat.Live.Resources (RelVar, Timed (..), relVarDispose, relVarUse)
 import Minipat.Print (prettyPrint, prettyPrintAll, prettyShow, prettyShowAll)
 import Minipat.Stream (Stream, streamRun, tapeToList)
 import Minipat.Time (Arc (..), CycleTime (..), bpmToCps, cpsToBpm)

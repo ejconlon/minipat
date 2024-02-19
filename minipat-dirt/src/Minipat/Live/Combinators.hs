@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 -- | Useful combinators and shorthands
-module Minipat.Dirt.Combinators
+module Minipat.Live.Combinators
   ( S
   , setIn
   , (#)
@@ -41,10 +41,10 @@ import Data.Text qualified as T
 import Looksee qualified as L
 import Minipat.Ast (Ident (..), Select (..))
 import Minipat.Classes (Flow (..))
-import Minipat.Dirt.Attrs (Attr (..), Attrs, DatumProxy (..), IsAttrs (..), attrsInsert, attrsMerge)
-import Minipat.Dirt.Notes (ChordName, Note (..), OctNote (..), Octave (..), convChordName, convNoteName, octToNote)
 import Minipat.EStream
 import Minipat.Eval (evalPat)
+import Minipat.Live.Attrs (Attr (..), Attrs, DatumProxy (..), IsAttrs (..), attrsInsert, attrsMerge)
+import Minipat.Live.Notes (ChordName, Note (..), OctNote (..), Octave (..), convChordName, convNoteName, octToNote)
 import Minipat.Parser (P, identP, selectP)
 import Minipat.Time (CycleDelta, CycleTime)
 import Prettyprinter (Pretty (..))

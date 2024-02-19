@@ -1,11 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Minipat.Dirt.Params where
+module Minipat.Live.Params where
 
 import Data.Int (Int32)
 import Data.Text (Text)
-import Minipat.Dirt.Attrs (Attr (..))
 import Minipat.EStream (EStream)
+import Minipat.Live.Attrs (Attr (..))
 
 pF :: (Real a) => Text -> EStream a -> EStream (Attr Float)
 pF k = fmap (Attr k . realToFrac)
