@@ -11,31 +11,19 @@ module Minipat.Dirt.Impl
 where
 
 import Control.Concurrent (forkFinally)
-import Control.Concurrent.Async (Async, async, cancel, waitCatch)
-import Control.Concurrent.STM (STM, atomically)
-import Control.Concurrent.STM.TQueue (writeTQueue)
-import Control.Concurrent.STM.TVar (readTVar, readTVarIO)
+import Control.Concurrent.Async (async, cancel, waitCatch)
 import Control.Exception (SomeException, bracket, throwIO)
-import Control.Monad (when)
-import Control.Monad.IO.Class (liftIO)
 import Dahdit.Midi.Osc (Datum (..), Msg (..), Packet (..))
 import Dahdit.Midi.OscAddr (RawAddrPat)
 import Dahdit.Network (Conn (..), HostPort (..), resolveAddr, runDecoder, runEncoder, udpServerConn)
-import Data.Acquire (Acquire)
 import Data.Either (isRight)
-import Data.Foldable (foldl', for_)
-import Data.Map.Strict qualified as Map
-import Data.Ratio ((%))
+import Data.Foldable (foldl')
 import Data.Sequence (Seq (..))
-import Data.Text qualified as T
 import Minipat.Live.Attrs (Attrs, attrsToList)
-import Minipat.Live.Core (Domain (..), Env (..), Impl (..), St (..), advanceCycleSTM, logEvents, setPlaying, withData)
+import Minipat.Live.Core (Env (..), Impl (..), St (..), setPlaying, withData)
 import Minipat.Live.Logger (LogAction, logError, logInfo)
-import Minipat.Live.Osc (PlayEnv (..), PlayErr, convertTape)
-import Minipat.Live.Resources (Timed (..), acquireAwait, acquireLoop, relVarAcquire)
-import Minipat.Stream (streamRun)
-import Minipat.Time (Arc (..), CycleTime (..))
-import Nanotime (PosixTime, TimeDelta, addTime, threadDelayDelta, timeDeltaFromFracSecs)
+import Minipat.Live.Resources (RelVar, Timed (..), relVarAcquire)
+import Nanotime (TimeDelta, threadDelayDelta, timeDeltaFromFracSecs)
 import Network.Socket qualified as NS
 
 data DirtEnv = DirtEnv
@@ -58,71 +46,27 @@ data OscConn = OscConn
   , ocListenConn :: !(Conn NS.SockAddr)
   }
 
-acqConn :: DirtEnv -> Acquire OscConn
-acqConn (DirtEnv targetHp listenHp _) = do
-  targetAddr <- liftIO (resolveAddr targetHp)
-  conn <- udpServerConn Nothing listenHp
-  pure (OscConn targetAddr conn)
+type DirtSt = St DirtEnv OscConn
 
-type DirtSt = St DirtEnv OscConn Packet
+dirtInit :: LogAction -> RelVar -> DirtEnv -> IO OscConn
+dirtInit _ rv (DirtEnv targetHp listenHp _) = do
+  targetAddr <- resolveAddr targetHp
+  relVarAcquire rv $ do
+    conn <- udpServerConn Nothing listenHp
+    pure (OscConn targetAddr conn)
 
-dirtImpl :: Impl DirtEnv OscConn Packet
-dirtImpl =
-  Impl
-    { implSpawn = \logger dom rv de -> do
-        conn <- relVarAcquire rv (acqConn de)
-        genTask <- relVarAcquire rv (acqGenTask logger dom)
-        sendTask <- relVarAcquire rv (acqSendTask conn dom)
-        let tasks = Map.fromList [("gen", genTask), ("send", sendTask)]
-        pure (tasks, conn)
-    }
+dirtSend :: LogAction -> ((OscConn -> IO ()) -> IO ()) -> Timed Attrs -> IO ()
+dirtSend _ wd (Timed _ attrs) = do
+  let packet = playPacket attrs
+  wd $ \(OscConn targetAddr (Conn _ enc)) ->
+    runEncoder enc targetAddr packet
 
-genEventsSTM :: Domain Packet -> PosixTime -> STM (PlayEnv, Either PlayErr (Seq (Timed Attrs)))
-genEventsSTM dom now = do
-  ahead <- readTVar (domAhead dom)
-  cps <- readTVar (domCps dom)
-  gpc <- readTVar (domGpc dom)
-  gcyc <- readTVar (domGenCycle dom)
-  let start = CycleTime (gcyc % gpc)
-      end = CycleTime ((gcyc + 1) % gpc)
-      arc = Arc start end
-  stream <- readTVar (domStream dom)
-  let tape = streamRun stream arc
-      origin = addTime now ahead
-      penv = PlayEnv origin start cps
-      mpevs = convertTape penv tape
-  pure (penv, mpevs)
+dirtImpl :: Impl DirtEnv OscConn
+dirtImpl = Impl dirtInit dirtSend
 
-doGen :: LogAction -> Domain Packet -> PosixTime -> IO ()
-doGen logger dom now = do
-  mr <- atomically $ do
-    playing <- readTVar (domPlaying dom)
-    if playing
-      then fmap Just (genEventsSTM dom now)
-      else pure Nothing
-  case mr of
-    Nothing -> pure ()
-    Just (_, mpevs) ->
-      case mpevs of
-        Left err -> logError logger (T.pack ("Gen failed: " ++ show err))
-        Right pevs -> do
-          debug <- readTVarIO (domDebug dom)
-          when debug (logEvents logger dom pevs)
-          atomically $ do
-            advanceCycleSTM dom
-            for_ pevs (writeTQueue (domQueue dom) . fmap playPacket)
-
-acqGenTask :: LogAction -> Domain Packet -> Acquire (Async ())
-acqGenTask logger dom = acquireLoop (domAhead dom) (doGen logger dom)
-
-sendPacket :: OscConn -> Packet -> IO ()
-sendPacket (OscConn targetAddr (Conn _ enc)) = runEncoder enc targetAddr
-
-doSend :: OscConn -> Timed Packet -> IO ()
-doSend conn = sendPacket conn . timedVal
-
-acqSendTask :: OscConn -> Domain Packet -> Acquire (Async ())
-acqSendTask conn dom = acquireAwait (domPlaying dom) (domQueue dom) (doSend conn)
+sendPacket :: DirtSt -> Packet -> IO ()
+sendPacket st packet = withData st $ \(OscConn targetAddr (Conn _ enc)) ->
+  runEncoder enc targetAddr packet
 
 withTimeout :: TimeDelta -> IO a -> IO (Either SomeException a)
 withTimeout td act = do
@@ -143,7 +87,6 @@ handshake st = bracket acq rel (const (pure ()))
   logger = stLogger st
   acq = do
     logInfo logger "Handshaking ..."
-    withData st (`sendPacket` handshakePacket)
     recvPacket st
   rel resp = do
     let ok = isRight resp
