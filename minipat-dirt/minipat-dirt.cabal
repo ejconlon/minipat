@@ -28,6 +28,7 @@ library
       Minipat.Dirt.Boot
       Minipat.Dirt.Combinators
       Minipat.Dirt.Core
+      Minipat.Dirt.DirtCore
       Minipat.Dirt.Logger
       Minipat.Dirt.Notes
       Minipat.Dirt.Osc

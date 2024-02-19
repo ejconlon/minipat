@@ -9,6 +9,7 @@ module Minipat.Dirt.Attrs
   , attrsFromList
   , attrsLookup
   , attrsInsert
+  , attrsDefault
   , attrsDelete
   , attrsToList
   , IsAttrs (..)
@@ -89,6 +90,11 @@ attrsLookup k (Attrs m) = Map.lookup k m
 
 attrsInsert :: Text -> Datum -> Attrs -> Attrs
 attrsInsert k v (Attrs m) = Attrs (Map.insert k v m)
+
+attrsDefault :: Text -> Datum -> Attrs -> Attrs
+attrsDefault k v a@(Attrs m) = case Map.lookup k m of
+  Nothing -> Attrs (Map.insert k v m)
+  Just _ -> a
 
 attrsDelete :: Text -> Attrs -> Attrs
 attrsDelete k (Attrs m) = Attrs (Map.delete k m)

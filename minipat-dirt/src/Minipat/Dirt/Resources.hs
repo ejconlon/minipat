@@ -2,6 +2,7 @@ module Minipat.Dirt.Resources
   ( RelVar
   , relVarInit
   , relVarDispose
+  , relVarUse
   , relVarAcquire
   , withRelVar
   , acquireAsync
@@ -15,7 +16,7 @@ import Control.Concurrent.Async (Async, async, cancel)
 import Control.Concurrent.STM (atomically, retry)
 import Control.Concurrent.STM.TQueue (TQueue, peekTQueue, readTQueue, tryPeekTQueue)
 import Control.Concurrent.STM.TVar (TVar, readTVar, readTVarIO)
-import Control.Exception (Exception, bracket, mask, throwIO)
+import Control.Exception (Exception, bracket, mask, onException, throwIO)
 import Control.Monad (unless)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Resource (InternalState, closeInternalState, createInternalState)
@@ -33,6 +34,11 @@ relVarInit = createInternalState
 
 relVarDispose :: RelVar -> IO ()
 relVarDispose = closeInternalState
+
+relVarUse :: (RelVar -> IO a) -> IO a
+relVarUse f = do
+  rv <- relVarInit
+  onException (f rv) (relVarDispose rv)
 
 relVarAcquire :: RelVar -> Acquire a -> IO a
 relVarAcquire rv (Acquire f) = mask $ \restore -> do

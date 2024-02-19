@@ -5,6 +5,7 @@ module Minipat.Dirt.Boot where
 
 import Minipat.Dirt.Attrs (Attrs, IsAttrs (..))
 import Minipat.Dirt.Core qualified as C
+import Minipat.Dirt.DirtCore qualified as D
 import Minipat.Dirt.Logger qualified as L
 import Minipat.EStream (EStream)
 import Minipat.Stream (Stream)
@@ -12,13 +13,13 @@ import Nanotime (TimeDelta)
 import Prettyprinter (Pretty)
 
 class Minipat where
-  minipat :: C.St
+  minipat :: D.DirtSt
 
-initialize :: IO C.St
+initialize :: IO D.DirtSt
 initialize = do
   logger <- L.newLogger
   L.logInfo logger "Initializing"
-  C.initSt logger C.defaultEnv
+  C.initSt logger D.dirtImpl (C.defaultEnv D.defaultDirtEnv)
 
 dispose :: (Minipat) => IO ()
 dispose = C.disposeSt minipat
@@ -81,7 +82,7 @@ stop :: (Minipat) => IO ()
 stop = setPlaying False
 
 handshake :: (Minipat) => IO ()
-handshake = C.handshake minipat
+handshake = D.handshake minipat
 
 checkTasks :: (Minipat) => IO ()
 checkTasks = C.checkTasks minipat
