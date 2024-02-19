@@ -10,10 +10,7 @@ module Minipat.Live.Core
   , stLogger
   , stEnv
   , initAsyncSt
-  , initSyncSt
   , disposeSt
-  , stepGenSt
-  , stepSendSt
   , withData
   , getDebug
   , getCps
@@ -34,6 +31,8 @@ module Minipat.Live.Core
   , panic
   , checkTasks
   , peek
+  , Record
+  , stepRecord
   )
 where
 
@@ -41,7 +40,7 @@ import Control.Concurrent.Async (Async, poll)
 import Control.Concurrent.MVar (MVar, newEmptyMVar, putMVar, tryTakeMVar, withMVar)
 import Control.Concurrent.STM (STM, atomically)
 import Control.Concurrent.STM.TQueue (TQueue, flushTQueue, newTQueueIO, writeTQueue)
-import Control.Concurrent.STM.TVar (TVar, modifyTVar', newTVarIO, readTVar, readTVarIO, stateTVar, writeTVar)
+import Control.Concurrent.STM.TVar (TVar, modifyTVar', newTVarIO, readTVar, readTVarIO, stateTVar, swapTVar, writeTVar)
 import Control.Exception (Exception (..), mask_)
 import Control.Monad (unless, void, when)
 import Dahdit.Midi.Osc (Datum (..))
@@ -50,20 +49,20 @@ import Data.Foldable (foldl', for_)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Ratio ((%))
-import Data.Sequence (Seq)
+import Data.Sequence (Seq (..))
 import Data.Sequence qualified as Seq
 import Data.Text (Text)
 import Data.Text qualified as T
 import Minipat.EStream (EStream (..))
 import Minipat.Live.Attrs (Attrs, attrsDefault)
-import Minipat.Live.Logger (LogAction, logDebug, logError, logInfo, logWarn)
+import Minipat.Live.Logger (LogAction, logDebug, logError, logInfo, logWarn, nullLogger)
 import Minipat.Live.Osc (PlayEnv (..), PlayErr, convertTape)
 import Minipat.Live.Resources (RelVar, Timed (..), acquireAwait, acquireLoop, relVarAcquire, relVarDispose, relVarUse)
 import Minipat.Print (prettyPrint, prettyPrintAll, prettyShow, prettyShowAll)
 import Minipat.Stream (Stream, streamRun, tapeToList)
-import Minipat.Time (Arc (..), CycleTime (..), bpmToCps, cpsToBpm)
+import Minipat.Time (Arc (..), Cycle (..), CycleTime (..), bpmToCps, cpsToBpm)
 import Nanotime
-  ( PosixTime
+  ( PosixTime (..)
   , TimeDelta
   , addTime
   , timeDeltaFromFracSecs
@@ -336,6 +335,45 @@ peek st es =
           evs = tapeToList (streamRun s arc)
       prettyPrint arc
       prettyPrintAll "\n" evs
+
+-- * Recording
+
+newtype Record = Record {unRecord :: TVar (Seq (Timed Attrs))}
+
+recordImpl :: Impl () Record
+recordImpl =
+  Impl
+    { implInit = \_ _ _ -> fmap Record (newTVarIO Empty)
+    , implSend = \_ wd ta -> wd (\(Record r) -> atomically (modifyTVar' r (:|> ta)))
+    }
+
+flushRecord :: St () Record -> IO (Seq (Timed Attrs))
+flushRecord = flip withData (\(Record r) -> atomically (swapTVar r Empty))
+
+stepRecord
+  :: (CycleTime -> PosixTime -> St () Record -> IO ())
+  -> (CycleTime -> PosixTime -> Seq (Timed Attrs) -> IO ())
+  -> CommonEnv
+  -> Cycle
+  -> Cycle
+  -> PosixTime
+  -> IO PosixTime
+stepRecord onEnter onLeave ce start end now0 = go
+ where
+  go = do
+    let env = Env ce ()
+    st <- initSyncSt nullLogger recordImpl env
+    setCycle st (unCycle start)
+    loop (fromInteger (unCycle end)) st (fromInteger (unCycle start)) now0
+  loop cycEnd st !cycNow !realNow =
+    if cycNow >= cycEnd
+      then pure realNow
+      else do
+        onEnter cycNow realNow st
+        (cycNext, realNext) <- stepGenSt st realNow
+        events <- flushRecord st
+        onLeave cycNow realNow events
+        loop cycEnd st cycNext realNext
 
 -- Helpers
 
