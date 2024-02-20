@@ -16,6 +16,10 @@ import Test.Tasty.HUnit (testCase, (@?=))
 
 testRecord :: TestTree
 testRecord = testCase "record" $ do
+  -- 2000000000 (ns) here is 2 seconds
+  -- Default 120 bpm, 1 gpc means 2 second generation delay
+  -- and 1/2 second per beat
+  -- 1000000 (us) is 1 second
   let expected =
         Seq.fromList
           [ Timed 2000000000 $
