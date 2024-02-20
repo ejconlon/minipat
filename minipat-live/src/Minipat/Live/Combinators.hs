@@ -43,7 +43,7 @@ import Minipat.Ast (Ident (..), Select (..))
 import Minipat.Classes (Flow (..))
 import Minipat.EStream
 import Minipat.Eval (evalPat)
-import Minipat.Live.Attrs (Attr (..), Attrs, DatumProxy (..), IsAttrs (..), attrsInsert, attrsMerge)
+import Minipat.Live.Attrs (Attr (..), Attrs, DatumProxy (..), Squishy (..), attrsInsert, squishMerge)
 import Minipat.Live.Notes (ChordName, Note (..), OctNote (..), Octave (..), convChordName, convNoteName, octToNote)
 import Minipat.Parser (P, identP, selectP)
 import Minipat.Time (CycleDelta, CycleTime)
@@ -95,8 +95,8 @@ ordP m pa =
 
 -- General combinators
 
-setIn, (#) :: (IsAttrs a, IsAttrs b) => S a -> S b -> S Attrs
-setIn = flowInnerApply attrsMerge
+setIn, (#) :: (Squishy q a, Squishy q b) => S a -> S b -> S q
+setIn = flowInnerApply squishMerge
 (#) = setIn
 
 attrPat :: Text -> S a -> S (Attr a)
@@ -116,8 +116,8 @@ data Sound = Sound
 instance Pretty Sound where
   pretty (Sound so mn) = pretty so <> maybe mempty ((":" <>) . pretty) mn
 
-instance IsAttrs Sound where
-  toAttrs (Sound so mn) = attrsInsert "sound" (DatumString (unIdent so)) (maybe mempty toAttrs mn)
+instance Squishy Attrs Sound where
+  squish (Sound so mn) = attrsInsert "sound" (DatumString (unIdent so)) (squish mn)
 
 soundP :: P Sound
 soundP = fmap (\(Select so mn) -> Sound so mn) (selectP identP noteP)

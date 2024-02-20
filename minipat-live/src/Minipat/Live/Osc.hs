@@ -15,7 +15,7 @@ import Dahdit.Midi.Osc (Datum (..))
 import Data.Sequence (Seq (..))
 import Data.Sequence qualified as Seq
 import Data.Text (Text)
-import Minipat.Live.Attrs (Attrs, IsAttrs (..), attrsDelete, attrsInsert, attrsLookup)
+import Minipat.Live.Attrs (Attrs, Squishy (..), attrsDelete, attrsInsert, attrsLookup)
 import Minipat.Live.Resources (Timed (..))
 import Minipat.Stream (Ev (..), Tape, tapeToList)
 import Minipat.Time (CycleDelta (..), CycleTime (..), Span, spanCycle, spanDelta)
@@ -92,7 +92,7 @@ timeDeltaToMicros td =
   let (_, ns) = timeDeltaToNanos td
   in  fromIntegral ns / 1000
 
-convertEvent :: (IsAttrs a) => PlayEnv -> Ev a -> M (Maybe (Timed Attrs))
+convertEvent :: (Squishy Attrs a) => PlayEnv -> Ev a -> M (Maybe (Timed Attrs))
 convertEvent (PlayEnv startTime startCyc cps) (Ev sp dat) =
   case spanCycle sp of
     Nothing ->
@@ -103,7 +103,7 @@ convertEvent (PlayEnv startTime startCyc cps) (Ev sp dat) =
           onset = addTime startTime (timeDeltaFromFracSecs (unCycleTime cycOffset / cps))
       deltaCyc <- fmap unCycleDelta (spanDeltaM sp)
       let deltaTime = timeDeltaToMicros (timeDeltaFromFracSecs (deltaCyc / cps))
-      dat' <- replaceAliases playAliases (toAttrs dat)
+      dat' <- replaceAliases playAliases (squish dat)
       dat'' <- insertSafe "delta" (DatumFloat deltaTime) dat'
       dat''' <- insertSafe "cps" (DatumFloat (realToFrac cps)) dat''
       pure (Just (Timed onset dat'''))
@@ -115,5 +115,5 @@ traverseMaybe f = go Empty
     Empty -> pure acc
     a :<| as' -> f a >>= maybe (go acc as') (\b -> go (acc :|> b) as')
 
-convertTape :: (IsAttrs a) => PlayEnv -> Tape a -> M (Seq (Timed Attrs))
+convertTape :: (Squishy Attrs a) => PlayEnv -> Tape a -> M (Seq (Timed Attrs))
 convertTape penv = traverseMaybe (convertEvent penv) . Seq.fromList . tapeToList

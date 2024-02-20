@@ -41,7 +41,7 @@ import Control.Concurrent.Async (Async, poll)
 import Control.Concurrent.MVar (MVar, newEmptyMVar, putMVar, tryTakeMVar, withMVar)
 import Control.Concurrent.STM (STM, atomically)
 import Control.Concurrent.STM.TQueue (TQueue, flushTQueue, newTQueueIO, writeTQueue)
-import Control.Concurrent.STM.TVar (TVar, modifyTVar', newTVarIO, readTVar, readTVarIO, stateTVar, swapTVar, writeTVar)
+import Control.Concurrent.STM.TVar (TVar, modifyTVar', newTVarIO, readTVar, readTVarIO, stateTVar, writeTVar)
 import Control.Exception (Exception (..), mask_)
 import Control.Monad (unless, void, when)
 import Dahdit.Midi.Osc (Datum (..))
@@ -56,7 +56,7 @@ import Data.Sequence qualified as Seq
 import Data.Text (Text)
 import Data.Text qualified as T
 import Minipat.EStream (EStream (..))
-import Minipat.Live.Attrs (Attrs, IsAttrs (..), attrsDefault)
+import Minipat.Live.Attrs (Attrs, Squishy (..), attrsDefault)
 import Minipat.Live.Logger (LogAction, logDebug, logError, logInfo, logWarn, nullLogger)
 import Minipat.Live.Osc (PlayEnv (..), PlayErr, convertTape)
 import Minipat.Live.Resources (RelVar, Timed (..), acquireAwait, acquireLoop, relVarAcquire, relVarDispose, relVarUse)
@@ -300,11 +300,11 @@ updateOrbits st f = atomically $ do
   let z = foldl' (\x (o, y) -> x <> fmap (addOrbit o) y) mempty (Map.toList m')
   writeTVar (domStream dom) z
 
-setOrbit :: (IsAttrs a) => St i d -> Integer -> EStream a -> IO ()
+setOrbit :: (Squishy Attrs a) => St i d -> Integer -> EStream a -> IO ()
 setOrbit st o es =
   case unEStream es of
     Left e -> putStrLn (displayException e)
-    Right s -> updateOrbits st (Map.insert o (fmap toAttrs s))
+    Right s -> updateOrbits st (Map.insert o (fmap squish s))
 
 clearOrbit :: St i d -> Integer -> IO ()
 clearOrbit st o = updateOrbits st (Map.delete o)

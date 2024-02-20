@@ -39,7 +39,7 @@ where
 
 import Data.Kind (Type)
 import Minipat.EStream (EStream)
-import Minipat.Live.Attrs (Attrs, IsAttrs (..))
+import Minipat.Live.Attrs (Attrs, Squishy (..))
 import Minipat.Live.Combinators
 import Minipat.Live.Core qualified as C
 import Minipat.Live.Params
@@ -91,7 +91,7 @@ setCycle = C.setCycle liveSt
 setTempo :: (LiveSt) => Rational -> IO ()
 setTempo = C.setTempo liveSt
 
-setOrbit :: (LiveSt) => Integer -> EStream Attrs -> IO ()
+setOrbit :: (LiveSt, Squishy Attrs a) => Integer -> EStream a -> IO ()
 setOrbit = C.setOrbit liveSt
 
 clearOrbit :: (LiveSt) => Integer -> IO ()
@@ -119,10 +119,10 @@ checkTasks = C.checkTasks liveSt
 peek :: (LiveSt, Pretty a) => EStream a -> IO ()
 peek = C.peek liveSt
 
-d :: (LiveSt, IsAttrs a) => Integer -> EStream a -> IO ()
-d i = setOrbit i . fmap toAttrs
+d :: (LiveSt, Squishy Attrs a) => Integer -> EStream a -> IO ()
+d = setOrbit
 
-d0, d1, d2, d3, d4, d5, d6, d7 :: (LiveSt, IsAttrs a) => EStream a -> IO ()
+d0, d1, d2, d3, d4, d5, d6, d7 :: (LiveSt, Squishy Attrs a) => EStream a -> IO ()
 d0 = d 0
 d1 = d 1
 d2 = d 2

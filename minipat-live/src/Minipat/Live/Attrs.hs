@@ -12,8 +12,8 @@ module Minipat.Live.Attrs
   , attrsDefault
   , attrsDelete
   , attrsToList
-  , IsAttrs (..)
-  , attrsMerge
+  , Squishy (..)
+  , squishMerge
   )
 where
 
@@ -102,17 +102,20 @@ attrsDelete k (Attrs m) = Attrs (Map.delete k m)
 attrsToList :: Attrs -> [(Text, Datum)]
 attrsToList = Map.toList . unAttrs
 
-class IsAttrs a where
-  toAttrs :: a -> Attrs
+class (Semigroup q) => Squishy q a where
+  squish :: a -> q
 
-instance IsAttrs Attrs where
-  toAttrs = id
+squishMerge :: (Squishy q a, Squishy q b) => a -> b -> q
+squishMerge a b = squish a <> squish b
 
-instance (IsDatum a) => IsAttrs (Attr a) where
-  toAttrs (Attr k v) = attrsSingleton k (toDatum v)
+instance (Semigroup q) => Squishy q q where
+  squish = id
 
-instance IsAttrs Note where
-  toAttrs (Note n) = attrsSingleton "note" (DatumInt32 (fromInteger n))
+instance (Monoid q, Squishy q a) => Squishy q (Maybe a) where
+  squish = maybe mempty squish
 
-attrsMerge :: (IsAttrs a, IsAttrs b) => a -> b -> Attrs
-attrsMerge a b = toAttrs a <> toAttrs b
+instance (IsDatum a) => Squishy Attrs (Attr a) where
+  squish (Attr k v) = attrsSingleton k (toDatum v)
+
+instance Squishy Attrs Note where
+  squish (Note n) = attrsSingleton "note" (DatumInt32 (fromInteger n))
