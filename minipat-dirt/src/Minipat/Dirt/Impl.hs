@@ -59,17 +59,17 @@ dirtInit _ rv (DirtEnv targetHp listenHp _) = do
     pure (OscConn targetAddr conn)
 
 dirtSend :: LogAction -> ((OscConn -> IO ()) -> IO ()) -> Timed Attrs -> IO ()
-dirtSend _ wd (Timed _ attrs) = do
-  let packet = playPacket attrs
-  wd $ \(OscConn targetAddr (Conn _ enc)) ->
-    runEncoder enc targetAddr packet
+dirtSend _ wd = sendPacket' wd . playPacket . timedVal
 
 dirtImpl :: Impl DirtEnv OscConn
 dirtImpl = Impl dirtInit dirtSend
 
-sendPacket :: DirtSt -> Packet -> IO ()
-sendPacket st packet = withData st $ \(OscConn targetAddr (Conn _ enc)) ->
+sendPacket' :: ((OscConn -> IO ()) -> IO ()) -> Packet -> IO ()
+sendPacket' wd packet = wd $ \(OscConn targetAddr (Conn _ enc)) ->
   runEncoder enc targetAddr packet
+
+sendPacket :: DirtSt -> Packet -> IO ()
+sendPacket = sendPacket' . withData
 
 withTimeout :: TimeDelta -> IO a -> IO (Either SomeException a)
 withTimeout td act = do
@@ -90,6 +90,7 @@ handshake st = bracket acq rel (const (pure ()))
   logger = stLogger st
   acq = do
     logInfo logger "Handshaking ..."
+    sendPacket st handshakePacket
     recvPacket st
   rel resp = do
     let ok = isRight resp

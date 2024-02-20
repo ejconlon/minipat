@@ -8,9 +8,9 @@
 
 import Minipat.Dirt.Boot
 
-putStrLn "==== Minipat ==============================================="
+putStrLn "==== minipat-dirt =========================================="
 putStrLn "Quit with Ctrl-d or `:quit`"
-putStrLn "Clear stream with `hush` or stop with `panic`"
+putStrLn "Clear orbits with `hush` or stop with `panic`"
 putStrLn "List available functions with `:browse Minipat.Dirt.Boot`"
 putStrLn "Show documentation with `:doc someFunctionName`"
 putStrLn "============================================================"
