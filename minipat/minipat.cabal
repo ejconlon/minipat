@@ -74,13 +74,13 @@ library
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints -fno-warn-unused-top-binds
   build-depends:
       base >=4.12 && <5
-    , bowtie ==0.3.*
+    , bowtie >=0.3.1 && <0.4
     , containers ==0.6.*
     , data-default ==0.7.*
     , heaps ==0.4.*
-    , looksee ==0.5.*
+    , looksee >=0.5.2 && <0.6
     , mtl ==2.3.*
-    , nanotime ==0.3.*
+    , nanotime >=0.3.2 && <0.4
     , nonempty-containers ==0.3.*
     , prettyprinter ==1.7.*
     , text ==2.0.*
@@ -127,15 +127,15 @@ test-suite minipat-test
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints -fno-warn-unused-top-binds -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.12 && <5
-    , bowtie ==0.3.*
+    , bowtie >=0.3.1 && <0.4
     , containers ==0.6.*
     , data-default ==0.7.*
     , daytripper ==0.3.*
     , heaps ==0.4.*
-    , looksee ==0.5.*
+    , looksee >=0.5.2 && <0.6
     , minipat
     , mtl ==2.3.*
-    , nanotime ==0.3.*
+    , nanotime >=0.3.2 && <0.4
     , nonempty-containers ==0.3.*
     , prettyprinter ==1.7.*
     , tasty ==1.4.*

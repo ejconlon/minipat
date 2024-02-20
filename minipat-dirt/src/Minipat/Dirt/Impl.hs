@@ -11,8 +11,6 @@ module Minipat.Dirt.Impl
   )
 where
 
-import Control.Concurrent (forkFinally)
-import Control.Concurrent.Async (async, cancel, waitCatch)
 import Control.Exception (SomeException, bracket, throwIO)
 import Dahdit.Midi.Osc (Datum (..), Msg (..), Packet (..))
 import Dahdit.Midi.OscAddr (RawAddrPat)
@@ -23,8 +21,8 @@ import Data.Sequence (Seq (..))
 import Minipat.Live.Attrs (Attrs, attrsToList)
 import Minipat.Live.Core (Env (..), Impl (..), St (..), setPlaying, withData)
 import Minipat.Live.Logger (LogAction, logError, logInfo)
-import Minipat.Live.Resources (RelVar, Timed (..), relVarAcquire)
-import Nanotime (TimeDelta, threadDelayDelta, timeDeltaFromFracSecs)
+import Minipat.Live.Resources (RelVar, Timed (..), relVarAcquire, withTimeout)
+import Nanotime (TimeDelta, timeDeltaFromFracSecs)
 import Network.Socket qualified as NS
 
 data DirtEnv = DirtEnv
@@ -70,12 +68,6 @@ sendPacket' wd packet = wd $ \(OscConn targetAddr (Conn _ enc)) ->
 
 sendPacket :: DirtSt -> Packet -> IO ()
 sendPacket = sendPacket' . withData
-
-withTimeout :: TimeDelta -> IO a -> IO (Either SomeException a)
-withTimeout td act = do
-  thread <- async act
-  _ <- forkFinally (threadDelayDelta td) (const (cancel thread))
-  waitCatch thread
 
 recvPacket :: DirtSt -> IO (Either SomeException Packet)
 recvPacket st = withData st $ \(OscConn _ (Conn dec _)) ->

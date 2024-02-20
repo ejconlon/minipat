@@ -31,8 +31,9 @@ module Minipat.Live.Core
   , panic
   , checkTasks
   , peek
-  , Record
   , stepRecord
+  , mergeRecord
+  , simpleRecord
   )
 where
 
@@ -46,6 +47,7 @@ import Control.Monad (unless, void, when)
 import Dahdit.Midi.Osc (Datum (..))
 import Data.Acquire (Acquire)
 import Data.Foldable (foldl', for_)
+import Data.IORef (modifyIORef', newIORef, readIORef)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Ratio ((%))
@@ -54,7 +56,7 @@ import Data.Sequence qualified as Seq
 import Data.Text (Text)
 import Data.Text qualified as T
 import Minipat.EStream (EStream (..))
-import Minipat.Live.Attrs (Attrs, attrsDefault)
+import Minipat.Live.Attrs (Attrs, IsAttrs (..), attrsDefault)
 import Minipat.Live.Logger (LogAction, logDebug, logError, logInfo, logWarn, nullLogger)
 import Minipat.Live.Osc (PlayEnv (..), PlayErr, convertTape)
 import Minipat.Live.Resources (RelVar, Timed (..), acquireAwait, acquireLoop, relVarAcquire, relVarDispose, relVarUse)
@@ -62,7 +64,7 @@ import Minipat.Print (prettyPrint, prettyPrintAll, prettyShow, prettyShowAll)
 import Minipat.Stream (Stream, streamRun, tapeToList)
 import Minipat.Time (Arc (..), Cycle (..), CycleTime (..), bpmToCps, cpsToBpm)
 import Nanotime
-  ( PosixTime (..)
+  ( PosixTime
   , TimeDelta
   , addTime
   , timeDeltaFromFracSecs
@@ -83,7 +85,7 @@ defaultCommonEnv =
   CommonEnv
     { ceDebug = False
     , ceCps = 1 % 2 -- 120 bpm, 4 bpc
-    , ceGpc = 8 -- Number of gens per cycle
+    , ceGpc = 1 -- Number of gens per cycle
     }
 
 data Env i = Env
@@ -298,11 +300,11 @@ updateOrbits st f = atomically $ do
   let z = foldl' (\x (o, y) -> x <> fmap (addOrbit o) y) mempty (Map.toList m')
   writeTVar (domStream dom) z
 
-setOrbit :: St i d -> Integer -> EStream Attrs -> IO ()
+setOrbit :: (IsAttrs a) => St i d -> Integer -> EStream a -> IO ()
 setOrbit st o es =
   case unEStream es of
     Left e -> putStrLn (displayException e)
-    Right s -> updateOrbits st (Map.insert o s)
+    Right s -> updateOrbits st (Map.insert o (fmap toAttrs s))
 
 clearOrbit :: St i d -> Integer -> IO ()
 clearOrbit st o = updateOrbits st (Map.delete o)
@@ -338,42 +340,66 @@ peek st es =
 
 -- * Recording
 
-newtype Record = Record {unRecord :: TVar (Seq (Timed Attrs))}
-
-recordImpl :: Impl () Record
-recordImpl =
+nullImpl :: Impl () ()
+nullImpl =
   Impl
-    { implInit = \_ _ _ -> fmap Record (newTVarIO Empty)
-    , implSend = \_ wd ta -> wd (\(Record r) -> atomically (modifyTVar' r (:|> ta)))
+    { implInit = \_ _ _ -> pure ()
+    , implSend = \_ _ _ -> pure ()
     }
 
-flushRecord :: St () Record -> IO (Seq (Timed Attrs))
-flushRecord = flip withData (\(Record r) -> atomically (swapTVar r Empty))
-
 stepRecord
-  :: (CycleTime -> PosixTime -> St () Record -> IO ())
-  -> (CycleTime -> PosixTime -> Seq (Timed Attrs) -> IO ())
-  -> CommonEnv
+  :: CommonEnv
   -> Cycle
   -> Cycle
   -> PosixTime
+  -> (CycleTime -> PosixTime -> St () () -> IO ())
+  -> (CycleTime -> PosixTime -> Seq (Timed Attrs) -> IO ())
   -> IO PosixTime
-stepRecord onEnter onLeave ce start end now0 = go
+stepRecord ce start end now0 onEnter onLeave = go
  where
   go = do
     let env = Env ce ()
-    st <- initSyncSt nullLogger recordImpl env
+    st <- initSyncSt nullLogger nullImpl env
     setCycle st (unCycle start)
-    loop (fromInteger (unCycle end)) st (fromInteger (unCycle start)) now0
-  loop cycEnd st !cycNow !realNow =
+    setPlaying st True
+    loop (fromInteger (unCycle end)) st now0
+  flush = fmap Seq.fromList . atomically . flushTQueue . domEvents . stDom
+  loop cycEnd st !realNow = do
+    cycNow <- getCycleTime st
     if cycNow >= cycEnd
       then pure realNow
       else do
         onEnter cycNow realNow st
-        (cycNext, realNext) <- stepGenSt st realNow
-        events <- flushRecord st
+        (_, realNext) <- stepGenSt st realNow
+        events <- flush st
         onLeave cycNow realNow events
-        loop cycEnd st cycNext realNext
+        loop cycEnd st realNext
+
+mergeRecord
+  :: CommonEnv
+  -> Cycle
+  -> Cycle
+  -> PosixTime
+  -> (St () () -> IO ())
+  -> IO (Seq (Timed Attrs), PosixTime)
+mergeRecord ce start end now0 onInit = do
+  let cycStart = fromInteger (unCycle start)
+  r <- newIORef Empty
+  realEnd <-
+    stepRecord
+      ce
+      start
+      end
+      now0
+      (\cyc _ -> when (cyc == cycStart) . onInit)
+      (\_ _ tas -> modifyIORef' r (<> tas))
+  tas <- readIORef r
+  pure (tas, realEnd)
+
+simpleRecord
+  :: (St () () -> IO ())
+  -> IO (Seq (Timed Attrs))
+simpleRecord = fmap fst . mergeRecord defaultCommonEnv 0 1 0
 
 -- Helpers
 

@@ -72,12 +72,12 @@ library
       async ==2.2.*
     , base >=4.12 && <5
     , containers ==0.6.*
-    , dahdit-midi ==0.5.*
+    , dahdit-midi >=0.5.5 && <0.6
     , little-logger ==1.0.*
-    , looksee ==0.5.*
+    , looksee >=0.5.2 && <0.6
     , minipat ==0.1.*
     , mtl ==2.3.*
-    , nanotime ==0.3.*
+    , nanotime >=0.3.2 && <0.4
     , prettyprinter ==1.7.*
     , resourcet ==1.3.*
     , stm ==2.5.*
@@ -126,13 +126,13 @@ test-suite minipat-live-test
       async ==2.2.*
     , base >=4.12 && <5
     , containers ==0.6.*
-    , dahdit-midi ==0.5.*
+    , dahdit-midi >=0.5.5 && <0.6
     , little-logger ==1.0.*
-    , looksee ==0.5.*
+    , looksee >=0.5.2 && <0.6
     , minipat ==0.1.*
     , minipat-live
     , mtl ==2.3.*
-    , nanotime ==0.3.*
+    , nanotime >=0.3.2 && <0.4
     , prettyprinter ==1.7.*
     , resourcet ==1.3.*
     , stm ==2.5.*

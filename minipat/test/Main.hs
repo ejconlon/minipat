@@ -819,7 +819,7 @@ main = do
   hSetBuffering stdout LineBuffering
   daytripperMain $
     testGroup
-      "Minipat"
+      "minipat"
       [ testParseCases
       , testPatNormCases
       , testPatInterpCases

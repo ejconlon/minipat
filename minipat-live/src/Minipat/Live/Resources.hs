@@ -9,14 +9,16 @@ module Minipat.Live.Resources
   , acquireLoop
   , Timed (..)
   , acquireAwait
+  , withTimeout
   )
 where
 
-import Control.Concurrent.Async (Async, async, cancel)
+import Control.Concurrent (forkFinally)
+import Control.Concurrent.Async (Async, async, cancel, waitCatch)
 import Control.Concurrent.STM (atomically, retry)
 import Control.Concurrent.STM.TQueue (TQueue, peekTQueue, readTQueue, tryPeekTQueue)
 import Control.Concurrent.STM.TVar (TVar, readTVar, readTVarIO)
-import Control.Exception (Exception, bracket, mask, onException, throwIO)
+import Control.Exception (Exception, SomeException, bracket, mask, onException, throwIO)
 import Control.Monad (unless)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Resource (InternalState, closeInternalState, createInternalState)
@@ -113,3 +115,9 @@ acquireAwait runVar queue act =
         maybe (pure ()) act mtimed
         act'
   in  acquireAsync act'
+
+withTimeout :: TimeDelta -> IO a -> IO (Either SomeException a)
+withTimeout td act = do
+  thread <- async act
+  _ <- forkFinally (threadDelayDelta td) (const (cancel thread))
+  waitCatch thread
