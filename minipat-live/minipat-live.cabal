@@ -30,8 +30,8 @@ library
       Minipat.Live.Core
       Minipat.Live.Logger
       Minipat.Live.Notes
-      Minipat.Live.Osc
       Minipat.Live.Params
+      Minipat.Live.Play
       Minipat.Live.Resources
   other-modules:
       Paths_minipat_live

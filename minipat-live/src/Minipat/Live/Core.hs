@@ -58,7 +58,7 @@ import Data.Text qualified as T
 import Minipat.EStream (EStream (..))
 import Minipat.Live.Attrs (Attrs, Squishy (..), attrsDefault)
 import Minipat.Live.Logger (LogAction, logDebug, logError, logInfo, logWarn, nullLogger)
-import Minipat.Live.Osc (PlayEnv (..), PlayErr, convertTape)
+import Minipat.Live.Play (PlayEnv (..), PlayErr, playTape)
 import Minipat.Live.Resources (RelVar, Timed (..), acquireAwait, acquireLoop, relVarAcquire, relVarDispose, relVarUse)
 import Minipat.Print (prettyPrint, prettyPrintAll, prettyShow, prettyShowAll)
 import Minipat.Stream (Stream, streamRun, tapeToList)
@@ -465,7 +465,7 @@ genEventsSTM dom now = do
   let tape = streamRun stream arc
       origin = addTime now ahead
       penv = PlayEnv origin start cps
-      mpevs = convertTape penv tape
+      mpevs = playTape penv tape
   pure (penv, mpevs)
 
 doGen :: LogAction -> Domain -> PosixTime -> IO ()

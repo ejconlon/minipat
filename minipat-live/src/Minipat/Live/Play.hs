@@ -1,10 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Minipat.Live.Osc
+module Minipat.Live.Play
   ( PlayErr (..)
   , PlayEnv (..)
-  , convertEvent
-  , convertTape
+  , playEvent
+  , playTape
   )
 where
 
@@ -92,8 +92,8 @@ timeDeltaToMicros td =
   let (_, ns) = timeDeltaToNanos td
   in  fromIntegral ns / 1000
 
-convertEvent :: (Squishy Attrs a) => PlayEnv -> Ev a -> M (Maybe (Timed Attrs))
-convertEvent (PlayEnv startTime startCyc cps) (Ev sp dat) =
+playEvent :: (Squishy Attrs a) => PlayEnv -> Ev a -> M (Maybe (Timed Attrs))
+playEvent (PlayEnv startTime startCyc cps) (Ev sp dat) =
   case spanCycle sp of
     Nothing ->
       -- Only emit start events
@@ -115,5 +115,5 @@ traverseMaybe f = go Empty
     Empty -> pure acc
     a :<| as' -> f a >>= maybe (go acc as') (\b -> go (acc :|> b) as')
 
-convertTape :: (Squishy Attrs a) => PlayEnv -> Tape a -> M (Seq (Timed Attrs))
-convertTape penv = traverseMaybe (convertEvent penv) . Seq.fromList . tapeToList
+playTape :: (Squishy Attrs a) => PlayEnv -> Tape a -> M (Seq (Timed Attrs))
+playTape penv = traverseMaybe (playEvent penv) . Seq.fromList . tapeToList
