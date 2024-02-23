@@ -108,10 +108,10 @@ class (Semigroup q) => Squishy q a where
 squishMerge :: (Squishy q a, Squishy q b) => a -> b -> q
 squishMerge a b = squish a <> squish b
 
-instance (Semigroup q) => Squishy q q where
+instance {-# OVERLAPPABLE #-} (Semigroup q) => Squishy q q where
   squish = id
 
-instance (Monoid q, Squishy q a) => Squishy q (Maybe a) where
+instance {-# INCOHERENT #-} (Monoid q, Squishy q a) => Squishy q (Maybe a) where
   squish = maybe mempty squish
 
 instance (IsDatum a) => Squishy Attrs (Attr a) where

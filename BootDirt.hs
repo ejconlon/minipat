@@ -17,7 +17,7 @@ putStrLn "============================================================"
 
 dirtSt <- initialize
 
-instance LiveSt where { type LiveEnv = DirtEnv; type LiveData = DirtData; liveSt = dirtSt }
+instance LiveSt where { type LiveBackend = DirtBackend; liveSt = dirtSt }
 
 handshake
 

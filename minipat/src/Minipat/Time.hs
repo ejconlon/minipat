@@ -2,42 +2,53 @@
 
 -- | Time is a cube with four corners
 module Minipat.Time
-  ( CycleTime (..)
+  ( midpoint
+  , Measurable (..)
+  , CycleTime (..)
   , CycleDelta (..)
-  , Cycle (..)
-  , cycTimeFloor
-  , cycTimeCeil
-  , cycTimeMid
   , Arc (..)
+  , CycleArc
+  , PosixArc
+  , arcMidpoint
   , arcWiden
   , arcRelevant
   , arcUnion
   , arcIntersect
-  , arcMid
-  , arcTimeMapMono
+  , arcLength
   , MergeStrat (..)
   , arcMerge
   , Span (..)
+  , CycleSpan
+  , PosixSpan
   , spanCover
   , spanSplit
-  , spanCycle
-  , spanDelta
-  , spanTimeMapMono
-  , spanWholeMapMono
+  , spanActiveStart
+  , spanWholeLength
+  , spanMapWhole
   , spanIsStart
   , bpmToCps
   , cpsToBpm
   , deltaToCycle
   , cycleToDelta
-  , relDelta
+  , relativeDelta
   )
 where
 
 import Data.Maybe (fromMaybe)
 import Minipat.Print (prettyRat, prettyTup)
-import Nanotime (TimeDelta, timeDeltaFromFracSecs, timeDeltaToFracSecs)
+import Nanotime (PosixTime, TimeDelta, diffTime, timeDeltaFromFracSecs, timeDeltaToFracSecs)
 import Prettyprinter (Pretty (..))
 import Prettyprinter qualified as P
+
+midpoint :: (Fractional a) => a -> a -> a
+midpoint s e = s + (e - s) / 2
+
+class Measurable b a | a -> b where
+  -- | `measure start end` is `end - start`
+  measure :: a -> a -> b
+
+instance Measurable TimeDelta PosixTime where
+  measure s e = diffTime e s
 
 newtype CycleTime = CycleTime {unCycleTime :: Rational}
   deriving stock (Show)
@@ -53,46 +64,36 @@ newtype CycleDelta = CycleDelta {unCycleDelta :: Rational}
 instance Pretty CycleDelta where
   pretty = prettyRat . unCycleDelta
 
-newtype Cycle = Cycle {unCycle :: Integer}
-  deriving stock (Show)
-  deriving newtype (Eq, Ord, Num, Pretty)
+instance Measurable CycleDelta CycleTime where
+  measure s e = CycleDelta (unCycleTime e - unCycleTime s)
 
-cycTimeFloor :: CycleTime -> Cycle
-cycTimeFloor = Cycle . floor . unCycleTime
+data Arc a = Arc {arcStart :: !a, arcEnd :: !a}
+  deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
 
-cycTimeCeil :: CycleTime -> Cycle
-cycTimeCeil = (+ 1) . cycTimeFloor
+type CycleArc = Arc CycleTime
 
-cycTimeMid :: CycleTime -> CycleTime -> CycleTime
-cycTimeMid s e = s + (e - s) / 2
+type PosixArc = Arc PosixTime
 
-data Arc = Arc {arcStart :: !CycleTime, arcEnd :: !CycleTime}
-  deriving stock (Eq, Ord, Show)
-
-instance Pretty Arc where
+instance (Pretty a) => Pretty (Arc a) where
   pretty (Arc s e) = prettyTup s e
 
-arcWiden :: Arc -> Arc
-arcWiden (Arc s e) = Arc (fromInteger (floor (unCycleTime s))) (fromInteger (floor (unCycleTime e) + 1))
+arcWiden :: (RealFrac a) => Arc a -> Arc a
+arcWiden (Arc s e) = Arc (fromInteger (floor s)) (fromInteger (floor e) + 1)
 
-arcRelevant :: Arc -> Arc -> Bool
+arcRelevant :: (Ord a) => Arc a -> Arc a -> Bool
 arcRelevant (Arc s1 e1) (Arc s2 e2) = s2 < e1 && (e2 > s1 || (s2 == s1 && e2 == s1))
 
-arcUnion :: Arc -> Arc -> Arc
+arcUnion :: (Ord a) => Arc a -> Arc a -> Arc a
 arcUnion (Arc s1 e1) (Arc s2 e2) = Arc (min s1 s2) (max e1 e2)
 
-arcIntersect :: Arc -> Arc -> Arc
+arcIntersect :: (Ord a) => Arc a -> Arc a -> Arc a
 arcIntersect (Arc s1 e1) (Arc s2 e2) =
   let s3 = max s1 s2
       e3 = min e1 e2
   in  Arc s3 (max s3 e3)
 
-arcMid :: Arc -> CycleTime
-arcMid (Arc s e) = cycTimeMid s e
-
--- | Map a monotonic function over cycle times
-arcTimeMapMono :: (CycleTime -> CycleTime) -> Arc -> Arc
-arcTimeMapMono f (Arc s e) = Arc (f s) (f e)
+arcMidpoint :: (Fractional a) => Arc a -> a
+arcMidpoint (Arc s e) = midpoint s e
 
 -- | Strategy for merging arcs
 data MergeStrat
@@ -102,42 +103,45 @@ data MergeStrat
   deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 -- | Merges arcs according to the given strategy
-arcMerge :: MergeStrat -> Maybe Arc -> Maybe Arc -> Maybe Arc
+arcMerge :: (Ord a) => MergeStrat -> Maybe (Arc a) -> Maybe (Arc a) -> Maybe (Arc a)
 arcMerge = \case
   MergeStratInner -> (\_ x -> x)
   MergeStratOuter -> const
   MergeStratMixed -> liftA2 arcIntersect
 
-data Span = Span
-  { spanActive :: !Arc
-  , spanWhole :: !(Maybe Arc)
-  }
-  deriving stock (Eq, Ord, Show)
+arcLength :: (Measurable b a) => Arc a -> b
+arcLength (Arc s e) = measure s e
 
-instance Pretty Span where
+data Span a = Span
+  { spanActive :: !(Arc a)
+  , spanWhole :: !(Maybe (Arc a))
+  }
+  deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
+
+type CycleSpan = Span CycleTime
+
+type PosixSpan = Span PosixTime
+
+instance (Pretty a) => Pretty (Span a) where
   pretty (Span ac wh) = P.hsep (pretty ac : maybe [] (pure . pretty) wh)
 
--- | Map a monotonic function over all cycle times
-spanTimeMapMono :: (CycleTime -> CycleTime) -> Span -> Span
-spanTimeMapMono f (Span ac wh) = Span (arcTimeMapMono f ac) (fmap (arcTimeMapMono f) wh)
-
 -- | Map a monotonic function over whole cycle times
-spanWholeMapMono :: (Maybe Arc -> Maybe Arc) -> Span -> Span
-spanWholeMapMono f (Span ac wh) = Span ac (f wh)
+spanMapWhole :: (Maybe (Arc a) -> Maybe (Arc a)) -> Span a -> Span a
+spanMapWhole f (Span ac wh) = Span ac (f wh)
 
 -- | Returns the 'Arc' covering the whole event
 -- (or just the active arc if non-discrete)
-spanCover :: Span -> Arc
+spanCover :: Span a -> Arc a
 spanCover (Span ac wh) = fromMaybe ac wh
 
 -- | Splits an 'Arc' into single-cycle spans
-spanSplit :: Arc -> [(Cycle, Span)]
+spanSplit :: (RealFrac a) => Arc a -> [(Integer, Span a)]
 spanSplit (Arc s0 e) =
-  let ef = cycTimeFloor e
+  let ef = floor e
       go s =
-        let sf = cycTimeFloor s
-            si = fromInteger (unCycle sf)
-            sc = fromInteger (unCycle (cycTimeCeil s))
+        let sf = floor s
+            si = fromInteger sf
+            sc = fromInteger (floor s + 1)
             wh = Just (Arc si sc)
         in  if sf == ef || sc == e
               then [(sf, Span (Arc s e) wh)]
@@ -145,19 +149,19 @@ spanSplit (Arc s0 e) =
   in  go s0
 
 -- | The start of the 'Span' in cycle time, if active
-spanCycle :: Span -> Maybe CycleTime
-spanCycle = \case
+spanActiveStart :: (Eq a) => Span a -> Maybe a
+spanActiveStart = \case
   sp@(Span _ (Just (Arc sw _))) | spanIsStart sp -> Just sw
   _ -> Nothing
 
 -- | The length of the whole event in cycle time, if discrete
-spanDelta :: Span -> Maybe CycleDelta
-spanDelta = \case
-  Span _ (Just (Arc sw ew)) -> Just (CycleDelta (unCycleTime (ew - sw)))
+spanWholeLength :: (Measurable b a) => Span a -> Maybe b
+spanWholeLength = \case
+  Span _ (Just arc) -> Just (arcLength arc)
   _ -> Nothing
 
 -- | True if active start aligns with whole start
-spanIsStart :: Span -> Bool
+spanIsStart :: (Eq a) => Span a -> Bool
 spanIsStart (Span (Arc sa _) mwh) =
   case mwh of
     Nothing -> True
@@ -181,5 +185,5 @@ cycleToDelta :: Rational -> CycleTime -> TimeDelta
 cycleToDelta cps = timeDeltaFromFracSecs . (/ cps) . unCycleTime
 
 -- | Given CPS return relative time from origin to target
-relDelta :: Rational -> CycleTime -> CycleTime -> TimeDelta
-relDelta cps origin target = timeDeltaFromFracSecs (unCycleTime (target - origin) / cps)
+relativeDelta :: Rational -> CycleTime -> CycleTime -> TimeDelta
+relativeDelta cps start end = timeDeltaFromFracSecs (unCycleTime (end - start) / cps)

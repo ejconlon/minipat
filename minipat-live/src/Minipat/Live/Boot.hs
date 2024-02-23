@@ -2,14 +2,12 @@
 module Minipat.Live.Boot
   ( LiveSt (..)
   , dispose
-  , getDebug
   , getCps
   , getAhead
   , getPlaying
   , getStream
   , getCycle
   , getTempo
-  , setDebug
   , setCps
   , setPlaying
   , setCycle
@@ -39,24 +37,23 @@ where
 
 import Data.Kind (Type)
 import Minipat.EStream (EStream)
-import Minipat.Live.Attrs (Attrs, Squishy (..))
+import Minipat.Live.Attrs (Squishy (..))
 import Minipat.Live.Combinators
 import Minipat.Live.Core qualified as C
 import Minipat.Live.Params
+import Minipat.Live.Play (WithOrbit)
 import Minipat.Stream (Stream)
 import Nanotime (TimeDelta)
 import Prettyprinter (Pretty)
 
-class LiveSt where
-  type LiveEnv :: Type
-  type LiveData :: Type
-  liveSt :: C.St LiveEnv LiveData
+class (C.Backend LiveBackend) => LiveSt where
+  type LiveBackend :: Type
+  liveSt :: C.St LiveBackend
+
+type LiveAttrs = C.BackendAttrs LiveBackend
 
 dispose :: (LiveSt) => IO ()
 dispose = C.disposeSt liveSt
-
-getDebug :: (LiveSt) => IO Bool
-getDebug = C.getDebug liveSt
 
 getCps :: (LiveSt) => IO Rational
 getCps = C.getCps liveSt
@@ -67,7 +64,7 @@ getAhead = C.getAhead liveSt
 getPlaying :: (LiveSt) => IO Bool
 getPlaying = C.getPlaying liveSt
 
-getStream :: (LiveSt) => IO (Stream Attrs)
+getStream :: (LiveSt) => IO (Stream (WithOrbit LiveAttrs))
 getStream = C.getStream liveSt
 
 getCycle :: (LiveSt) => IO Integer
@@ -75,9 +72,6 @@ getCycle = C.getCycle liveSt
 
 getTempo :: (LiveSt) => IO Rational
 getTempo = C.getTempo liveSt
-
-setDebug :: (LiveSt) => Bool -> IO ()
-setDebug = C.setDebug liveSt
 
 setCps :: (LiveSt) => Rational -> IO ()
 setCps = C.setCps liveSt
@@ -91,7 +85,7 @@ setCycle = C.setCycle liveSt
 setTempo :: (LiveSt) => Rational -> IO ()
 setTempo = C.setTempo liveSt
 
-setOrbit :: (LiveSt, Squishy Attrs a) => Integer -> EStream a -> IO ()
+setOrbit :: (LiveSt, Squishy LiveAttrs a) => Integer -> EStream a -> IO ()
 setOrbit = C.setOrbit liveSt
 
 clearOrbit :: (LiveSt) => Integer -> IO ()
@@ -119,10 +113,10 @@ checkTasks = C.checkTasks liveSt
 peek :: (LiveSt, Pretty a) => EStream a -> IO ()
 peek = C.peek liveSt
 
-d :: (LiveSt, Squishy Attrs a) => Integer -> EStream a -> IO ()
+d :: (LiveSt, Squishy LiveAttrs a) => Integer -> EStream a -> IO ()
 d = setOrbit
 
-d0, d1, d2, d3, d4, d5, d6, d7 :: (LiveSt, Squishy Attrs a) => EStream a -> IO ()
+d0, d1, d2, d3, d4, d5, d6, d7 :: (LiveSt, Squishy LiveAttrs a) => EStream a -> IO ()
 d0 = d 0
 d1 = d 1
 d2 = d 2

@@ -60,25 +60,24 @@ import Minipat.Classes (Flow (..), Pattern (..), PatternUnwrap (..))
 import Minipat.Rand (arcSeed, randFrac, randInt, spanSeed)
 import Minipat.Time
   ( Arc (..)
-  , Cycle (..)
+  , CycleArc
   , CycleDelta (..)
+  , CycleSpan
   , CycleTime (..)
   , MergeStrat (..)
   , Span (..)
   , arcIntersect
   , arcMerge
   , arcRelevant
-  , arcTimeMapMono
   , arcWiden
+  , spanMapWhole
   , spanSplit
-  , spanTimeMapMono
-  , spanWholeMapMono
   )
 import Prettyprinter (Pretty (..))
 import Prettyprinter qualified as P
 
 data Ev a = Ev
-  { evSpan :: !Span
+  { evSpan :: !CycleSpan
   , evValue :: !a
   }
   deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
@@ -86,10 +85,10 @@ data Ev a = Ev
 instance (Pretty a) => Pretty (Ev a) where
   pretty (Ev sp v) = P.hsep [pretty sp, pretty v]
 
-evCont :: (CycleTime -> a) -> Arc -> Ev a
+evCont :: (CycleTime -> a) -> CycleArc -> Ev a
 evCont f arc = Ev (Span arc Nothing) (f (arcStart arc))
 
-newtype Tape a = Tape {unTape :: Heap (Entry Span a)}
+newtype Tape a = Tape {unTape :: Heap (Entry CycleSpan a)}
   deriving stock (Show)
   deriving newtype (Eq, Ord, Semigroup, Monoid)
 
@@ -100,20 +99,20 @@ tapeNull :: Tape a -> Bool
 tapeNull = H.null . unTape
 
 -- TODO Actually sample at the given rate
-tapeCont :: Integer -> (CycleTime -> a) -> Arc -> Tape a
+tapeCont :: Integer -> (CycleTime -> a) -> CycleArc -> Tape a
 tapeCont _ f arc = tapeSingleton (evCont f arc)
 
 tapeFilter :: (a -> Bool) -> Tape a -> Tape a
 tapeFilter f = Tape . H.filter (\(Entry _ a) -> f a) . unTape
 
-tapeFastBy :: Cycle -> Rational -> Tape a -> Tape a
+tapeFastBy :: Integer -> Rational -> Tape a -> Tape a
 tapeFastBy o r =
-  let o' = fromInteger (unCycle o)
+  let o' = fromInteger o
   in  tapeTimeMapMono (\(CycleTime t) -> CycleTime ((t - o') / r + o'))
 
-tapeSlowBy :: Cycle -> Rational -> Tape a -> Tape a
+tapeSlowBy :: Integer -> Rational -> Tape a -> Tape a
 tapeSlowBy o r =
-  let o' = fromInteger (unCycle o)
+  let o' = fromInteger o
   in  tapeTimeMapMono (\(CycleTime t) -> CycleTime ((t - o') * r + o'))
 
 tapeLateBy :: CycleDelta -> Tape a -> Tape a
@@ -128,10 +127,10 @@ tapeDegradeBy r = Tape . H.filter f . unTape
   f (Entry sp _) = randFrac (spanSeed sp) < r
 
 tapeTimeMapMono :: (CycleTime -> CycleTime) -> Tape a -> Tape a
-tapeTimeMapMono f = Tape . H.mapMonotonic (\(Entry s a) -> Entry (spanTimeMapMono f s) a) . unTape
+tapeTimeMapMono f = Tape . H.mapMonotonic (\(Entry s a) -> Entry (fmap f s) a) . unTape
 
-tapeWholeMapMono :: (Maybe Arc -> Maybe Arc) -> Tape a -> Tape a
-tapeWholeMapMono f = Tape . H.mapMonotonic (\(Entry s a) -> Entry (spanWholeMapMono f s) a) . unTape
+tapeWholeMapMono :: (Maybe CycleArc -> Maybe CycleArc) -> Tape a -> Tape a
+tapeWholeMapMono f = Tape . H.mapMonotonic (\(Entry s a) -> Entry (spanMapWhole f s) a) . unTape
 
 tapeSingleton :: Ev a -> Tape a
 tapeSingleton (Ev s a) = Tape (H.singleton (Entry s a))
@@ -149,7 +148,7 @@ tapeFromList :: [Ev a] -> Tape a
 tapeFromList = Tape . H.fromList . fmap (\(Ev s a) -> Entry s a)
 
 -- Keep only relevant events (narrowing active arcs)
-tapeRelevant :: Arc -> Tape a -> Tape a
+tapeRelevant :: CycleArc -> Tape a -> Tape a
 tapeRelevant ref = Tape . H.fromList . mapMaybe go . toList . unTape
  where
   go (Entry s a) =
@@ -157,7 +156,7 @@ tapeRelevant ref = Tape . H.fromList . mapMaybe go . toList . unTape
       then Just (Entry (s {spanActive = arcIntersect ref (spanActive s)}) a)
       else Nothing
 
-newtype Stream a = Stream {unStream :: Arc -> Tape a}
+newtype Stream a = Stream {unStream :: CycleArc -> Tape a}
 
 instance Functor Stream where
   fmap f (Stream k) = Stream (fmap f . k)
@@ -186,7 +185,7 @@ instance Alternative Stream where
 streamFilter :: (a -> Bool) -> Stream a -> Stream a
 streamFilter f (Stream k) = Stream (tapeFilter f . k)
 
-streamBindWith :: (Maybe Arc -> Maybe Arc -> Maybe Arc) -> Stream a -> (a -> Stream b) -> Stream b
+streamBindWith :: (Maybe CycleArc -> Maybe CycleArc -> Maybe CycleArc) -> Stream a -> (a -> Stream b) -> Stream b
 streamBindWith g pa f = Stream $ \arc ->
   let ta = streamRun pa arc
   in  flip tapeConcatMap ta $ \(Ev (Span ac wh) a) ->
@@ -196,13 +195,14 @@ streamBindWith g pa f = Stream $ \arc ->
 streamBind :: MergeStrat -> Stream a -> (a -> Stream b) -> Stream b
 streamBind = streamBindWith . arcMerge
 
-streamApplyWith :: (Maybe Arc -> Maybe Arc -> Maybe Arc) -> (a -> b -> c) -> Stream a -> Stream b -> Stream c
+streamApplyWith
+  :: (Maybe CycleArc -> Maybe CycleArc -> Maybe CycleArc) -> (a -> b -> c) -> Stream a -> Stream b -> Stream c
 streamApplyWith g f pa = streamBindWith g (fmap f pa) . flip fmap
 
 streamApply :: MergeStrat -> (a -> b -> c) -> Stream a -> Stream b -> Stream c
 streamApply = streamApplyWith . arcMerge
 
-streamRun :: Stream a -> Arc -> Tape a
+streamRun :: Stream a -> CycleArc -> Tape a
 streamRun pa arc =
   let arc' = arcWiden arc
   in  if arc' == arc
@@ -210,7 +210,7 @@ streamRun pa arc =
         else tapeRelevant arc (unStream pa arc')
 
 streamTimeMapInv :: (CycleTime -> CycleTime) -> (CycleTime -> CycleTime) -> Stream a -> Stream a
-streamTimeMapInv onTape onArc (Stream k) = Stream (tapeTimeMapMono onTape . k . arcTimeMapMono onArc)
+streamTimeMapInv onTape onArc (Stream k) = Stream (tapeTimeMapMono onTape . k . fmap onArc)
 
 streamAdjust :: (a -> Stream b -> Stream c) -> Stream a -> Stream b -> Stream c
 streamAdjust f pa pb = streamBind MergeStratInner pa (`f` pb)
@@ -289,7 +289,7 @@ streamAlt :: Seq (Stream a) -> Stream a
 streamAlt ss =
   let l = Seq.length ss
       f z arc =
-        let i = mod (fromInteger (unCycle z)) l
+        let i = mod (fromInteger z) l
             t = Seq.index ss i
         in  streamRun t arc
   in  Stream (foldMap' (\(z, sp) -> f z (spanActive sp)) . spanSplit)

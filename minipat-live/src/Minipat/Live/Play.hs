@@ -2,6 +2,12 @@
 
 module Minipat.Live.Play
   ( PlayErr (..)
+  , PlayMeta (..)
+  , pmCycleLength
+  , pmRealLength
+  , WithOrbit (..)
+  , WithPlayMeta (..)
+  , attrsConvert
   , PlayEnv (..)
   , playEvent
   , playTape
@@ -12,77 +18,93 @@ import Control.Exception (Exception)
 import Control.Monad (foldM)
 import Control.Monad.Except (throwError)
 import Dahdit.Midi.Osc (Datum (..))
+import Data.Functor ((<&>))
 import Data.Sequence (Seq (..))
 import Data.Sequence qualified as Seq
 import Data.Text (Text)
-import Minipat.Live.Attrs (Attrs, Squishy (..), attrsDelete, attrsInsert, attrsLookup)
-import Minipat.Live.Resources (Timed (..))
+import Minipat.Live.Attrs (Attrs, attrsDefault, attrsDelete, attrsInsert, attrsLookup)
 import Minipat.Stream (Ev (..), Tape, tapeToList)
-import Minipat.Time (CycleDelta (..), CycleTime (..), Span, spanCycle, spanDelta)
-import Nanotime (PosixTime (..), TimeDelta (..), addTime, timeDeltaFromFracSecs, timeDeltaToNanos)
+import Minipat.Time
+  ( Arc (..)
+  , CycleArc
+  , CycleDelta (..)
+  , CycleSpan
+  , CycleTime (..)
+  , PosixArc
+  , arcLength
+  , spanActiveStart
+  , spanWholeLength
+  )
+import Nanotime (PosixTime, TimeDelta (..), addTime, timeDeltaFromFracSecs, timeDeltaToNanos)
+import Prettyprinter (Pretty (..))
+import Prettyprinter qualified as P
 
 data PlayErr
-  = PlayErrDupe !Text
-  | PlayErrCont
+  = -- | Error when playing continuous signals
+    PlayErrCont
   deriving stock (Eq, Ord, Show)
 
 instance Exception PlayErr
 
-type M = Either PlayErr
+data PlayMeta = PlayMeta
+  { pmOrbit :: !Integer
+  , pmRealArc :: !PosixArc
+  , pmCycleArc :: !CycleArc
+  , pmCps :: !Rational
+  }
+  deriving stock (Eq, Ord, Show)
 
-insertSafe :: Text -> Datum -> Attrs -> M Attrs
-insertSafe k v m =
+instance Pretty PlayMeta where
+  pretty pm = P.hcat [pretty (pmCycleArc pm), " d", pretty (pmOrbit pm)]
+
+pmCycleLength :: PlayMeta -> CycleDelta
+pmCycleLength = arcLength . pmCycleArc
+
+pmRealLength :: PlayMeta -> TimeDelta
+pmRealLength = arcLength . pmRealArc
+
+data WithOrbit a = WithOrbit !Integer !a
+  deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
+
+instance (Pretty a) => Pretty (WithOrbit a) where
+  pretty (WithOrbit o a) = P.hcat ["d", pretty o, " ", pretty a]
+
+data WithPlayMeta a = WithPlayMeta !PlayMeta !a
+  deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
+
+instance (Pretty a) => Pretty (WithPlayMeta a) where
+  pretty (WithPlayMeta pm a) = P.hsep [pretty pm, pretty a]
+
+attrsConvert :: [(Text, Text)] -> WithPlayMeta Attrs -> Either Text Attrs
+attrsConvert aliases (WithPlayMeta pm attrs) = do
+  let delta = timeDeltaToMicros (pmRealLength pm)
+      cps = realToFrac (pmCps pm)
+      orbit = pmOrbit pm
+  attrsUnalias aliases attrs
+    >>= attrsTryInsert "delta" (DatumFloat delta)
+    >>= attrsTryInsert "cps" (DatumFloat cps)
+    <&> attrsDefault "orbit" (DatumInt32 (fromInteger orbit))
+
+attrsTryInsert :: Text -> Datum -> Attrs -> Either Text Attrs
+attrsTryInsert k v m =
   case attrsLookup k m of
-    Nothing -> pure (attrsInsert k v m)
-    Just _ -> throwError (PlayErrDupe k)
+    Nothing -> Right (attrsInsert k v m)
+    Just _ -> Left ("Duplicate key: " <> k)
 
-replaceAliases :: [(Text, Text)] -> Attrs -> M Attrs
-replaceAliases as m0 = foldM go m0 as
+attrsUnalias :: [(Text, Text)] -> Attrs -> Either Text Attrs
+attrsUnalias as m0 = foldM go m0 as
  where
   go !m (x, y) = do
     case attrsLookup x m of
       Nothing -> pure m
-      Just v -> insertSafe y v (attrsDelete x m)
+      Just v -> attrsTryInsert y v (attrsDelete x m)
 
--- Useful params:
--- sound - string, req - name of sound
--- orbit - int, opt - index of orbit
--- cps - float, given - current cps
--- cycle - float, given - event start in cycle time
--- delta - float, given - microsecond length of event
--- TODO add more aliases for params
-playAliases :: [(Text, Text)]
-playAliases =
-  [ ("lpf", "cutoff")
-  , ("lpq", "resonance")
-  , ("hpf", "hcutoff")
-  , ("hpq", "hresonance")
-  , ("bpf", "bandf")
-  , ("bpq", "bandq")
-  , ("res", "resonance")
-  , ("midi", "midinote")
-  , ("n", "note")
-  , ("oct", "octave")
-  , ("accel", "accelerate")
-  , ("leg", "legato")
-  , ("delayt", "delaytime")
-  , ("delayfb", "delayfeedback")
-  , ("phasr", "phaserrate")
-  , ("phasdp", "phaserdepth")
-  , ("tremr", "tremolorate")
-  , ("tremdp", "tremolodepth")
-  , ("dist", "distort")
-  , ("o", "orbit")
-  , ("ts", "timescale")
-  , ("s", "sound")
-  ]
-
-spanDeltaM :: Span -> M CycleDelta
-spanDeltaM = maybe (throwError PlayErrCont) pure . spanDelta
+spanDeltaM :: CycleSpan -> Either PlayErr CycleDelta
+spanDeltaM = maybe (throwError PlayErrCont) pure . spanWholeLength
 
 data PlayEnv = PlayEnv
-  { peStart :: !PosixTime
-  , peCycle :: !CycleTime
+  { peRealOrigin :: !PosixTime
+  , peCycleBounds :: !CycleArc
   , peCps :: !Rational
   }
   deriving stock (Eq, Ord, Show)
@@ -92,21 +114,26 @@ timeDeltaToMicros td =
   let (_, ns) = timeDeltaToNanos td
   in  fromIntegral ns / 1000
 
-playEvent :: (Squishy Attrs a) => PlayEnv -> Ev a -> M (Maybe (Timed Attrs))
-playEvent (PlayEnv startTime startCyc cps) (Ev sp dat) =
-  case spanCycle sp of
+playEvent
+  :: PlayEnv
+  -> Ev (WithOrbit q)
+  -> Either PlayErr (Maybe (WithPlayMeta q))
+playEvent (PlayEnv realOrigin (Arc cycleOrigin _) cps) (Ev sp (WithOrbit orbit dat)) =
+  case spanActiveStart sp of
     Nothing ->
       -- Only emit start events
-      pure Nothing
-    Just targetCyc -> do
-      let cycOffset = targetCyc - startCyc
-          onset = addTime startTime (timeDeltaFromFracSecs (unCycleTime cycOffset / cps))
-      deltaCyc <- fmap unCycleDelta (spanDeltaM sp)
-      let deltaTime = timeDeltaToMicros (timeDeltaFromFracSecs (deltaCyc / cps))
-      dat' <- replaceAliases playAliases (squish dat)
-      dat'' <- insertSafe "delta" (DatumFloat deltaTime) dat'
-      dat''' <- insertSafe "cps" (DatumFloat (realToFrac cps)) dat''
-      pure (Just (Timed onset dat'''))
+      Right Nothing
+    Just cycleStart -> do
+      let cycleOffset = cycleStart - cycleOrigin
+          realStart = addTime realOrigin (timeDeltaFromFracSecs (unCycleTime cycleOffset / cps))
+      cycleDelta <- spanDeltaM sp
+      let cycleEnd = CycleTime (unCycleTime cycleStart + unCycleDelta cycleDelta)
+          cycleArc = Arc cycleStart cycleEnd
+          realLength = timeDeltaFromFracSecs (unCycleDelta cycleDelta / cps)
+          realEnd = addTime realStart realLength
+          realArc = Arc realStart realEnd
+          pm = PlayMeta orbit realArc cycleArc cps
+      pure (Just (WithPlayMeta pm dat))
 
 traverseMaybe :: (Monad m) => (a -> m (Maybe b)) -> Seq a -> m (Seq b)
 traverseMaybe f = go Empty
@@ -115,5 +142,8 @@ traverseMaybe f = go Empty
     Empty -> pure acc
     a :<| as' -> f a >>= maybe (go acc as') (\b -> go (acc :|> b) as')
 
-playTape :: (Squishy Attrs a) => PlayEnv -> Tape a -> M (Seq (Timed Attrs))
+playTape
+  :: PlayEnv
+  -> Tape (WithOrbit q)
+  -> Either PlayErr (Seq (WithPlayMeta q))
 playTape penv = traverseMaybe (playEvent penv) . Seq.fromList . tapeToList

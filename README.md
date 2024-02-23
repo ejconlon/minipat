@@ -33,4 +33,5 @@ everything set up:
 * Implement polymeters
 * Additional combinators like `arp, off, jux, |+, every, squiz, range`
 * Backends for... Plain old MIDI? Renoise?
-
+* Backend with push/pull of textual patterns
+* More meaningful `Pretty` subclasses for pattern rep or plain old logging

@@ -2,77 +2,102 @@
 
 -- | Superdirt-specific implementation
 module Minipat.Dirt.Impl
-  ( DirtEnv (..)
-  , defaultDirtEnv
-  , DirtData
+  ( DirtBackend (..)
+  , defaultDirtBackend
   , DirtSt
-  , dirtImpl
   , handshake
   )
 where
 
+import Control.Concurrent.Async (Async)
+import Control.Concurrent.STM (atomically)
+import Control.Concurrent.STM.TQueue (TQueue, flushTQueue, newTQueueIO, writeTQueue)
 import Control.Exception (SomeException, bracket, throwIO)
+import Control.Monad (void)
+import Control.Monad.IO.Class (liftIO)
 import Dahdit.Midi.Osc (Datum (..), Msg (..), Packet (..))
 import Dahdit.Midi.OscAddr (RawAddrPat)
 import Dahdit.Network (Conn (..), HostPort (..), resolveAddr, runDecoder, runEncoder, udpServerConn)
 import Data.Either (isRight)
-import Data.Foldable (foldl')
+import Data.Foldable (foldl', for_)
 import Data.Sequence (Seq (..))
+import Data.Text (Text)
 import Minipat.Live.Attrs (Attrs, attrsToList)
-import Minipat.Live.Core (Env (..), Impl (..), St (..), setPlaying, withData)
-import Minipat.Live.Logger (LogAction, logError, logInfo)
-import Minipat.Live.Resources (RelVar, Timed (..), relVarAcquire, withTimeout)
-import Nanotime (TimeDelta, timeDeltaFromFracSecs)
+import Minipat.Live.Core (Backend (..), Callback (..), St (..), setPlaying, useCallback)
+import Minipat.Live.Logger (logError, logInfo)
+import Minipat.Live.Play (PlayMeta (..), WithPlayMeta (..), attrsConvert)
+import Minipat.Live.Resources (acquireAwait, relVarAcquire, withTimeout)
+import Minipat.Time (Arc (..))
+import Nanotime (PosixTime, TimeDelta, timeDeltaFromFracSecs)
 import Network.Socket qualified as NS
-
-data DirtEnv = DirtEnv
-  { deTargetHp :: !HostPort
-  , deListenHp :: !HostPort
-  , deOscTimeout :: !TimeDelta
-  }
-  deriving stock (Eq, Ord, Show)
-
-defaultDirtEnv :: DirtEnv
-defaultDirtEnv =
-  DirtEnv
-    { deTargetHp = HostPort (Just "127.0.0.1") 57120
-    , deListenHp = HostPort (Just "127.0.0.1") 57129
-    , deOscTimeout = timeDeltaFromFracSecs @Double 0.1
-    }
 
 data OscConn = OscConn
   { ocTargetAddr :: !NS.SockAddr
   , ocListenConn :: !(Conn NS.SockAddr)
   }
 
-type DirtData = OscConn
+sendPacket :: OscConn -> Packet -> IO ()
+sendPacket (OscConn targetAddr (Conn _ enc)) = runEncoder enc targetAddr
 
-type DirtSt = St DirtEnv DirtData
+recvPacket :: TimeDelta -> OscConn -> IO (Either SomeException Packet)
+recvPacket timeout (OscConn _ (Conn dec _)) =
+  withTimeout timeout (runDecoder dec >>= either throwIO pure . snd)
 
-dirtInit :: LogAction -> RelVar -> DirtEnv -> IO DirtData
-dirtInit _ rv (DirtEnv targetHp listenHp _) = do
-  targetAddr <- resolveAddr targetHp
-  relVarAcquire rv $ do
-    conn <- udpServerConn Nothing listenHp
-    pure (OscConn targetAddr conn)
+data DirtBackend = DirtBackend
+  { dbTargetHp :: !HostPort
+  , dbListenHp :: !HostPort
+  , dbOscTimeout :: !TimeDelta
+  }
+  deriving stock (Eq, Ord, Show)
 
-dirtSend :: LogAction -> ((OscConn -> IO ()) -> IO ()) -> Timed Attrs -> IO ()
-dirtSend _ wd = sendPacket' wd . playPacket . timedVal
+defaultDirtBackend :: DirtBackend
+defaultDirtBackend =
+  DirtBackend
+    { dbTargetHp = HostPort (Just "127.0.0.1") 57120
+    , dbListenHp = HostPort (Just "127.0.0.1") 57129
+    , dbOscTimeout = timeDeltaFromFracSecs @Double 0.1
+    }
 
-dirtImpl :: Impl DirtEnv OscConn
-dirtImpl = Impl dirtInit dirtSend
+type DirtSt = St DirtBackend
 
-sendPacket' :: ((OscConn -> IO ()) -> IO ()) -> Packet -> IO ()
-sendPacket' wd packet = wd $ \(OscConn targetAddr (Conn _ enc)) ->
-  runEncoder enc targetAddr packet
+data DirtData = DirtData
+  { ddOscConn :: !OscConn
+  , ddEventQueue :: !(TQueue (WithPlayMeta Attrs))
+  , ddSendTask :: !(Async ())
+  }
 
-sendPacket :: DirtSt -> Packet -> IO ()
-sendPacket = sendPacket' . withData
+pwRealStart :: WithPlayMeta a -> PosixTime
+pwRealStart (WithPlayMeta pm _) = arcStart (pmRealArc pm)
 
-recvPacket :: DirtSt -> IO (Either SomeException Packet)
-recvPacket st = withData st $ \(OscConn _ (Conn dec _)) ->
-  withTimeout (deOscTimeout (envImpl (stEnv st))) $
-    runDecoder dec >>= either throwIO pure . snd
+instance Backend DirtBackend where
+  type BackendData DirtBackend = DirtData
+  type BackendAttrs DirtBackend = Attrs
+
+  backendInit (DirtBackend targetHp listenHp _) logger getPlayingSTM rv = do
+    targetAddr <- resolveAddr targetHp
+    let acqOscConn = fmap (OscConn targetAddr) (udpServerConn Nothing listenHp)
+    oscConn <- relVarAcquire rv acqOscConn
+    eventQueue <- liftIO newTQueueIO
+    let send pw = do
+          case attrsConvert dirtAliases pw of
+            Left err -> logError logger ("Failed to convert event: " <> err)
+            Right attrs -> sendPacket oscConn (playPacket attrs)
+        acqSendTask = acquireAwait pwRealStart getPlayingSTM eventQueue send
+    sendTask <- relVarAcquire rv acqSendTask
+    pure (DirtData oscConn eventQueue sendTask)
+
+  backendSend _ _ cb evs = runCallback cb (atomically . for_ evs . writeTQueue . ddEventQueue)
+
+  backendClear _ _ cb = runCallback cb (atomically . void . flushTQueue . ddEventQueue)
+
+  -- TODO really check
+  backendCheck _ _ _ = pure True
+
+sendPacketSt :: DirtSt -> Packet -> IO ()
+sendPacketSt st p = useCallback st (\dd -> sendPacket (ddOscConn dd) p)
+
+recvPacketSt :: DirtSt -> IO (Either SomeException Packet)
+recvPacketSt st = useCallback st (recvPacket (dbOscTimeout (stBackend st)) . ddOscConn)
 
 -- | Handshake with SuperDirt
 -- On success set playing true; on error false
@@ -82,8 +107,8 @@ handshake st = bracket acq rel (const (pure ()))
   logger = stLogger st
   acq = do
     logInfo logger "Handshaking ..."
-    sendPacket st handshakePacket
-    recvPacket st
+    sendPacketSt st handshakePacket
+    recvPacketSt st
   rel resp = do
     let ok = isRight resp
     if ok
@@ -107,3 +132,36 @@ handshakeAddr = "/dirt/handshake"
 
 handshakePacket :: Packet
 handshakePacket = PacketMsg (Msg handshakeAddr Empty)
+
+-- Useful params:
+-- sound - string, req - name of sound
+-- orbit - int, opt - index of orbit
+-- cps - float, given - current cps
+-- cycle - float, given - event start in cycle time
+-- delta - float, given - microsecond length of event
+-- TODO add more aliases for params
+dirtAliases :: [(Text, Text)]
+dirtAliases =
+  [ ("lpf", "cutoff")
+  , ("lpq", "resonance")
+  , ("hpf", "hcutoff")
+  , ("hpq", "hresonance")
+  , ("bpf", "bandf")
+  , ("bpq", "bandq")
+  , ("res", "resonance")
+  , ("midi", "midinote")
+  , ("n", "note")
+  , ("oct", "octave")
+  , ("accel", "accelerate")
+  , ("leg", "legato")
+  , ("delayt", "delaytime")
+  , ("delayfb", "delayfeedback")
+  , ("phasr", "phaserrate")
+  , ("phasdp", "phaserdepth")
+  , ("tremr", "tremolorate")
+  , ("tremdp", "tremolodepth")
+  , ("dist", "distort")
+  , ("o", "orbit")
+  , ("ts", "timescale")
+  , ("s", "sound")
+  ]

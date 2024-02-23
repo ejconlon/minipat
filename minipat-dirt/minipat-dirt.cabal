@@ -62,11 +62,15 @@ library
       ViewPatterns
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints -fno-warn-unused-top-binds
   build-depends:
-      base >=4.12 && <5
+      async
+    , base >=4.12 && <5
     , containers ==0.6.*
     , dahdit-midi >=0.5.5 && <0.6
     , dahdit-network >=0.5.2 && <0.6
+    , minipat
     , minipat-live ==0.1.*
     , nanotime >=0.3.2 && <0.4
     , network ==3.1.*
+    , stm
+    , text
   default-language: GHC2021

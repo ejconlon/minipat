@@ -26,7 +26,7 @@ import Minipat.Norm (normPat)
 import Minipat.Parser (Loc, P, ParseErr, factorP, identP, identPatP, selectIdentPatP)
 import Minipat.Print (prettyShow)
 import Minipat.Stream (Ev (..), Stream, streamRun, tapeToList)
-import Minipat.Time (Arc (..), CycleTime (..), Span (..))
+import Minipat.Time (Arc (..), CycleArc, CycleTime (..), Span (..))
 import Minipat.Ur (ur)
 import Prettyprinter qualified as P
 import System.IO (BufferMode (..), hSetBuffering, stdout)
@@ -414,7 +414,7 @@ testPatNormCases =
             )
           ]
 
-runPatInterpCase :: (TestName, Maybe Arc, Text, [Ev Ident]) -> TestTree
+runPatInterpCase :: (TestName, Maybe CycleArc, Text, [Ev Ident]) -> TestTree
 runPatInterpCase (n, mayArc, patStr, evs) = testCase n $ do
   pat <- either throwIO pure (evalPat identP patStr)
   let arc = fromMaybe (Arc 0 1) mayArc

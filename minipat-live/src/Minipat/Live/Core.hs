@@ -3,28 +3,28 @@
 module Minipat.Live.Core
   ( Env (..)
   , defaultEnv
-  , ImplInit
-  , ImplSend
-  , Impl (..)
+  , Callback (..)
+  , Backend (..)
   , St
   , stLogger
   , stEnv
+  , stBackend
   , initAsyncSt
   , disposeSt
-  , withData
-  , getDebug
+  , useCallback
   , getCps
   , getAhead
   , getPlaying
   , getStream
   , getCycle
+  , getCycleArc
   , getTempo
-  , setDebug
   , setCps
   , setPlaying
   , setCycle
   , setTempo
   , setOrbit
+  , setOrbit'
   , clearOrbit
   , clearAllOrbits
   , hush
@@ -38,16 +38,15 @@ module Minipat.Live.Core
 where
 
 import Control.Concurrent.Async (Async, poll)
-import Control.Concurrent.MVar (MVar, newEmptyMVar, putMVar, tryTakeMVar, withMVar)
+import Control.Concurrent.MVar (MVar, modifyMVarMasked_, modifyMVar_, newMVar, withMVar)
 import Control.Concurrent.STM (STM, atomically)
-import Control.Concurrent.STM.TQueue (TQueue, flushTQueue, newTQueueIO, writeTQueue)
 import Control.Concurrent.STM.TVar (TVar, modifyTVar', newTVarIO, readTVar, readTVarIO, stateTVar, writeTVar)
-import Control.Exception (Exception (..), mask_)
-import Control.Monad (unless, void, when)
-import Dahdit.Midi.Osc (Datum (..))
+import Control.Exception (Exception (..), throwIO)
+import Control.Monad (unless, when)
 import Data.Acquire (Acquire)
-import Data.Foldable (foldl', for_)
-import Data.IORef (modifyIORef', newIORef, readIORef)
+import Data.Foldable (foldl')
+import Data.IORef (IORef, atomicModifyIORef', modifyIORef', newIORef, readIORef)
+import Data.Kind (Type)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Ratio ((%))
@@ -56,235 +55,233 @@ import Data.Sequence qualified as Seq
 import Data.Text (Text)
 import Data.Text qualified as T
 import Minipat.EStream (EStream (..))
-import Minipat.Live.Attrs (Attrs, Squishy (..), attrsDefault)
+import Minipat.Live.Attrs (Squishy (..))
 import Minipat.Live.Logger (LogAction, logDebug, logError, logInfo, logWarn, nullLogger)
-import Minipat.Live.Play (PlayEnv (..), PlayErr, playTape)
-import Minipat.Live.Resources (RelVar, Timed (..), acquireAwait, acquireLoop, relVarAcquire, relVarDispose, relVarUse)
-import Minipat.Print (prettyPrint, prettyPrintAll, prettyShow, prettyShowAll)
+import Minipat.Live.Play (PlayEnv (..), PlayErr, WithOrbit (..), WithPlayMeta, playTape)
+import Minipat.Live.Resources (RelVar, acquireLoop, relVarAcquire, relVarDispose, relVarUse)
+import Minipat.Print (prettyShow, prettyShowAll)
 import Minipat.Stream (Stream, streamRun, tapeToList)
-import Minipat.Time (Arc (..), Cycle (..), CycleTime (..), bpmToCps, cpsToBpm)
+import Minipat.Time (Arc (..), CycleArc, CycleTime (..), bpmToCps, cpsToBpm)
 import Nanotime
   ( PosixTime
   , TimeDelta
   , addTime
+  , currentTime
   , timeDeltaFromFracSecs
   )
 import Prettyprinter (Pretty)
 
 -- * Environment
 
-data CommonEnv = CommonEnv
-  { ceDebug :: !Bool
-  , ceCps :: !Rational
-  , ceGpc :: !Integer
+data Env = Env
+  { envCps :: !Rational
+  , envGpc :: !Integer
   }
   deriving stock (Eq, Ord, Show)
 
-defaultCommonEnv :: CommonEnv
-defaultCommonEnv =
-  CommonEnv
-    { ceDebug = False
-    , ceCps = 1 % 2 -- 120 bpm, 4 bpc
-    , ceGpc = 1 -- Number of gens per cycle
+defaultEnv :: Env
+defaultEnv =
+  Env
+    { envCps = 1 % 2 -- 120 bpm, 4 bpc
+    , envGpc = 16 -- Number of gens per cycle
     }
 
-data Env i = Env
-  { envCommon :: !CommonEnv
-  , envImpl :: !i
-  }
-  deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
+-- * Callback
 
-defaultEnv :: i -> Env i
-defaultEnv = Env defaultCommonEnv
+newtype Callback d = Callback {runCallback :: forall r. (d -> IO r) -> IO r}
+  deriving stock (Functor)
 
--- * Impl
+-- * Backend
 
-type ImplInit i d = LogAction -> RelVar -> i -> IO d
+class Backend i where
+  type BackendData i :: Type
+  type BackendAttrs i :: Type
 
-type ImplSend d = LogAction -> ((d -> IO ()) -> IO ()) -> Timed Attrs -> IO ()
+  backendInit
+    :: i
+    -> LogAction
+    -> STM Bool
+    -> RelVar
+    -> IO (BackendData i)
 
-data Impl i d = Impl
-  { implInit :: !(ImplInit i d)
-  , implSend :: !(ImplSend d)
-  }
+  backendSend
+    :: i
+    -> LogAction
+    -> Callback (BackendData i)
+    -> Seq (WithPlayMeta (BackendAttrs i))
+    -> IO ()
+
+  backendClear
+    :: i
+    -> LogAction
+    -> Callback (BackendData i)
+    -> IO ()
+
+  backendCheck
+    :: i
+    -> LogAction
+    -> Callback (BackendData i)
+    -> IO Bool
+
+data UninitErr = UninitErr
+  deriving stock (Eq, Ord, Show)
+
+instance Exception UninitErr
 
 -- * State
 
-data Domain = Domain
-  { domDebug :: !(TVar Bool)
-  , domCps :: !(TVar Rational)
+data Domain q = Domain
+  { domCps :: !(TVar Rational)
   , domGpc :: !(TVar Integer)
-  , domAhead :: !(TVar TimeDelta)
   , domPlaying :: !(TVar Bool)
   , domGenCycle :: !(TVar Integer)
   , domAbsGenCycle :: !(TVar Integer)
-  , domOrbits :: !(TVar (Map Integer (Stream Attrs)))
-  , domStream :: !(TVar (Stream Attrs))
-  , domEvents :: !(TQueue (Timed Attrs))
+  , domOrbits :: !(TVar (Map Integer (Stream q)))
+  , domStream :: !(TVar (Stream (WithOrbit q)))
   }
 
-newDomain :: IO Domain
+newDomain :: IO (Domain q)
 newDomain =
   Domain
-    <$> newTVarIO False
-    <*> newTVarIO 0
-    <*> newTVarIO 0
+    <$> newTVarIO 0
     <*> newTVarIO 0
     <*> newTVarIO False
     <*> newTVarIO 0
     <*> newTVarIO 0
     <*> newTVarIO mempty
     <*> newTVarIO mempty
-    <*> newTQueueIO
 
-initDomain :: CommonEnv -> IO Domain
-initDomain ce = newDomain >>= \d -> d <$ reinitDomain ce d
+initDomain :: Env -> IO (Domain q)
+initDomain env = newDomain >>= \d -> d <$ reinitDomain env d
 
-reinitDomain :: CommonEnv -> Domain -> IO ()
-reinitDomain ce dom = atomically $ do
-  let cps = ceCps ce
-      gpc = ceGpc ce
-      ahead = timeDeltaFromFracSecs (1 / (cps * fromInteger gpc))
-  writeTVar (domDebug dom) (ceDebug ce)
+reinitDomain :: Env -> Domain q -> IO ()
+reinitDomain (Env cps gpc) dom = atomically $ do
   writeTVar (domCps dom) cps
   writeTVar (domGpc dom) gpc
-  writeTVar (domAhead dom) ahead
   writeTVar (domPlaying dom) False
   writeTVar (domGenCycle dom) 0
   writeTVar (domAbsGenCycle dom) 0
   writeTVar (domOrbits dom) mempty
   writeTVar (domStream dom) mempty
-  clearEventsSTM dom
-
-data Tasks = Tasks
-  { taskGen :: !(Async ())
-  , taskSend :: !(Async ())
-  }
 
 data Resources d = Resources
   { resRel :: !RelVar
-  , resTasks :: !(Maybe Tasks)
+  , resGenTask :: !(Maybe (Async ()))
   , resData :: !d
   }
 
-data St i d = St
+data St i = St
   { stLogger :: !LogAction
-  , stImpl :: !(Impl i d)
-  , stEnv :: !(Env i)
-  , stDom :: !Domain
-  , stRes :: !(MVar (Resources d))
+  , stBackend :: !i
+  , stEnv :: !Env
+  , stDom :: !(Domain (BackendAttrs i))
+  , stRes :: !(MVar (Maybe (Resources (BackendData i))))
   }
 
-newSt :: LogAction -> Impl i d -> Env i -> IO (St i d)
-newSt logger impl env = St logger impl env <$> initDomain (envCommon env) <*> newEmptyMVar
+newSt :: LogAction -> i -> Env -> IO (St i)
+newSt logger be env = St logger be env <$> initDomain env <*> newMVar Nothing
 
-initRes :: Bool -> St i d -> IO ()
+initRes :: (Backend i) => Bool -> St i -> IO ()
 initRes isSync st = do
   disposeSt st
   relVarUse $ \rv -> do
-    dat <- implInit (stImpl st) (stLogger st) rv (envImpl (stEnv st))
-    tasks <-
+    let getPlayingSTM = readTVar (domPlaying (stDom st))
+    dat <- backendInit (stBackend st) (stLogger st) getPlayingSTM rv
+    genTask <-
       if isSync
         then pure Nothing
         else do
-          genTask <- relVarAcquire rv (acqGenTask st)
-          sendTask <- relVarAcquire rv (acqSendTask st)
-          pure (Just (Tasks genTask sendTask))
-    putMVar (stRes st) (Resources rv tasks dat)
+          now <- currentTime
+          fmap Just (relVarAcquire rv (acqGenTask st now))
+    modifyMVar_ (stRes st) (const (pure (Just (Resources rv genTask dat))))
 
-initSt :: Bool -> LogAction -> Impl i d -> Env i -> IO (St i d)
-initSt isSync logger impl env = newSt logger impl env >>= \st -> st <$ initRes isSync st
+initSt :: (Backend i) => Bool -> LogAction -> i -> Env -> IO (St i)
+initSt isSync logger be env = newSt logger be env >>= \st -> st <$ initRes isSync st
 
-initAsyncSt :: LogAction -> Impl i d -> Env i -> IO (St i d)
+initAsyncSt :: (Backend i) => LogAction -> i -> Env -> IO (St i)
 initAsyncSt = initSt False
 
-initSyncSt :: LogAction -> Impl i d -> Env i -> IO (St i d)
+initSyncSt :: (Backend i) => LogAction -> i -> Env -> IO (St i)
 initSyncSt = initSt True
 
-stepGenSt :: St i d -> PosixTime -> IO (CycleTime, PosixTime)
+stepGenSt
+  :: St i
+  -> PosixTime
+  -> IO (CycleTime, PosixTime, Seq (WithPlayMeta (BackendAttrs i)))
 stepGenSt st now = do
-  let dom = stDom st
-  doGen (stLogger st) dom now
-  (nextCycTime, ahead) <- atomically $ do
-    nextCycTime <- getCycleTimeSTM dom
-    ahead <- readTVar (domAhead dom)
-    pure (nextCycTime, ahead)
-  let nextNow = addTime now ahead
-  pure (nextCycTime, nextNow)
+  (penv, mresult) <- atomically (genAndAdvanceSTM (stDom st) now)
+  let cycleBounds = peCycleBounds penv
+  events <- case mresult of
+    Nothing -> pure Empty
+    Just eresult -> case eresult of
+      Left err -> Empty <$ logError (stLogger st) ("Error @ " <> prettyShow cycleBounds <> "\n" <> T.pack (displayException err))
+      Right events -> pure events
+  let nextCycTime = arcEnd cycleBounds
+      nextRealTime = peRealOrigin penv
+  pure (nextCycTime, nextRealTime, events)
 
-stepSendSt :: St i d -> IO ()
-stepSendSt st = do
-  let dom = stDom st
-      wd = withData st
-      send = implSend (stImpl st) (stLogger st) wd
-  events <- atomically (flushTQueue (domEvents dom))
-  for_ events send
+stepSendSt :: (Backend i) => St i -> Seq (WithPlayMeta (BackendAttrs i)) -> IO ()
+stepSendSt st = backendSend (stBackend st) (stLogger st) (mkCallback st)
 
-disposeSt :: St i d -> IO ()
-disposeSt st = mask_ (tryTakeMVar (stRes st) >>= maybe (pure ()) (relVarDispose . resRel))
+disposeSt :: St i -> IO ()
+disposeSt st = modifyMVarMasked_ (stRes st) $ \case
+  Nothing -> pure Nothing
+  Just res -> Nothing <$ relVarDispose (resRel res)
 
-withData :: St i d -> (d -> IO a) -> IO a
-withData st f = withMVar (stRes st) (f . resData)
+mkCallback :: St i -> Callback (BackendData i)
+mkCallback st = Callback (useCallback st)
+
+useCallback :: St i -> (BackendData i -> IO r) -> IO r
+useCallback st f = withMVar (stRes st) (maybe (throwIO UninitErr) (f . resData))
 
 -- * Getters
 
-getDebug :: St i d -> IO Bool
-getDebug = readTVarIO . domDebug . stDom
-
-getCps :: St i d -> IO Rational
+getCps :: St i -> IO Rational
 getCps = readTVarIO . domCps . stDom
 
-getGpc :: St i d -> IO Integer
+getGpc :: St i -> IO Integer
 getGpc = readTVarIO . domGpc . stDom
 
-getAhead :: St i d -> IO TimeDelta
-getAhead = readTVarIO . domAhead . stDom
+getAhead :: St i -> IO TimeDelta
+getAhead = atomically . getAheadSTM . stDom
 
-getPlaying :: St i d -> IO Bool
+getPlaying :: St i -> IO Bool
 getPlaying = readTVarIO . domPlaying . stDom
 
-getStream :: St i d -> IO (Stream Attrs)
+getStream :: St i -> IO (Stream (WithOrbit (BackendAttrs i)))
 getStream = readTVarIO . domStream . stDom
 
-getGenCycle :: St i d -> IO Integer
+getGenCycle :: St i -> IO Integer
 getGenCycle = readTVarIO . domGenCycle . stDom
 
-getAbsGenCycle :: St i d -> IO Integer
+getAbsGenCycle :: St i -> IO Integer
 getAbsGenCycle = readTVarIO . domAbsGenCycle . stDom
 
-getCycle :: St i d -> IO Integer
+getCycle :: St i -> IO Integer
 getCycle st = atomically $ do
   let dom = stDom st
   gpc <- readTVar (domGpc dom)
   gcyc <- readTVar (domGenCycle dom)
   pure (div gcyc gpc)
 
-getCycleTime :: St i d -> IO CycleTime
-getCycleTime = atomically . getCycleTimeSTM . stDom
+getCycleArc :: St i -> IO CycleArc
+getCycleArc = atomically . getCycleArcSTM . stDom
 
-getTempo :: St i d -> IO Rational
+getTempo :: St i -> IO Rational
 getTempo = fmap (cpsToBpm 4) . getCps
 
 -- * Setters
 
-setDebug :: St i d -> Bool -> IO ()
-setDebug st = atomically . writeTVar (domDebug (stDom st))
-
-setTempo :: St i d -> Rational -> IO ()
+setTempo :: St i -> Rational -> IO ()
 setTempo st = setCps st . bpmToCps 4
 
-setCps :: St i d -> Rational -> IO ()
-setCps st cps' = atomically $ do
-  let dom = stDom st
-  gpc <- readTVar (domGpc dom)
-  let ahead' = timeDeltaFromFracSecs (1 / (cps' * fromInteger gpc))
-  writeTVar (domCps dom) cps'
-  writeTVar (domAhead dom) ahead'
+setCps :: St i -> Rational -> IO ()
+setCps st = atomically . writeTVar (domCps (stDom st))
 
-setPlaying :: St i d -> Bool -> IO ()
+setPlaying :: St i -> Bool -> IO ()
 setPlaying st x = atomically (writeTVar (domPlaying (stDom st)) x)
 
-setCycle :: St i d -> Integer -> IO ()
+setCycle :: St i -> Integer -> IO ()
 setCycle st x = atomically $ do
   let dom = stDom st
   gpc <- readTVar (domGpc dom)
@@ -292,98 +289,112 @@ setCycle st x = atomically $ do
   let y = x * gpc + mod gcyc gpc
   writeTVar (domGenCycle (stDom st)) y
 
-updateOrbits :: St i d -> (Map Integer (Stream Attrs) -> Map Integer (Stream Attrs)) -> IO ()
+updateOrbits :: St i -> (Map Integer (Stream (BackendAttrs i)) -> Map Integer (Stream (BackendAttrs i))) -> IO ()
 updateOrbits st f = atomically $ do
   let dom = stDom st
-      addOrbit = attrsDefault "orbit" . DatumInt32 . fromInteger
   m' <- stateTVar (domOrbits dom) (\m -> let m' = f m in (m', m'))
-  let z = foldl' (\x (o, y) -> x <> fmap (addOrbit o) y) mempty (Map.toList m')
+  let z = foldl' (\x (o, y) -> x <> fmap (WithOrbit o) y) mempty (Map.toList m')
   writeTVar (domStream dom) z
 
-setOrbit :: (Squishy Attrs a) => St i d -> Integer -> EStream a -> IO ()
+setOrbit :: (Squishy (BackendAttrs i) a) => St i -> Integer -> EStream a -> IO ()
 setOrbit st o es =
   case unEStream es of
-    Left e -> putStrLn (displayException e)
-    Right s -> updateOrbits st (Map.insert o (fmap squish s))
+    Left e -> logError (stLogger st) (T.pack (displayException e))
+    Right s -> setOrbit' st o s
 
-clearOrbit :: St i d -> Integer -> IO ()
+setOrbit' :: (Squishy (BackendAttrs i) a) => St i -> Integer -> Stream a -> IO ()
+setOrbit' st o s = updateOrbits st (Map.insert o (fmap squish s))
+
+clearOrbit :: St i -> Integer -> IO ()
 clearOrbit st o = updateOrbits st (Map.delete o)
 
-clearAllOrbits :: St i d -> IO ()
+clearAllOrbits :: St i -> IO ()
 clearAllOrbits st = atomically (clearAllOrbitsSTM (stDom st))
+
+clearEvents :: (Backend i) => St i -> IO ()
+clearEvents st = backendClear (stBackend st) (stLogger st) (mkCallback st)
 
 -- * Other actions
 
-hush :: St i d -> IO ()
-hush st = atomically $ do
-  let dom = stDom st
-  clearAllOrbitsSTM dom
-  clearEventsSTM dom
+hush :: (Backend i) => St i -> IO ()
+hush st = do
+  atomically (clearAllOrbitsSTM (stDom st))
+  clearEvents st
 
-panic :: St i d -> IO ()
-panic st = atomically $ do
-  let dom = stDom st
-  clearAllOrbitsSTM dom
-  clearEventsSTM dom
-  writeTVar (domPlaying dom) False
+panic :: (Backend i) => St i -> IO ()
+panic st = do
+  atomically $ do
+    let dom = stDom st
+    clearAllOrbitsSTM dom
+    writeTVar (domPlaying dom) False
+  clearEvents st
 
-peek :: (Pretty a) => St i d -> EStream a -> IO ()
+peek :: (Pretty a) => St i -> EStream a -> IO ()
 peek st es =
-  case unEStream es of
-    Left e -> putStrLn (displayException e)
-    Right s -> do
-      cyc <- fmap fromIntegral (getCycle st)
-      let arc = Arc cyc (cyc + 1)
-          evs = tapeToList (streamRun s arc)
-      prettyPrint arc
-      prettyPrintAll "\n" evs
+  let logger = stLogger st
+  in  case unEStream es of
+        Left e -> logError logger (T.pack (displayException e))
+        Right s -> do
+          cyc <- fmap fromIntegral (getCycle st)
+          let arc = Arc cyc (cyc + 1)
+              evs = tapeToList (streamRun s arc)
+          logInfo logger (prettyShow arc <> "\n" <> prettyShowAll "\n" evs)
 
 -- * Recording
 
-nullImpl :: Impl () ()
-nullImpl =
-  Impl
-    { implInit = \_ _ _ -> pure ()
-    , implSend = \_ _ _ -> pure ()
-    }
+data RecordBackend (q :: Type) = RecordBackend
+  deriving stock (Eq, Ord, Show)
+
+newtype RecordData q = RecordData {unRecordData :: IORef (Seq (WithPlayMeta q))}
+
+newRecordData :: IO (RecordData q)
+newRecordData = fmap RecordData (newIORef Empty)
+
+flushRecordData :: RecordData q -> IO (Seq (WithPlayMeta q))
+flushRecordData (RecordData r) = atomicModifyIORef' r (Empty,)
+
+instance Backend (RecordBackend q) where
+  type BackendData (RecordBackend q) = RecordData q
+  type BackendAttrs (RecordBackend q) = q
+
+  backendInit _ _ _ _ = newRecordData
+  backendSend _ _ cb vs = runCallback cb (\(RecordData r) -> modifyIORef' r (<> vs))
+  backendClear _ _ cb = runCallback cb (\(RecordData r) -> modifyIORef' r (const Empty))
+  backendCheck _ _ _ = pure True
 
 stepRecord
-  :: CommonEnv
-  -> Cycle
-  -> Cycle
+  :: Env
+  -> Integer
+  -> Integer
   -> PosixTime
-  -> (CycleTime -> PosixTime -> St () () -> IO ())
-  -> (CycleTime -> PosixTime -> Seq (Timed Attrs) -> IO ())
+  -> (CycleTime -> PosixTime -> St (RecordBackend a) -> IO ())
+  -> (CycleTime -> PosixTime -> Seq (WithPlayMeta a) -> IO ())
   -> IO PosixTime
-stepRecord ce start end now0 onEnter onLeave = go
+stepRecord env start end now0 onEnter onLeave = go
  where
   go = do
-    let env = Env ce ()
-    st <- initSyncSt nullLogger nullImpl env
-    setCycle st (unCycle start)
+    st <- initSyncSt nullLogger RecordBackend env
+    setCycle st start
     setPlaying st True
-    loop (fromInteger (unCycle end)) st now0
-  flush = fmap Seq.fromList . atomically . flushTQueue . domEvents . stDom
+    loop (fromInteger end) st now0
   loop cycEnd st !realNow = do
-    cycNow <- getCycleTime st
-    if cycNow >= cycEnd
-      then pure realNow
-      else do
-        onEnter cycNow realNow st
-        (_, realNext) <- stepGenSt st realNow
-        events <- flush st
-        onLeave cycNow realNow events
-        loop cycEnd st realNext
+    Arc cycNow _ <- getCycleArc st
+    onEnter cycNow realNow st
+    (cycNext, realNext, events) <- stepGenSt st realNow
+    onLeave cycNow realNow events
+    if cycNext >= cycEnd
+      then pure realNext
+      else loop cycEnd st realNext
 
 mergeRecord
-  :: CommonEnv
-  -> Cycle
-  -> Cycle
+  :: Env
+  -> Integer
+  -> Integer
   -> PosixTime
-  -> (St () () -> IO ())
-  -> IO (Seq (Timed Attrs), PosixTime)
+  -> (St (RecordBackend a) -> IO ())
+  -> IO (Seq (WithPlayMeta a), PosixTime)
 mergeRecord ce start end now0 onInit = do
-  let cycStart = fromInteger (unCycle start)
+  let cycStart = fromInteger start
   r <- newIORef Empty
   realEnd <-
     stepRecord
@@ -397,27 +408,31 @@ mergeRecord ce start end now0 onInit = do
   pure (tas, realEnd)
 
 simpleRecord
-  :: (St () () -> IO ())
-  -> IO (Seq (Timed Attrs))
-simpleRecord = fmap fst . mergeRecord defaultCommonEnv 0 1 0
+  :: (St (RecordBackend a) -> IO ())
+  -> IO (Seq (WithPlayMeta a))
+simpleRecord = fmap fst . mergeRecord defaultEnv 0 1 0
 
 -- Helpers
 
-getCycleTimeSTM :: Domain -> STM CycleTime
-getCycleTimeSTM dom = do
+getCycleArcSTM :: Domain q -> STM CycleArc
+getCycleArcSTM dom = do
   gpc <- readTVar (domGpc dom)
   gcyc <- readTVar (domGenCycle dom)
-  pure (CycleTime (gcyc % gpc))
+  let start = CycleTime (gcyc % gpc)
+      end = CycleTime ((gcyc + 1) % gpc)
+  pure (Arc start end)
 
-clearAllOrbitsSTM :: Domain -> STM ()
+getRealOriginSTM :: Domain q -> PosixTime -> STM PosixTime
+getRealOriginSTM dom now = do
+  ahead <- getAheadSTM dom
+  pure (addTime now ahead)
+
+clearAllOrbitsSTM :: Domain q -> STM ()
 clearAllOrbitsSTM dom = do
   writeTVar (domOrbits dom) mempty
   writeTVar (domStream dom) mempty
 
-clearEventsSTM :: Domain -> STM ()
-clearEventsSTM dom = void (flushTQueue (domEvents dom))
-
-advanceCycleSTM :: Domain -> STM ()
+advanceCycleSTM :: Domain q -> STM ()
 advanceCycleSTM dom = do
   modifyTVar' (domGenCycle dom) (+ 1)
   modifyTVar' (domAbsGenCycle dom) (+ 1)
@@ -432,72 +447,58 @@ logAsyncState logger name task = do
         Left e -> logError logger ("Task " <> name <> " failed:\n" <> T.pack (displayException e))
         Right _ -> logWarn logger ("Task " <> name <> " not running")
 
-checkTasks :: St i d -> IO ()
+checkTasks :: St i -> IO ()
 checkTasks st =
-  withMVar (stRes st) $ \res ->
-    let logger = stLogger st
-    in  case resTasks res of
-          Nothing -> logInfo logger "No tasks running"
-          Just tasks -> do
-            logAsyncState logger "gen" (taskGen tasks)
-            logAsyncState logger "send" (taskSend tasks)
+  let logger = stLogger st
+  in  withMVar (stRes st) $ \case
+        Nothing -> pure ()
+        Just res ->
+          -- TODO check backend
+          case resGenTask res of
+            Nothing -> logInfo logger "No tasks running"
+            Just genTask -> do
+              logAsyncState logger "gen" genTask
 
-logEvents :: (Pretty a) => LogAction -> Domain -> Seq (Timed a) -> IO ()
+logEvents :: (Pretty q) => LogAction -> Domain q -> Seq (WithPlayMeta q) -> IO ()
 logEvents logger dom pevs =
   unless (Seq.null pevs) $ do
-    gpc <- readTVarIO (domGpc dom)
-    gcyc <- readTVarIO (domGenCycle dom)
-    let start = CycleTime (gcyc % gpc)
-        end = CycleTime ((gcyc + 1) % gpc)
-        arc = Arc start end
+    arc <- atomically (getCycleArcSTM dom)
     logDebug logger ("Generated @ " <> prettyShow arc <> "\n" <> prettyShowAll "\n" pevs)
 
-genEventsSTM :: Domain -> PosixTime -> STM (PlayEnv, Either PlayErr (Seq (Timed Attrs)))
-genEventsSTM dom now = do
-  ahead <- readTVar (domAhead dom)
+getPlayEnvSTM :: Domain q -> PosixTime -> STM PlayEnv
+getPlayEnvSTM dom now = do
+  realOrigin <- getRealOriginSTM dom now
+  cycleBounds <- getCycleArcSTM dom
+  cps <- readTVar (domCps dom)
+  pure (PlayEnv realOrigin cycleBounds cps)
+
+genAndAdvanceSTM :: Domain q -> PosixTime -> STM (PlayEnv, Maybe (Either PlayErr (Seq (WithPlayMeta q))))
+genAndAdvanceSTM dom now = do
+  penv <- getPlayEnvSTM dom now
+  playing <- readTVar (domPlaying dom)
+  mresult <-
+    if playing
+      then do
+        stream <- readTVar (domStream dom)
+        let arc = peCycleBounds penv
+            tape = streamRun stream arc
+            result = playTape penv tape
+        advanceCycleSTM dom
+        pure (Just result)
+      else pure Nothing
+  pure (penv, mresult)
+
+getAheadSTM :: Domain q -> STM TimeDelta
+getAheadSTM dom = do
   cps <- readTVar (domCps dom)
   gpc <- readTVar (domGpc dom)
-  gcyc <- readTVar (domGenCycle dom)
-  let start = CycleTime (gcyc % gpc)
-      end = CycleTime ((gcyc + 1) % gpc)
-      arc = Arc start end
-  stream <- readTVar (domStream dom)
-  let tape = streamRun stream arc
-      origin = addTime now ahead
-      penv = PlayEnv origin start cps
-      mpevs = playTape penv tape
-  pure (penv, mpevs)
+  pure (timeDeltaFromFracSecs (1 / (cps * fromInteger gpc)))
 
-doGen :: LogAction -> Domain -> PosixTime -> IO ()
-doGen logger dom now = do
-  mr <- atomically $ do
-    playing <- readTVar (domPlaying dom)
-    if playing
-      then fmap Just (genEventsSTM dom now)
-      else pure Nothing
-  case mr of
-    Nothing -> pure ()
-    Just (_, mpevs) ->
-      case mpevs of
-        Left err -> logError logger (T.pack ("Gen failed: " ++ show err))
-        Right pevs -> do
-          debug <- readTVarIO (domDebug dom)
-          when debug (logEvents logger dom pevs)
-          atomically $ do
-            advanceCycleSTM dom
-            for_ pevs (writeTQueue (domEvents dom))
+runGenTask :: (Backend i) => St i -> PosixTime -> IO PosixTime
+runGenTask st now = do
+  (_, next, events) <- stepGenSt st now
+  stepSendSt st events
+  pure next
 
-acqGenTask :: St i d -> Acquire (Async ())
-acqGenTask st =
-  let logger = stLogger st
-      dom = stDom st
-  in  acquireLoop (domAhead dom) (doGen logger dom)
-
-acqSendTask :: St i d -> Acquire (Async ())
-acqSendTask st =
-  let logger = stLogger st
-      dom = stDom st
-      impl = stImpl st
-      wd = withData st
-      doSend = implSend impl logger wd
-  in  acquireAwait (domPlaying dom) (domEvents dom) doSend
+acqGenTask :: (Backend i) => St i -> PosixTime -> Acquire (Async ())
+acqGenTask = acquireLoop . runGenTask

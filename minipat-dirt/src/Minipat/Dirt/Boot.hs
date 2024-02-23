@@ -1,8 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Minipat.Dirt.Boot
-  ( D.DirtEnv
-  , D.DirtData
+  ( D.DirtBackend
+  , D.DirtSt
   , DirtLiveSt
   , initialize
   , handshake
@@ -15,13 +15,13 @@ import Minipat.Live.Boot
 import Minipat.Live.Core qualified as C
 import Minipat.Live.Logger qualified as L
 
-type DirtLiveSt = (LiveSt, LiveEnv ~ D.DirtEnv, LiveData ~ D.DirtData)
+type DirtLiveSt = (LiveSt, LiveBackend ~ D.DirtBackend)
 
 initialize :: IO D.DirtSt
 initialize = do
   logger <- L.newLogger
   L.logInfo logger "Initializing"
-  C.initAsyncSt logger D.dirtImpl (C.defaultEnv D.defaultDirtEnv)
+  C.initAsyncSt logger D.defaultDirtBackend C.defaultEnv
 
 handshake :: (DirtLiveSt) => IO ()
 handshake = D.handshake liveSt
