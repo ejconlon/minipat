@@ -483,6 +483,14 @@ testPatInterpCases =
           ]
         )
       ,
+        ( "slow down 2"
+        , Just (Arc 0 2)
+        , "x/2"
+        ,
+          [ Ev (Span (Arc 0 2) (Just (Arc 0 2))) "x"
+          ]
+        )
+      ,
         ( "seq simple"
         , Nothing
         , "[x y]"
@@ -643,8 +651,8 @@ testPatInterpCases =
         , "[x , y , z]"
         ,
           [ ev 0 1 "x"
-          , ev 0 1 "y"
           , ev 0 1 "z"
+          , ev 0 1 "y"
           ] -- Note this order is arbitrary, just comes from heap behavior
         )
       ,
@@ -696,40 +704,46 @@ testPatInterpCases =
           , ev (5 % 8) (6 % 8) "x"
           ]
         )
-        -- TODO make these work
-        -- , ( "nesting 1"
-        --   , Just (Arc 0 2)
-        --   , "[x y [z w] v]/2"
-        --   ,
-        --     [ ev 0 (1 % 2) "x"
-        --     , ev (1 % 2) 1 "y"
-        --     , ev 1 (5 % 4) "z"
-        --     , ev (5 % 4) (3 % 2) "w"
-        --     , ev (3 % 2) 2 "v"
-        --     ]
-        --   )
-        -- , ( "nesting 2"
-        --   , Nothing
-        --   , "[x y]"
-        --   , [ ev 0 (1 % 2) "x"
-        --     , ev (1 % 2) 1 "y"
-        --     ]
-        --   )
-        -- , ( "nesting 2"
-        --   , Nothing
-        --   , "[[x y]]"
-        --   , [ ev 0 (1 % 2) "x"
-        --     , ev (1 % 2) 1 "y"
-        --     ]
-        --   )
-        -- , ( "nesting 3"
-        --   , Nothing
-        --   , "[[x y] z]"
-        --   , [ ev 0 (1 % 4) "x"
-        --     , ev (1 % 4) 1 "y"
-        --     , ev (1 % 2) 1 "z"
-        --     ]
-        --   )
+      ,
+        ( "nesting 1"
+        , Just (Arc 0 2)
+        , "[x y [z w] v]/2"
+        ,
+          [ ev 0 (1 % 2) "x"
+          , ev (1 % 2) 1 "y"
+          , ev 1 (5 % 4) "z"
+          , ev (5 % 4) (3 % 2) "w"
+          , ev (3 % 2) 2 "v"
+          ]
+        )
+      ,
+        ( "nesting 2"
+        , Nothing
+        , "[x y]"
+        ,
+          [ ev 0 (1 % 2) "x"
+          , ev (1 % 2) 1 "y"
+          ]
+        )
+      ,
+        ( "nesting 2"
+        , Nothing
+        , "[[x y]]"
+        ,
+          [ ev 0 (1 % 2) "x"
+          , ev (1 % 2) 1 "y"
+          ]
+        )
+      ,
+        ( "nesting 3"
+        , Nothing
+        , "[[x y] z]"
+        ,
+          [ ev 0 (1 % 4) "x"
+          , ev (1 % 4) (1 % 2) "y"
+          , ev (1 % 2) 1 "z"
+          ]
+        )
       ]
 
 runPatReprCase :: (TestName, Text, Maybe (TPat Ident), Maybe Text) -> TestTree

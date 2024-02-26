@@ -78,7 +78,7 @@ instance (Pretty a) => Pretty (Arc a) where
   pretty (Arc s e) = prettyTup s e
 
 arcWiden :: (RealFrac a) => Arc a -> Arc a
-arcWiden (Arc s e) = Arc (fromInteger (floor s)) (fromInteger (floor e) + 1)
+arcWiden (Arc s e) = Arc (fromInteger (floor s)) (fromInteger (ceiling e))
 
 arcRelevant :: (Ord a) => Arc a -> Arc a -> Bool
 arcRelevant (Arc s1 e1) (Arc s2 e2) = s2 < e1 && (e2 > s1 || (s2 == s1 && e2 == s1))
