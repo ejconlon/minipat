@@ -127,13 +127,13 @@ attrsUnalias as m0 = foldM go m0 as
       Nothing -> pure m
       Just v -> attrsTryInsert y v (attrsDelete x m)
 
-class (Semigroup q) => Squishy q a where
+class Squishy q a where
   squish :: a -> q
 
-squishMerge :: (Squishy q a, Squishy q b) => a -> b -> q
+squishMerge :: (Semigroup q, Squishy q a, Squishy q b) => a -> b -> q
 squishMerge a b = squish a <> squish b
 
-instance {-# OVERLAPPABLE #-} (Semigroup q) => Squishy q q where
+instance {-# OVERLAPPABLE #-} Squishy q q where
   squish = id
 
 instance {-# INCOHERENT #-} (Monoid q, Squishy q a) => Squishy q (Maybe a) where

@@ -69,7 +69,7 @@ instance Backend MidiBackend where
             Nothing -> fail "Could not find acceptable port"
             Just p -> do
               name <- fmap (fromMaybe "UNNAMED") (R.portName device p)
-              logInfo logger ("Opened port " <> T.pack (show p) <> "(" <> T.pack name <> ")")
+              logInfo logger ("Opened port " <> T.pack (show p) <> " (" <> T.pack name <> ")")
     _ <- mkAcquire getPort (const (R.closePort device))
     heap <- liftIO (newTVarIO H.empty)
     buf <- liftIO (VSM.new 4)

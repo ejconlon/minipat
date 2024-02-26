@@ -95,7 +95,7 @@ ordP m pa =
 
 -- General combinators
 
-setIn, (#) :: (Squishy q a, Squishy q b) => S a -> S b -> S q
+setIn, (#) :: (Semigroup q, Squishy q a, Squishy q b) => S a -> S b -> S q
 setIn = flowInnerApply squishMerge
 (#) = setIn
 
@@ -168,8 +168,8 @@ lateBy, earlyBy :: CycleDelta -> S a -> S a
 lateBy = estreamLateBy
 earlyBy = estreamEarlyBy
 
-layout :: Seq (CycleTime, CycleTime, S a) -> S a
-layout = estreamPar . fmap (\(start, end, stream) -> estreamPieces mempty [(start, stream), (end, mempty)])
+pieces :: Seq (CycleTime, CycleTime, S a) -> S a
+pieces = estreamPar . fmap (\(start, end, stream) -> estreamPieces mempty [(start, stream), (end, mempty)])
 
 fastCat :: Seq (S a) -> S a
 fastCat = estreamSeq

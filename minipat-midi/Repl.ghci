@@ -19,5 +19,3 @@ implSt <- initialize
 
 instance LiveSt where { type LiveBackend = MidiBackend; liveSt = implSt }
 
-handshake
-

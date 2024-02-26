@@ -23,5 +23,6 @@ initialize = do
   L.logInfo logger "Initializing"
   C.initAsyncSt logger D.defaultDirtBackend C.defaultEnv
 
+-- TODO move handshake into init
 handshake :: (DirtLiveSt) => IO ()
 handshake = D.handshake liveSt
