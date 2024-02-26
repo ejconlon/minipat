@@ -15,10 +15,10 @@ where
 
 import Control.Concurrent.STM (STM)
 import Control.Exception (Exception)
+import Data.Acquire (Acquire)
 import Data.Kind (Type)
 import Data.Sequence (Seq)
 import Minipat.Live.Logger (LogAction)
-import Minipat.Live.Resources (RelVar)
 import Minipat.Time (CycleArc, CycleDelta, PosixArc, arcLength)
 import Nanotime (TimeDelta)
 import Prettyprinter (Pretty (..))
@@ -39,8 +39,7 @@ class Backend i where
     :: i
     -> LogAction
     -> STM Bool
-    -> RelVar
-    -> IO (BackendData i)
+    -> Acquire (BackendData i)
 
   backendSend
     :: i

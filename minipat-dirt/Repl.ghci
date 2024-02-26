@@ -15,9 +15,9 @@ putStrLn "List available functions with `:browse Minipat.Dirt.Boot`"
 putStrLn "Show documentation with `:doc someFunctionName`"
 putStrLn "============================================================"
 
-dirtSt <- initialize
+implSt <- initialize
 
-instance LiveSt where { type LiveBackend = DirtBackend; liveSt = dirtSt }
+instance LiveSt where { type LiveBackend = DirtBackend; liveSt = implSt }
 
 handshake
 

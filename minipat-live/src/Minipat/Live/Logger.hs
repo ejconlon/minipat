@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Minipat.Live.Logger
   ( LogAction
   , LogLevel (..)
@@ -8,11 +10,14 @@ module Minipat.Live.Logger
   , logInfo
   , logWarn
   , logError
+  , logException
   )
 where
 
 import Control.Concurrent.MVar (newMVar, withMVar)
+import Control.Exception (Exception (..))
 import Data.Text (Text)
+import Data.Text qualified as T
 import LittleLogger (LogAction (..), LogLevel (..), defaultLogAction, logOtherN, runLogActionM)
 
 newLogger :: IO LogAction
@@ -38,3 +43,6 @@ logWarn logger = logLvl logger LevelWarn
 
 logError :: LogAction -> Text -> IO ()
 logError logger = logLvl logger LevelError
+
+logException :: (Exception e) => LogAction -> Text -> e -> IO ()
+logException logger msg err = logError logger (msg <> ":\n" <> T.pack (displayException err))

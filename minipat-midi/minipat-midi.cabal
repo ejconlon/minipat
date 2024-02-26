@@ -4,9 +4,9 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 
-name:           minipat-dirt
+name:           minipat-midi
 version:        0.1.0
-synopsis:       SuperDirt integration for minipat
+synopsis:       MIDI backend for minipat
 description:    Please see the README on GitHub at <https://github.com/ejconlon/minipat#readme>
 homepage:       https://github.com/ejconlon/minipat#readme
 bug-reports:    https://github.com/ejconlon/minipat/issues
@@ -24,10 +24,10 @@ source-repository head
 
 library
   exposed-modules:
-      Minipat.Dirt.Boot
-      Minipat.Dirt.Impl
+      Minipat.Midi.Boot
+      Minipat.Midi.Impl
   other-modules:
-      Paths_minipat_dirt
+      Paths_minipat_midi
   hs-source-dirs:
       src
   default-extensions:
@@ -62,15 +62,17 @@ library
       ViewPatterns
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints -fno-warn-unused-top-binds
   build-depends:
-      async ==2.2.*
+      RtMidi >=0.8 && <1.0
     , base >=4.12 && <5
     , containers ==0.6.*
+    , dahdit >=0.5.1 && <0.6
     , dahdit-midi >=0.5.5 && <0.6
-    , dahdit-network >=0.5.2 && <0.6
+    , heaps ==0.4.*
     , minipat ==0.1.*
     , minipat-live ==0.1.*
     , nanotime >=0.3.2 && <0.4
-    , network ==3.1.*
+    , resourcet ==1.3.*
     , stm ==2.5.*
     , text ==2.0.*
+    , vector ==0.13.*
   default-language: GHC2021

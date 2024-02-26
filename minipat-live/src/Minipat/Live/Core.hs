@@ -39,8 +39,9 @@ import Control.Concurrent.Async (Async, poll)
 import Control.Concurrent.MVar (MVar, modifyMVarMasked_, modifyMVar_, newMVar, withMVar)
 import Control.Concurrent.STM (STM, atomically)
 import Control.Concurrent.STM.TVar (TVar, modifyTVar', newTVarIO, readTVar, readTVarIO, stateTVar, writeTVar)
-import Control.Exception (Exception (..), throwIO)
+import Control.Exception (throwIO)
 import Control.Monad (unless, when)
+import Control.Monad.IO.Class (liftIO)
 import Data.Acquire (Acquire)
 import Data.Foldable (foldl')
 import Data.IORef (IORef, atomicModifyIORef', modifyIORef', newIORef, readIORef)
@@ -55,7 +56,7 @@ import Data.Text qualified as T
 import Minipat.EStream (EStream (..))
 import Minipat.Live.Attrs (Squishy (..))
 import Minipat.Live.Backend (Backend (..), Callback (..), UninitErr (..), WithPlayMeta)
-import Minipat.Live.Logger (LogAction, logDebug, logError, logInfo, logWarn, nullLogger)
+import Minipat.Live.Logger (LogAction, logDebug, logException, logInfo, logWarn, nullLogger)
 import Minipat.Live.Play (PlayEnv (..), PlayErr, WithOrbit (..), playTape)
 import Minipat.Live.Resources (RelVar, acquireLoop, relVarAcquire, relVarDispose, relVarUse)
 import Minipat.Print (prettyShow, prettyShowAll)
@@ -143,7 +144,7 @@ initRes isSync st = do
   disposeSt st
   relVarUse $ \rv -> do
     let getPlayingSTM = readTVar (domPlaying (stDom st))
-    dat <- backendInit (stBackend st) (stLogger st) getPlayingSTM rv
+    dat <- relVarAcquire rv (backendInit (stBackend st) (stLogger st) getPlayingSTM)
     genTask <-
       if isSync
         then pure Nothing
@@ -171,7 +172,7 @@ stepGenSt st now = do
   events <- case mresult of
     Nothing -> pure Empty
     Just eresult -> case eresult of
-      Left err -> Empty <$ logError (stLogger st) ("Error @ " <> prettyShow cycleBounds <> "\n" <> T.pack (displayException err))
+      Left err -> Empty <$ logException (stLogger st) ("Error @ " <> prettyShow cycleBounds) err
       Right events -> pure events
   let nextCycTime = arcEnd cycleBounds
       nextRealTime = peRealOrigin penv
@@ -256,7 +257,7 @@ updateOrbits st f = atomically $ do
 setOrbit :: (Squishy (BackendAttrs i) a) => St i -> Integer -> EStream a -> IO ()
 setOrbit st o es =
   case unEStream es of
-    Left e -> logError (stLogger st) (T.pack (displayException e))
+    Left e -> logException (stLogger st) ("Error setting orbit " <> T.pack (show o)) e
     Right s -> setOrbit' st o s
 
 setOrbit' :: (Squishy (BackendAttrs i) a) => St i -> Integer -> Stream a -> IO ()
@@ -290,7 +291,7 @@ peek :: (Pretty a) => St i -> EStream a -> IO ()
 peek st es =
   let logger = stLogger st
   in  case unEStream es of
-        Left e -> logError logger (T.pack (displayException e))
+        Left e -> logException logger "Error peeking" e
         Right s -> do
           cyc <- fmap fromIntegral (getCycle st)
           let arc = Arc cyc (cyc + 1)
@@ -314,7 +315,7 @@ instance Backend (RecordBackend q) where
   type BackendData (RecordBackend q) = RecordData q
   type BackendAttrs (RecordBackend q) = q
 
-  backendInit _ _ _ _ = newRecordData
+  backendInit _ _ _ = liftIO newRecordData
   backendSend _ _ cb vs = runCallback cb (\(RecordData r) -> modifyIORef' r (<> vs))
   backendClear _ _ cb = runCallback cb (\(RecordData r) -> modifyIORef' r (const Empty))
   backendCheck _ _ _ = pure True
@@ -401,7 +402,7 @@ logAsyncState logger name task = do
     Nothing -> logInfo logger ("Task " <> name <> " is running")
     Just ea ->
       case ea of
-        Left e -> logError logger ("Task " <> name <> " failed:\n" <> T.pack (displayException e))
+        Left e -> logException logger ("Task " <> name <> " failed") e
         Right _ -> logWarn logger ("Task " <> name <> " not running")
 
 checkTasks :: St i -> IO ()

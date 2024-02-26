@@ -1,3 +1,0 @@
-#!/bin/bash
-cd "$(dirname "$0")/.."
-exec stack exec -- ghci -package minipat-dirt -ghci-script BootDirt.hs $@

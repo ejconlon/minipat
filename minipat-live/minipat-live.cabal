@@ -74,6 +74,7 @@ library
     , base >=4.12 && <5
     , containers ==0.6.*
     , dahdit-midi >=0.5.5 && <0.6
+    , heaps ==0.4.*
     , little-logger ==1.0.*
     , looksee >=0.5.2 && <0.6
     , minipat ==0.1.*
@@ -128,6 +129,7 @@ test-suite minipat-live-test
     , base >=4.12 && <5
     , containers ==0.6.*
     , dahdit-midi >=0.5.5 && <0.6
+    , heaps ==0.4.*
     , little-logger ==1.0.*
     , looksee >=0.5.2 && <0.6
     , minipat ==0.1.*

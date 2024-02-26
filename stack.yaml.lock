@@ -74,9 +74,16 @@ packages:
       size: 168
   original:
     hackage: nanotime-0.3.2
+- completed:
+    hackage: RtMidi-0.8.0.0@sha256:23b0f994be7dc57478d17ff4e3fc359984317630cf5b6c4d59196e8e64106f1e,3892
+    pantry-tree:
+      sha256: a4d71450d4a51b8a1e25fe890570b6616d529bcfb46e2109206f3a767af7124f
+      size: 861
+  original:
+    hackage: RtMidi-0.8.0.0
 snapshots:
 - completed:
-    sha256: 2fdd7d3e54540062ef75ca0a73ca3a804c527dbf8a4cadafabf340e66ac4af40
-    size: 712469
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/22/11.yaml
-  original: lts-22.11
+    sha256: e2c529ccfb21501f98f639e056cbde50470b86256d9849d7a82d414ca23e4276
+    size: 712898
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/22/12.yaml
+  original: lts-22.12

@@ -12,23 +12,21 @@ where
 import Control.Concurrent.Async (Async)
 import Control.Concurrent.STM (atomically)
 import Control.Concurrent.STM.TQueue (TQueue, flushTQueue, newTQueueIO, writeTQueue)
-import Control.Exception (Exception (..), SomeException, bracket, throwIO)
+import Control.Exception (SomeException, bracket, throwIO)
 import Control.Monad (void)
 import Control.Monad.IO.Class (liftIO)
 import Dahdit.Midi.Osc (Datum (..), Msg (..), Packet (..))
 import Dahdit.Midi.OscAddr (RawAddrPat)
 import Dahdit.Network (Conn (..), HostPort (..), resolveAddr, runDecoder, runEncoder, udpServerConn)
-import Data.Either (isRight)
 import Data.Foldable (foldl', for_)
 import Data.Functor ((<&>))
 import Data.Sequence (Seq (..))
 import Data.Text (Text)
-import Data.Text qualified as T
 import Minipat.Live.Attrs (Attrs, DupeAttrErr, attrsDefault, attrsToList, attrsTryInsert, attrsUnalias)
 import Minipat.Live.Backend (Backend (..), Callback (..), PlayMeta (..), WithPlayMeta (..), pmRealLength)
 import Minipat.Live.Core (St, setPlaying, stBackend, stLogger, useCallback)
-import Minipat.Live.Logger (logError, logInfo)
-import Minipat.Live.Resources (acquireAwait, relVarAcquire, withTimeout)
+import Minipat.Live.Logger (logException, logInfo)
+import Minipat.Live.Resources (acquireAwait, qhTQueue, withTimeout)
 import Minipat.Time (Arc (..))
 import Nanotime (PosixTime, TimeDelta, timeDeltaFromFracSecs, timeDeltaToNanos)
 import Network.Socket qualified as NS
@@ -90,18 +88,17 @@ instance Backend DirtBackend where
   type BackendData DirtBackend = DirtData
   type BackendAttrs DirtBackend = Attrs
 
-  backendInit (DirtBackend targetHp listenHp _) logger getPlayingSTM rv = do
-    targetAddr <- resolveAddr targetHp
+  backendInit (DirtBackend targetHp listenHp _) logger getPlayingSTM = do
+    targetAddr <- liftIO (resolveAddr targetHp)
     let acqOscConn = fmap (OscConn targetAddr) (udpServerConn Nothing listenHp)
-    oscConn <- relVarAcquire rv acqOscConn
+    oscConn <- acqOscConn
     eventQueue <- liftIO newTQueueIO
     let send pw = do
           case attrsConvert dirtAliases pw of
-            Left err -> logError logger ("Failed to convert event: " <> T.pack (displayException err))
+            Left err -> logException logger "Failed to convert event" err
             Right attrs -> sendPacket oscConn (playPacket attrs)
-        acqSendTask = acquireAwait pwRealStart getPlayingSTM eventQueue send
-    sendTask <- relVarAcquire rv acqSendTask
-    pure (DirtData oscConn eventQueue sendTask)
+        acqSendTask = acquireAwait pwRealStart getPlayingSTM (qhTQueue eventQueue) send
+    fmap (DirtData oscConn eventQueue) acqSendTask
 
   backendSend _ _ cb evs = runCallback cb (atomically . for_ evs . writeTQueue . ddEventQueue)
 
@@ -127,10 +124,9 @@ handshake st = bracket acq rel (const (pure ()))
     sendPacketSt st handshakePacket
     recvPacketSt st
   rel resp = do
-    let ok = isRight resp
-    if ok
-      then logInfo logger "... handshake succeeded"
-      else logError logger "... handshake FAILED"
+    ok <- case resp of
+      Left err -> False <$ logException logger "... handshake FAILED" err
+      Right _ -> True <$ logInfo logger "... handshake succeeded"
     setPlaying st ok
 
 namedPayload :: Attrs -> Seq Datum

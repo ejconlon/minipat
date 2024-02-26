@@ -1,5 +1,5 @@
 stack_build := "stack build --fast"
-src_dirs := "minipat minipat-live minipat-dirt"
+src_dirs := "minipat minipat-live minipat-dirt minipat-midi"
 
 # No default tasks
 default:
@@ -46,7 +46,7 @@ lint-apply:
   find {{ src_dirs }} -name '*.hs' | xargs -t -I % stack exec -- hlint % --refactor --refactor-options="--inplace"
 
 # Run a dirt session in ghci
-dirt:
-  just build minipat-dirt
-  bin/dirt-ghci
+backend target:
+  just build minipat-{{ target }}
+  bin/minipat-repl {{ target }}
 
