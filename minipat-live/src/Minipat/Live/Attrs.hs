@@ -12,11 +12,16 @@ module Minipat.Live.Attrs
   , attrsDefault
   , attrsDelete
   , attrsToList
+  , DupeAttrErr
+  , attrsTryInsert
+  , attrsUnalias
   , Squishy (..)
   , squishMerge
   )
 where
 
+import Control.Exception (Exception)
+import Control.Monad (foldM)
 import Dahdit.Midi.Osc (Datum (..), DatumType (..), IsDatum (..))
 import Data.Int (Int32, Int64)
 import Data.Map.Strict (Map)
@@ -101,6 +106,26 @@ attrsDelete k (Attrs m) = Attrs (Map.delete k m)
 
 attrsToList :: Attrs -> [(Text, Datum)]
 attrsToList = Map.toList . unAttrs
+
+newtype DupeAttrErr = DupeAttrErr {unDupeAttrErr :: Text}
+  deriving stock (Show)
+  deriving newtype (Eq, Ord)
+
+instance Exception DupeAttrErr
+
+attrsTryInsert :: Text -> Datum -> Attrs -> Either DupeAttrErr Attrs
+attrsTryInsert k v m =
+  case attrsLookup k m of
+    Nothing -> Right (attrsInsert k v m)
+    Just _ -> Left (DupeAttrErr k)
+
+attrsUnalias :: [(Text, Text)] -> Attrs -> Either DupeAttrErr Attrs
+attrsUnalias as m0 = foldM go m0 as
+ where
+  go !m (x, y) = do
+    case attrsLookup x m of
+      Nothing -> pure m
+      Just v -> attrsTryInsert y v (attrsDelete x m)
 
 class (Semigroup q) => Squishy q a where
   squish :: a -> q

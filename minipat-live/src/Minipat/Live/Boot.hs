@@ -38,6 +38,7 @@ where
 import Data.Kind (Type)
 import Minipat.EStream (EStream)
 import Minipat.Live.Attrs (Squishy (..))
+import Minipat.Live.Backend qualified as B
 import Minipat.Live.Combinators
 import Minipat.Live.Core qualified as C
 import Minipat.Live.Params
@@ -46,11 +47,11 @@ import Minipat.Stream (Stream)
 import Nanotime (TimeDelta)
 import Prettyprinter (Pretty)
 
-class (C.Backend LiveBackend) => LiveSt where
+class (B.Backend LiveBackend) => LiveSt where
   type LiveBackend :: Type
   liveSt :: C.St LiveBackend
 
-type LiveAttrs = C.BackendAttrs LiveBackend
+type LiveAttrs = B.BackendAttrs LiveBackend
 
 dispose :: (LiveSt) => IO ()
 dispose = C.disposeSt liveSt

@@ -25,6 +25,7 @@ source-repository head
 library
   exposed-modules:
       Minipat.Live.Attrs
+      Minipat.Live.Backend
       Minipat.Live.Boot
       Minipat.Live.Combinators
       Minipat.Live.Core

@@ -3,8 +3,6 @@
 module Minipat.Live.Core
   ( Env (..)
   , defaultEnv
-  , Callback (..)
-  , Backend (..)
   , St
   , stLogger
   , stEnv
@@ -56,8 +54,9 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Minipat.EStream (EStream (..))
 import Minipat.Live.Attrs (Squishy (..))
+import Minipat.Live.Backend (Backend (..), Callback (..), UninitErr (..), WithPlayMeta)
 import Minipat.Live.Logger (LogAction, logDebug, logError, logInfo, logWarn, nullLogger)
-import Minipat.Live.Play (PlayEnv (..), PlayErr, WithOrbit (..), WithPlayMeta, playTape)
+import Minipat.Live.Play (PlayEnv (..), PlayErr, WithOrbit (..), playTape)
 import Minipat.Live.Resources (RelVar, acquireLoop, relVarAcquire, relVarDispose, relVarUse)
 import Minipat.Print (prettyShow, prettyShowAll)
 import Minipat.Stream (Stream, streamRun, tapeToList)
@@ -85,48 +84,6 @@ defaultEnv =
     { envCps = 1 % 2 -- 120 bpm, 4 bpc
     , envGpc = 16 -- Number of gens per cycle
     }
-
--- * Callback
-
-newtype Callback d = Callback {runCallback :: forall r. (d -> IO r) -> IO r}
-  deriving stock (Functor)
-
--- * Backend
-
-class Backend i where
-  type BackendData i :: Type
-  type BackendAttrs i :: Type
-
-  backendInit
-    :: i
-    -> LogAction
-    -> STM Bool
-    -> RelVar
-    -> IO (BackendData i)
-
-  backendSend
-    :: i
-    -> LogAction
-    -> Callback (BackendData i)
-    -> Seq (WithPlayMeta (BackendAttrs i))
-    -> IO ()
-
-  backendClear
-    :: i
-    -> LogAction
-    -> Callback (BackendData i)
-    -> IO ()
-
-  backendCheck
-    :: i
-    -> LogAction
-    -> Callback (BackendData i)
-    -> IO Bool
-
-data UninitErr = UninitErr
-  deriving stock (Eq, Ord, Show)
-
-instance Exception UninitErr
 
 -- * State
 

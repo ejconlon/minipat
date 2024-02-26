@@ -12,7 +12,7 @@ where
 import Control.Concurrent.Async (Async)
 import Control.Concurrent.STM (atomically)
 import Control.Concurrent.STM.TQueue (TQueue, flushTQueue, newTQueueIO, writeTQueue)
-import Control.Exception (SomeException, bracket, throwIO)
+import Control.Exception (Exception (..), SomeException, bracket, throwIO)
 import Control.Monad (void)
 import Control.Monad.IO.Class (liftIO)
 import Dahdit.Midi.Osc (Datum (..), Msg (..), Packet (..))
@@ -20,15 +20,17 @@ import Dahdit.Midi.OscAddr (RawAddrPat)
 import Dahdit.Network (Conn (..), HostPort (..), resolveAddr, runDecoder, runEncoder, udpServerConn)
 import Data.Either (isRight)
 import Data.Foldable (foldl', for_)
+import Data.Functor ((<&>))
 import Data.Sequence (Seq (..))
 import Data.Text (Text)
-import Minipat.Live.Attrs (Attrs, attrsToList)
-import Minipat.Live.Core (Backend (..), Callback (..), St (..), setPlaying, useCallback)
+import Data.Text qualified as T
+import Minipat.Live.Attrs (Attrs, DupeAttrErr, attrsDefault, attrsToList, attrsTryInsert, attrsUnalias)
+import Minipat.Live.Backend (Backend (..), Callback (..), PlayMeta (..), WithPlayMeta (..), pmRealLength)
+import Minipat.Live.Core (St, setPlaying, stBackend, stLogger, useCallback)
 import Minipat.Live.Logger (logError, logInfo)
-import Minipat.Live.Play (PlayMeta (..), WithPlayMeta (..), attrsConvert)
 import Minipat.Live.Resources (acquireAwait, relVarAcquire, withTimeout)
 import Minipat.Time (Arc (..))
-import Nanotime (PosixTime, TimeDelta, timeDeltaFromFracSecs)
+import Nanotime (PosixTime, TimeDelta, timeDeltaFromFracSecs, timeDeltaToNanos)
 import Network.Socket qualified as NS
 
 data OscConn = OscConn
@@ -69,6 +71,21 @@ data DirtData = DirtData
 pwRealStart :: WithPlayMeta a -> PosixTime
 pwRealStart (WithPlayMeta pm _) = arcStart (pmRealArc pm)
 
+timeDeltaToMicros :: TimeDelta -> Float
+timeDeltaToMicros td =
+  let (_, ns) = timeDeltaToNanos td
+  in  fromIntegral ns / 1000
+
+attrsConvert :: [(Text, Text)] -> WithPlayMeta Attrs -> Either DupeAttrErr Attrs
+attrsConvert aliases (WithPlayMeta pm attrs) = do
+  let delta = timeDeltaToMicros (pmRealLength pm)
+      cps = realToFrac (pmCps pm)
+      orbit = pmOrbit pm
+  attrsUnalias aliases attrs
+    >>= attrsTryInsert "delta" (DatumFloat delta)
+    >>= attrsTryInsert "cps" (DatumFloat cps)
+    <&> attrsDefault "orbit" (DatumInt32 (fromInteger orbit))
+
 instance Backend DirtBackend where
   type BackendData DirtBackend = DirtData
   type BackendAttrs DirtBackend = Attrs
@@ -80,7 +97,7 @@ instance Backend DirtBackend where
     eventQueue <- liftIO newTQueueIO
     let send pw = do
           case attrsConvert dirtAliases pw of
-            Left err -> logError logger ("Failed to convert event: " <> err)
+            Left err -> logError logger ("Failed to convert event: " <> T.pack (displayException err))
             Right attrs -> sendPacket oscConn (playPacket attrs)
         acqSendTask = acquireAwait pwRealStart getPlayingSTM eventQueue send
     sendTask <- relVarAcquire rv acqSendTask

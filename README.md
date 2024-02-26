@@ -8,10 +8,10 @@ even play music using [SuperDirt](https://github.com/musikinformatik/SuperDirt)!
 
 What does `minipat` add?
 
+* Swappable backends - see how small `minipat-dirt` is!
+* Patterns can be pretty-printed back into textual form.
 * The pattern language has a plain old syntax tree (`Pat`) with standard
   functions for traversal and recursion (even through location annotations).
-* Patterns can be pretty-printed back into textual form.
-* Backends are easily swappable - see how small `minipat-dirt` is!
 * Lots of tiny changes...
 
 If you have `stack` installed, and you have `supercollider` running for use
@@ -28,9 +28,9 @@ everything set up:
 
 ## TODO
 
-* Add documentation
 * Finish midi notes/chords/arps
 * Implement polymeters
+* Add documentation
 * Additional combinators like `arp, off, jux, |+, every, squiz, range`
 * Backends for... Plain old MIDI? Renoise?
 * Backend with push/pull of textual patterns
