@@ -172,7 +172,7 @@ layout :: Seq (CycleTime, CycleTime, S a) -> S a
 layout = estreamPar . fmap (\(start, end, stream) -> estreamPieces mempty [(start, stream), (end, mempty)])
 
 fastCat :: Seq (S a) -> S a
-fastCat = estreamSeq . fmap (,1)
+fastCat = estreamSeq
 
 slowCat :: Seq (S a) -> S a
 slowCat ss = slowBy (fromIntegral (Seq.length ss)) (fastCat ss)
@@ -184,7 +184,7 @@ slowList :: Seq a -> S a
 slowList as = slowBy (fromIntegral (Seq.length as)) (fastList as)
 
 fastAppend :: S a -> S a -> S a
-fastAppend s1 s2 = estreamSeq [(s1, 1), (s2, 1)]
+fastAppend s1 s2 = fastCat [s1, s2]
 
 slowAppend :: S a -> S a -> S a
 slowAppend s1 s2 = slowBy 2 (fastAppend s1 s2)

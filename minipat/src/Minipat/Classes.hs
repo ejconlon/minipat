@@ -63,8 +63,11 @@ mkPatDeg pf = mkPatMod (ModTypeDegrade (Degrade (Just (fmap factorFromRational p
 mkPatRep :: Integer -> Pat b a -> Reader b (Pat b a)
 mkPatRep n = mkPatMod (ModTypeReplicate (Replicate (Just n)))
 
-mkPatSeq :: Seq (Pat b a, Rational) -> Reader b (Pat b a)
-mkPatSeq = \case
+mkPatSeq :: Seq (Pat b a) -> Reader b (Pat b a)
+mkPatSeq = mkPatRel . fmap (,1)
+
+mkPatRel :: Seq (Pat b a, Rational) -> Reader b (Pat b a)
+mkPatRel = \case
   Empty -> mkPat PatSilence
   (x, _) :<| Empty -> pure x
   xs ->
@@ -100,9 +103,13 @@ class (Functor f, Monad (PatM f), Default (PatA f)) => Pattern f where
   patRand :: Seq (f a) -> f a
   patRand = patCon . patRand'
 
-  patSeq' :: Seq (f a, Rational) -> PatM f (f a)
-  patSeq :: Seq (f a, Rational) -> f a
+  patSeq' :: Seq (f a) -> PatM f (f a)
+  patSeq :: Seq (f a) -> f a
   patSeq = patCon . patSeq'
+
+  patRel' :: Seq (f a, Rational) -> PatM f (f a)
+  patRel :: Seq (f a, Rational) -> f a
+  patRel = patCon . patRel'
 
   patEuc' :: Euclid -> f a -> PatM f (f a)
   patEuc :: Euclid -> f a -> f a
@@ -141,6 +148,7 @@ instance (Default b) => Pattern (Pat b) where
   patAlt' = mkPatGroup GroupTypeAlt
   patRand' = mkPatGroup GroupTypeRand
   patSeq' = mkPatSeq
+  patRel' = mkPatRel
   patEuc' = mkPatMod . ModTypeEuclid
   patRep' = mkPatRep
   patFast' = mkPatSpeed SpeedDirFast

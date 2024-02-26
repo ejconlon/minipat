@@ -66,7 +66,7 @@ goInterp useValue = \case
   PatShort _ -> throwRw InterpErrShort
   PatGroup (Group _ ty els) -> do
     case ty of
-      GroupTypeSeq _ -> construct1 (patSeq' els)
+      GroupTypeSeq _ -> construct1 (patRel' els)
       GroupTypePar -> construct1 (patPar' (fmap fst els))
       GroupTypeRand ->
         let els'' = fmap (\(el, w) -> guardFastBy w el) els

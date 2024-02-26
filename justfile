@@ -19,7 +19,7 @@ build target="":
 
 # Enter repl
 repl target="":
-  stack ghci --test --ghci-options "-XOverloadedStrings" {{ target }}
+  stack ghci --test --ghci-options "-XOverloadedStrings -XOverloadedLists" {{ target }}
 
 # Clean stack work
 clean:

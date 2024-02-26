@@ -76,8 +76,11 @@ estreamDegBy = estreamMap . streamDegBy
 estreamDeg :: EStream Rational -> EStream a -> EStream a
 estreamDeg = estreamLiftA2 streamDeg
 
-estreamSeq :: Seq (EStream a, Rational) -> EStream a
-estreamSeq = EStream . fmap streamSeq . traverse (\(EStream e, r) -> fmap (,r) e)
+estreamSeq :: Seq (EStream a) -> EStream a
+estreamSeq = estreamRel . fmap (,1)
+
+estreamRel :: Seq (EStream a, Rational) -> EStream a
+estreamRel = EStream . fmap streamRel . traverse (\(EStream e, r) -> fmap (,r) e)
 
 estreamRep :: Integer -> EStream a -> EStream a
 estreamRep = estreamMap . streamRep
@@ -113,6 +116,7 @@ instance Pattern EStream where
   patAlt' = Identity . estreamAlt
   patRand' = Identity . estreamRand
   patSeq' = Identity . estreamSeq
+  patRel' = Identity . estreamRel
   patEuc' e = Identity . estreamEuc e
   patRep' r = Identity . estreamRep r
   patFast' p = Identity . estreamFast p

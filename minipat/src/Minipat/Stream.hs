@@ -24,6 +24,7 @@ module Minipat.Stream
   , streamRun
   , streamAdjust
   , streamSeq
+  , streamRel
   , streamRep
   , streamFastBy
   , streamSlowBy
@@ -237,8 +238,11 @@ streamDegBy r (Stream k) = Stream (tapeDegradeBy r . k)
 streamDeg :: Stream Rational -> Stream a -> Stream a
 streamDeg = streamAdjust streamDegBy
 
-streamSeq :: Seq (Stream a, Rational) -> Stream a
-streamSeq ss = Stream $ \arc ->
+streamSeq :: Seq (Stream a) -> Stream a
+streamSeq = streamRel . fmap (,1)
+
+streamRel :: Seq (Stream a, Rational) -> Stream a
+streamRel ss = Stream $ \arc ->
   -- Sketch: split arc into cycles, for each render each stream over the cycle, slowing
   -- by length, then speed everything up by whole amount to fit all into one cycle
   let w = sum (fmap snd ss)
@@ -273,7 +277,7 @@ streamEuc (Euclid (fromInteger -> filled) (fromInteger -> steps) (maybe 0 fromIn
               ix = if ix1 >= steps then ix1 - steps else ix1
               active = mod ix filled == 0
           in  if active then activeEl else passiveEl
-  in  streamSeq eucSeq
+  in  streamRel eucSeq
 
 streamRand :: Seq (Stream a) -> Stream a
 streamRand ss =
@@ -326,6 +330,7 @@ instance Pattern Stream where
   patAlt' = Identity . streamAlt
   patRand' = Identity . streamRand
   patSeq' = Identity . streamSeq
+  patRel' = Identity . streamRel
   patEuc' e = Identity . streamEuc e
   patRep' r = Identity . streamRep r
   patFast' p = Identity . streamFast p
