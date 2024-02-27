@@ -2,8 +2,9 @@
 
 module Minipat.Live.Core
   ( Env (..)
-  , defaultEnv
   , St
+  , newSt
+  , initRes
   , stLogger
   , stEnv
   , stBackend
@@ -44,6 +45,7 @@ import Control.Exception (throwIO)
 import Control.Monad (unless, when)
 import Control.Monad.IO.Class (liftIO)
 import Data.Acquire (Acquire)
+import Data.Default (Default (..))
 import Data.Foldable (foldl')
 import Data.IORef (IORef, atomicModifyIORef', modifyIORef', newIORef, readIORef)
 import Data.Kind (Type)
@@ -55,11 +57,11 @@ import Data.Sequence qualified as Seq
 import Data.Text (Text)
 import Data.Text qualified as T
 import Minipat.EStream (EStream (..))
-import Minipat.Live.Attrs (Squishy (..))
 import Minipat.Live.Backend (Backend (..), Callback (..), UninitErr (..), WithPlayMeta)
 import Minipat.Live.Logger (LogAction, logDebug, logException, logInfo, logWarn, nullLogger)
 import Minipat.Live.Play (PlayEnv (..), PlayErr, WithOrbit (..), playTape)
 import Minipat.Live.Resources (RelVar, acquireLoop, relVarAcquire, relVarDispose, relVarUse)
+import Minipat.Live.Squish (Squish (..))
 import Minipat.Print (prettyShow, prettyShowAll)
 import Minipat.Stream (Stream, streamRun, tapeToList)
 import Minipat.Time (Arc (..), CycleArc, CycleTime (..), bpmToCps, cpsToBpm)
@@ -80,12 +82,12 @@ data Env = Env
   }
   deriving stock (Eq, Ord, Show)
 
-defaultEnv :: Env
-defaultEnv =
-  Env
-    { envCps = 1 % 2 -- 120 bpm, 4 bpc
-    , envGpc = 16 -- Number of gens per cycle
-    }
+instance Default Env where
+  def =
+    Env
+      { envCps = 1 % 2 -- 120 bpm, 4 bpc
+      , envGpc = 16 -- Number of gens per cycle
+      }
 
 -- * State
 
@@ -153,6 +155,7 @@ initRes isSync st = do
           now <- currentTime
           relVarAcquire rv (acqGenTask st now)
     modifyMVar_ (stRes st) (const (pure (Just (Resources rv genTask dat))))
+  setPlaying st True
 
 initSt :: (Backend i) => Bool -> LogAction -> i -> Env -> IO (St i)
 initSt isSync logger be env = newSt logger be env >>= \st -> st <$ initRes isSync st
@@ -183,9 +186,11 @@ stepSendSt :: (Backend i) => St i -> Seq (WithPlayMeta (BackendAttrs i)) -> IO (
 stepSendSt st = backendSend (stBackend st) (stLogger st) (mkCallback st)
 
 disposeSt :: St i -> IO ()
-disposeSt st = modifyMVarMasked_ (stRes st) $ \case
-  Nothing -> pure Nothing
-  Just res -> Nothing <$ relVarDispose (resRel res)
+disposeSt st = do
+  setPlaying st False
+  modifyMVarMasked_ (stRes st) $ \case
+    Nothing -> pure Nothing
+    Just res -> Nothing <$ relVarDispose (resRel res)
 
 mkCallback :: St i -> Callback (BackendData i)
 mkCallback st = Callback (useCallback st)
@@ -255,13 +260,13 @@ updateOrbits st f = atomically $ do
   let z = foldl' (\x (o, y) -> x <> fmap (WithOrbit o) y) mempty (Map.toList m')
   writeTVar (domStream dom) z
 
-setOrbit :: (Squishy (BackendAttrs i) a) => St i -> Integer -> EStream a -> IO ()
+setOrbit :: (Squish (BackendAttrs i) a) => St i -> Integer -> EStream a -> IO ()
 setOrbit st o es =
   case unEStream es of
     Left e -> logException (stLogger st) ("Error setting orbit " <> T.pack (show o)) e
     Right s -> setOrbit' st o s
 
-setOrbit' :: (Squishy (BackendAttrs i) a) => St i -> Integer -> Stream a -> IO ()
+setOrbit' :: (Squish (BackendAttrs i) a) => St i -> Integer -> Stream a -> IO ()
 setOrbit' st o s = updateOrbits st (Map.insert o (fmap squish s))
 
 clearOrbit :: St i -> Integer -> IO ()
@@ -369,7 +374,7 @@ mergeRecord ce start end now0 onInit = do
 simpleRecord
   :: (St (RecordBackend a) -> IO ())
   -> IO (Seq (WithPlayMeta a))
-simpleRecord = fmap fst . mergeRecord defaultEnv 0 1 0
+simpleRecord = fmap fst . mergeRecord def 0 1 0
 
 -- Helpers
 
@@ -406,7 +411,7 @@ logAsyncState logger name task = do
         Left e -> False <$ logException logger ("Task " <> name <> " failed") e
         Right _ -> False <$ logWarn logger ("Task " <> name <> " not running")
 
-checkTasks :: Backend i => St i -> IO Bool
+checkTasks :: (Backend i) => St i -> IO Bool
 checkTasks st =
   let logger = stLogger st
   in  withMVar (stRes st) $ \case

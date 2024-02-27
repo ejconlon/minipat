@@ -6,9 +6,6 @@
 :set prompt "> "
 :set prompt-cont "| "
 
-import Dahdit.Midi.Midi
-import Minipat.Midi.Boot
-
 putStrLn "==== minipat-midi =========================================="
 putStrLn "Quit with Ctrl-d or `:quit`"
 putStrLn "Clear orbits with `hush` or stop with `panic`"
@@ -16,7 +13,8 @@ putStrLn "List available functions with `:browse Minipat.Midi.Boot`"
 putStrLn "Show documentation with `:doc someFunctionName`"
 putStrLn "============================================================"
 
-implSt <- initialize
-
-instance LiveSt where { type LiveBackend = MidiBackend; liveSt = implSt }
+import Minipat.Midi.Boot
+stRef <- allocate @MidiBackend
+instance LiveSt where { type LiveBackend = MidiBackend; liveStRef = stRef }
+initialize
 

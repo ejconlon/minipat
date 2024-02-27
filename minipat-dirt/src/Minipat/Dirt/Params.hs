@@ -1,17 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Minipat.Live.Params where
+module Minipat.Dirt.Params where
 
-import Data.Int (Int32)
-import Data.Text (Text)
 import Minipat.EStream (EStream)
 import Minipat.Live.Attrs (Attr (..))
-
-pF :: (Real a) => Text -> EStream a -> EStream (Attr Float)
-pF k = fmap (Attr k . realToFrac)
-
-pI :: (Integral a) => Text -> EStream a -> EStream (Attr Int32)
-pI k = fmap (Attr k . fromIntegral)
+import Minipat.Live.Extra (pF)
 
 accelerate
   , attack
@@ -75,7 +68,7 @@ sustain = pF "sustain"
 tremolodepth = pF "tremolodepth"
 tremolorate = pF "tremolorate"
 
--- Shorthand for those effect parameters
+-- Abbreviations for those effect parameters
 accel
   , att
   , bpf

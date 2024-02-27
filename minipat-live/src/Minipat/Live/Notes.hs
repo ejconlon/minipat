@@ -3,9 +3,12 @@
 
 module Minipat.Live.Notes where
 
+import Dahdit.Midi.Osc (Datum (..))
 import Data.Maybe (fromMaybe)
 import Data.Sequence (Seq)
 import Data.Text (Text)
+import Minipat.Live.Attrs (Attrs, attrsSingleton)
+import Minipat.Live.Squish (Squish (..))
 import Prettyprinter (Pretty (..))
 
 data NoteName
@@ -114,6 +117,9 @@ octNoteIsMidi (OctNote moct nn) =
 newtype Note = Note {unNote :: Integer}
   deriving stock (Show)
   deriving newtype (Eq, Ord, Pretty)
+
+instance Squish Attrs Note where
+  squish (Note n) = attrsSingleton "note" (DatumInt32 (fromInteger n))
 
 c5MidiNum :: Integer
 c5MidiNum = 72

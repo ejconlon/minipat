@@ -3,29 +3,28 @@
 -- | Superdirt-specific implementation
 module Minipat.Dirt.Impl
   ( DirtBackend (..)
-  , defaultDirtBackend
   , DirtSt
-  , handshake
   )
 where
 
 import Control.Concurrent.Async (Async)
 import Control.Concurrent.STM (atomically)
 import Control.Concurrent.STM.TQueue (TQueue, flushTQueue, newTQueueIO, writeTQueue)
-import Control.Exception (SomeException, bracket, throwIO)
+import Control.Exception (SomeException, throwIO)
 import Control.Monad (void)
 import Control.Monad.IO.Class (liftIO)
 import Dahdit.Midi.Osc (Datum (..), Msg (..), Packet (..))
 import Dahdit.Midi.OscAddr (RawAddrPat)
 import Dahdit.Network (Conn (..), HostPort (..), resolveAddr, runDecoder, runEncoder, udpServerConn)
+import Data.Default (Default (..))
 import Data.Foldable (foldl', for_)
 import Data.Functor ((<&>))
 import Data.Sequence (Seq (..))
 import Data.Text (Text)
 import Minipat.Live.Attrs (Attrs, DupeAttrErr, attrsDefault, attrsToList, attrsTryInsert, attrsUnalias)
 import Minipat.Live.Backend (Backend (..), Callback (..), PlayMeta (..), WithPlayMeta (..), pmRealLength)
-import Minipat.Live.Core (St, setPlaying, stBackend, stLogger, useCallback)
-import Minipat.Live.Logger (logException, logInfo)
+import Minipat.Live.Core (St (..))
+import Minipat.Live.Logger (LogAction, logError, logException, logInfo)
 import Minipat.Live.Resources (acquireAwait, qhTQueue, withTimeout)
 import Minipat.Time (Arc (..))
 import Nanotime (PosixTime, TimeDelta, timeDeltaFromFracSecs, timeDeltaToNanos)
@@ -50,13 +49,13 @@ data DirtBackend = DirtBackend
   }
   deriving stock (Eq, Ord, Show)
 
-defaultDirtBackend :: DirtBackend
-defaultDirtBackend =
-  DirtBackend
-    { dbTargetHp = HostPort (Just "127.0.0.1") 57120
-    , dbListenHp = HostPort (Just "127.0.0.1") 57129
-    , dbOscTimeout = timeDeltaFromFracSecs @Double 0.1
-    }
+instance Default DirtBackend where
+  def =
+    DirtBackend
+      { dbTargetHp = HostPort (Just "127.0.0.1") 57120
+      , dbListenHp = HostPort (Just "127.0.0.1") 57129
+      , dbOscTimeout = timeDeltaFromFracSecs @Double 0.1
+      }
 
 type DirtSt = St DirtBackend
 
@@ -84,14 +83,27 @@ attrsConvert aliases (WithPlayMeta pm attrs) = do
     >>= attrsTryInsert "cps" (DatumFloat cps)
     <&> attrsDefault "orbit" (DatumInt32 (fromInteger orbit))
 
+-- Handshake with SuperDirt
+handshake :: LogAction -> TimeDelta -> OscConn -> IO ()
+handshake logger timeout oscConn = do
+  logInfo logger "Handshaking ..."
+  sendPacket oscConn handshakePacket
+  resp <- recvPacket timeout oscConn
+  case resp of
+    Left err -> do
+      logError logger "... handshake FAILED"
+      throwIO err
+    Right _ -> logInfo logger "... handshake succeeded"
+
 instance Backend DirtBackend where
   type BackendData DirtBackend = DirtData
   type BackendAttrs DirtBackend = Attrs
 
-  backendInit (DirtBackend targetHp listenHp _) logger getPlayingSTM = do
+  backendInit (DirtBackend targetHp listenHp timeout) logger getPlayingSTM = do
     targetAddr <- liftIO (resolveAddr targetHp)
     let acqOscConn = fmap (OscConn targetAddr) (udpServerConn Nothing listenHp)
     oscConn <- acqOscConn
+    liftIO (handshake logger timeout oscConn)
     eventQueue <- liftIO newTQueueIO
     let send pw = do
           case attrsConvert dirtAliases pw of
@@ -106,28 +118,6 @@ instance Backend DirtBackend where
 
   -- TODO really check
   backendCheck _ _ _ = pure True
-
-sendPacketSt :: DirtSt -> Packet -> IO ()
-sendPacketSt st p = useCallback st (\dd -> sendPacket (ddOscConn dd) p)
-
-recvPacketSt :: DirtSt -> IO (Either SomeException Packet)
-recvPacketSt st = useCallback st (recvPacket (dbOscTimeout (stBackend st)) . ddOscConn)
-
--- | Handshake with SuperDirt
--- On success set playing true; on error false
-handshake :: DirtSt -> IO ()
-handshake st = bracket acq rel (const (pure ()))
- where
-  logger = stLogger st
-  acq = do
-    logInfo logger "Handshaking ..."
-    sendPacketSt st handshakePacket
-    recvPacketSt st
-  rel resp = do
-    ok <- case resp of
-      Left err -> False <$ logException logger "... handshake FAILED" err
-      Right _ -> True <$ logInfo logger "... handshake succeeded"
-    setPlaying st ok
 
 namedPayload :: Attrs -> Seq Datum
 namedPayload = foldl' go Empty . attrsToList

@@ -19,6 +19,7 @@ dependencies:
 - containers >= 0.6 && < 0.7
 - dahdit-midi >= 0.5.5 && < 0.6
 - dahdit-network >= 0.5.2 && < 0.6
+- data-default >= 0.7 && < 0.8
 - minipat >= 0.1 && < 0.2
 - minipat-live >= 0.1 && < 0.2
 - nanotime >= 0.3.2 && < 0.4

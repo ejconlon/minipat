@@ -6,8 +6,6 @@
 :set prompt "> "
 :set prompt-cont "| "
 
-import Minipat.Dirt.Boot
-
 putStrLn "==== minipat-dirt =========================================="
 putStrLn "Quit with Ctrl-d or `:quit`"
 putStrLn "Clear orbits with `hush` or stop with `panic`"
@@ -15,9 +13,8 @@ putStrLn "List available functions with `:browse Minipat.Dirt.Boot`"
 putStrLn "Show documentation with `:doc someFunctionName`"
 putStrLn "============================================================"
 
-implSt <- initialize
-
-instance LiveSt where { type LiveBackend = DirtBackend; liveSt = implSt }
-
-handshake
+import Minipat.Dirt.Boot
+stRef <- allocate @DirtBackend
+instance LiveSt where { type LiveBackend = DirtBackend; liveStRef = stRef }
+initialize
 

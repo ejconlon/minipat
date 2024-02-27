@@ -68,6 +68,7 @@ library
     , containers ==0.6.*
     , dahdit >=0.5.1 && <0.6
     , dahdit-midi >=0.5.5 && <0.6
+    , data-default ==0.7.*
     , heaps ==0.4.*
     , minipat ==0.1.*
     , minipat-live ==0.1.*

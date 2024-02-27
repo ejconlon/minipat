@@ -1,6 +1,9 @@
 -- | Controls and prelude for the live system
 module Minipat.Live.Boot
   ( LiveSt (..)
+  , allocate
+  , initialize
+  , reallocate
   , dispose
   , getCps
   , getAhead
@@ -31,76 +34,97 @@ module Minipat.Live.Boot
   , d6
   , d7
   , module Minipat.Live.Combinators
-  , module Minipat.Live.Params
   )
 where
 
 import Control.Monad (void)
+import Data.Default (Default (..))
+import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Kind (Type)
 import Minipat.EStream (EStream)
-import Minipat.Live.Attrs (Squishy (..))
 import Minipat.Live.Backend qualified as B
 import Minipat.Live.Combinators
 import Minipat.Live.Core qualified as C
-import Minipat.Live.Params
+import Minipat.Live.Logger qualified as L
 import Minipat.Live.Play (WithOrbit)
+import Minipat.Live.Squish (Squish (..))
 import Minipat.Stream (Stream)
 import Nanotime (TimeDelta)
 import Prettyprinter (Pretty)
 
 class (B.Backend LiveBackend) => LiveSt where
   type LiveBackend :: Type
-  liveSt :: C.St LiveBackend
+  liveStRef :: IORef (C.St LiveBackend)
 
 type LiveAttrs = B.BackendAttrs LiveBackend
 
+readLiveSt :: (LiveSt) => IO (C.St LiveBackend)
+readLiveSt = readIORef liveStRef
+
+allocate :: (Default i) => IO (IORef (C.St i))
+allocate = do
+  logger <- L.newLogger
+  st <- C.newSt logger def def
+  newIORef st
+
+initialize :: (LiveSt) => IO ()
+initialize = readLiveSt >>= C.initRes False
+
+reallocate :: (LiveSt) => LiveBackend -> C.Env -> IO ()
+reallocate be env = do
+  oldSt <- readLiveSt
+  C.disposeSt oldSt
+  newSt <- C.newSt (C.stLogger oldSt) be env
+  writeIORef liveStRef newSt
+  initialize
+
 dispose :: (LiveSt) => IO ()
-dispose = C.disposeSt liveSt
+dispose = readLiveSt >>= C.disposeSt
 
 getCps :: (LiveSt) => IO Rational
-getCps = C.getCps liveSt
+getCps = readLiveSt >>= C.getCps
 
 getAhead :: (LiveSt) => IO TimeDelta
-getAhead = C.getAhead liveSt
+getAhead = readLiveSt >>= C.getAhead
 
 getPlaying :: (LiveSt) => IO Bool
-getPlaying = C.getPlaying liveSt
+getPlaying = readLiveSt >>= C.getPlaying
 
 getStream :: (LiveSt) => IO (Stream (WithOrbit LiveAttrs))
-getStream = C.getStream liveSt
+getStream = readLiveSt >>= C.getStream
 
 getCycle :: (LiveSt) => IO Integer
-getCycle = C.getCycle liveSt
+getCycle = readLiveSt >>= C.getCycle
 
 getTempo :: (LiveSt) => IO Rational
-getTempo = C.getTempo liveSt
+getTempo = readLiveSt >>= C.getTempo
 
 setCps :: (LiveSt) => Rational -> IO ()
-setCps = C.setCps liveSt
+setCps x = readLiveSt >>= \st -> C.setCps st x
 
 setPlaying :: (LiveSt) => Bool -> IO ()
-setPlaying = C.setPlaying liveSt
+setPlaying x = readLiveSt >>= \st -> C.setPlaying st x
 
 setCycle :: (LiveSt) => Integer -> IO ()
-setCycle = C.setCycle liveSt
+setCycle x = readLiveSt >>= \st -> C.setCycle st x
 
 setTempo :: (LiveSt) => Rational -> IO ()
-setTempo = C.setTempo liveSt
+setTempo x = readLiveSt >>= \st -> C.setTempo st x
 
-setOrbit :: (LiveSt, Squishy LiveAttrs a) => Integer -> EStream a -> IO ()
-setOrbit = C.setOrbit liveSt
+setOrbit :: (LiveSt, Squish LiveAttrs a) => Integer -> EStream a -> IO ()
+setOrbit x y = readLiveSt >>= \st -> C.setOrbit st x y
 
 clearOrbit :: (LiveSt) => Integer -> IO ()
-clearOrbit = C.clearOrbit liveSt
+clearOrbit x = readLiveSt >>= \st -> C.clearOrbit st x
 
 clearAllOrbits :: (LiveSt) => IO ()
-clearAllOrbits = C.clearAllOrbits liveSt
+clearAllOrbits = readLiveSt >>= C.clearAllOrbits
 
 hush :: (LiveSt) => IO ()
-hush = C.hush liveSt
+hush = readLiveSt >>= C.hush
 
 panic :: (LiveSt) => IO ()
-panic = C.panic liveSt
+panic = readLiveSt >>= C.panic
 
 play :: (LiveSt) => IO ()
 play = setPlaying True
@@ -109,16 +133,16 @@ stop :: (LiveSt) => IO ()
 stop = setPlaying False
 
 checkTasks :: (LiveSt) => IO ()
-checkTasks = void (C.checkTasks liveSt)
+checkTasks = readLiveSt >>= void . C.checkTasks
 
 -- | Prints the stream's events that would be generated in the current cycle
 peek :: (LiveSt, Pretty a) => EStream a -> IO ()
-peek = C.peek liveSt
+peek x = readLiveSt >>= \st -> C.peek st x
 
-d :: (LiveSt, Squishy LiveAttrs a) => Integer -> EStream a -> IO ()
+d :: (LiveSt, Squish LiveAttrs a) => Integer -> EStream a -> IO ()
 d = setOrbit
 
-d0, d1, d2, d3, d4, d5, d6, d7 :: (LiveSt, Squishy LiveAttrs a) => EStream a -> IO ()
+d0, d1, d2, d3, d4, d5, d6, d7 :: (LiveSt, Squish LiveAttrs a) => EStream a -> IO ()
 d0 = d 0
 d1 = d 1
 d2 = d 2

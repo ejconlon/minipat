@@ -19,6 +19,7 @@ dependencies:
 - containers >= 0.6 && < 0.7
 - dahdit >= 0.5.1 && < 0.6
 - dahdit-midi >= 0.5.5 && < 0.6
+- data-default >= 0.7 && < 0.8
 - heaps >= 0.4 && < 0.5
 - minipat >= 0.1 && < 0.2
 - minipat-live >= 0.1 && < 0.2

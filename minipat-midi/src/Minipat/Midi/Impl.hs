@@ -6,11 +6,12 @@ module Minipat.Midi.Impl where
 
 import Control.Concurrent.Async (Async)
 import Control.Concurrent.STM (atomically)
-import Control.Concurrent.STM.TVar (TVar, modifyTVar', newTVarIO, writeTVar, readTVarIO)
+import Control.Concurrent.STM.TVar (TVar, modifyTVar', newTVarIO, readTVarIO, writeTVar)
 import Control.Monad.IO.Class (liftIO)
 import Dahdit.Iface (mutEncode)
 import Dahdit.Midi.Midi (ChanData (..), ChanVoiceData (..), ShortMsg (..))
 import Data.Acquire (mkAcquire)
+import Data.Default (Default (..))
 import Data.Foldable (foldl')
 import Data.Functor ((<&>))
 import Data.Heap (Entry (..), Heap)
@@ -33,8 +34,8 @@ newtype MidiBackend = MidiBackend
   { mbPortSel :: String -> Bool
   }
 
-defaultMidiBackend :: MidiBackend
-defaultMidiBackend = MidiBackend (const True)
+instance Default MidiBackend where
+  def = MidiBackend (const True)
 
 type MidiSt = St MidiBackend
 

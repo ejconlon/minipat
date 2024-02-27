@@ -1,10 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Minipat.Live.Attrs
-  ( DatumProxy (..)
-  , datumProxyType
-  , Attr (..)
-  , Attrs
+  ( Attrs
   , attrsSingleton
   , attrsFromList
   , attrsLookup
@@ -15,60 +12,20 @@ module Minipat.Live.Attrs
   , DupeAttrErr
   , attrsTryInsert
   , attrsUnalias
-  , Squishy (..)
-  , squishMerge
+  , Attr (..)
   )
 where
 
 import Control.Exception (Exception)
 import Control.Monad (foldM)
-import Dahdit.Midi.Osc (Datum (..), DatumType (..), IsDatum (..))
-import Data.Int (Int32, Int64)
+import Dahdit.Midi.Osc (Datum (..), IsDatum (..))
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
-import Minipat.Ast (Ident (..))
-import Minipat.Live.Notes (Note (..))
-import Prettyprinter (Doc, Pretty (..))
+import Minipat.Live.Datum (prettyDatum)
+import Minipat.Live.Squish (Squish (..))
+import Prettyprinter (Pretty (..))
 import Prettyprinter qualified as P
-
-data Sound = Sound
-  { soundIdent :: !Ident
-  , soundNote :: !(Maybe Note)
-  }
-  deriving stock (Eq, Ord, Show)
-
-data DatumProxy a where
-  DatumProxyInt32 :: DatumProxy Int32
-  DatumProxyInt64 :: DatumProxy Int64
-  DatumProxyFloat :: DatumProxy Float
-  DatumProxyDouble :: DatumProxy Double
-  DatumProxyString :: DatumProxy Text
-
-datumProxyType :: DatumProxy a -> DatumType
-datumProxyType = \case
-  DatumProxyInt32 -> DatumTypeInt32
-  DatumProxyInt64 -> DatumTypeInt64
-  DatumProxyFloat -> DatumTypeFloat
-  DatumProxyDouble -> DatumTypeDouble
-  DatumProxyString -> DatumTypeString
-
-prettyDatum :: Datum -> Doc ann
-prettyDatum = \case
-  DatumInt32 x -> pretty x
-  DatumInt64 x -> pretty x
-  DatumFloat x -> pretty x
-  DatumDouble x -> pretty x
-  DatumString x -> pretty x
-  DatumBlob _ -> "<BLOB>"
-  DatumTime _ -> "<TIME>"
-  DatumMidi _ -> "<MIDI>"
-
-data Attr a = Attr
-  { attrKey :: !Text
-  , attrVal :: !a
-  }
-  deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
 
 newtype Attrs = Attrs {unAttrs :: Map Text Datum}
   deriving stock (Show)
@@ -127,20 +84,11 @@ attrsUnalias as m0 = foldM go m0 as
       Nothing -> pure m
       Just v -> attrsTryInsert y v (attrsDelete x m)
 
-class Squishy q a where
-  squish :: a -> q
+data Attr a = Attr
+  { attrKey :: !Text
+  , attrVal :: !a
+  }
+  deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
 
-squishMerge :: (Semigroup q, Squishy q a, Squishy q b) => a -> b -> q
-squishMerge a b = squish a <> squish b
-
-instance {-# OVERLAPPABLE #-} Squishy q q where
-  squish = id
-
-instance {-# INCOHERENT #-} (Monoid q, Squishy q a) => Squishy q (Maybe a) where
-  squish = maybe mempty squish
-
-instance (IsDatum a) => Squishy Attrs (Attr a) where
+instance (IsDatum a) => Squish Attrs (Attr a) where
   squish (Attr k v) = attrsSingleton k (toDatum v)
-
-instance Squishy Attrs Note where
-  squish (Note n) = attrsSingleton "note" (DatumInt32 (fromInteger n))
