@@ -63,6 +63,7 @@ library
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints -fno-warn-unused-top-binds
   build-depends:
       RtMidi >=0.8 && <1.0
+    , async ==2.2.*
     , base >=4.12 && <5
     , containers ==0.6.*
     , dahdit >=0.5.1 && <0.6

@@ -35,6 +35,7 @@ module Minipat.Live.Boot
   )
 where
 
+import Control.Monad (void)
 import Data.Kind (Type)
 import Minipat.EStream (EStream)
 import Minipat.Live.Attrs (Squishy (..))
@@ -108,7 +109,7 @@ stop :: (LiveSt) => IO ()
 stop = setPlaying False
 
 checkTasks :: (LiveSt) => IO ()
-checkTasks = C.checkTasks liveSt
+checkTasks = void (C.checkTasks liveSt)
 
 -- | Prints the stream's events that would be generated in the current cycle
 peek :: (LiveSt, Pretty a) => EStream a -> IO ()

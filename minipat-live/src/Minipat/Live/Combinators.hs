@@ -17,7 +17,7 @@ module Minipat.Live.Combinators
   , slowBy
   , lateBy
   , earlyBy
-  , layout
+  , pieces
   , fastCat
   , slowCat
   , fastList

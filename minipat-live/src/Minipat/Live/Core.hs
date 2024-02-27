@@ -28,6 +28,7 @@ module Minipat.Live.Core
   , hush
   , panic
   , checkTasks
+  , logAsyncState
   , peek
   , stepRecord
   , mergeRecord
@@ -35,7 +36,7 @@ module Minipat.Live.Core
   )
 where
 
-import Control.Concurrent.Async (Async, poll)
+import Control.Concurrent.Async (Async, async, poll)
 import Control.Concurrent.MVar (MVar, modifyMVarMasked_, modifyMVar_, newMVar, withMVar)
 import Control.Concurrent.STM (STM, atomically)
 import Control.Concurrent.STM.TVar (TVar, modifyTVar', newTVarIO, readTVar, readTVarIO, stateTVar, writeTVar)
@@ -124,7 +125,7 @@ reinitDomain (Env cps gpc) dom = atomically $ do
 
 data Resources d = Resources
   { resRel :: !RelVar
-  , resGenTask :: !(Maybe (Async ()))
+  , resGenTask :: !(Async ())
   , resData :: !d
   }
 
@@ -147,10 +148,10 @@ initRes isSync st = do
     dat <- relVarAcquire rv (backendInit (stBackend st) (stLogger st) getPlayingSTM)
     genTask <-
       if isSync
-        then pure Nothing
+        then liftIO (async (pure ()))
         else do
           now <- currentTime
-          fmap Just (relVarAcquire rv (acqGenTask st now))
+          relVarAcquire rv (acqGenTask st now)
     modifyMVar_ (stRes st) (const (pure (Just (Resources rv genTask dat))))
 
 initSt :: (Backend i) => Bool -> LogAction -> i -> Env -> IO (St i)
@@ -395,27 +396,25 @@ advanceCycleSTM dom = do
   modifyTVar' (domGenCycle dom) (+ 1)
   modifyTVar' (domAbsGenCycle dom) (+ 1)
 
-logAsyncState :: LogAction -> Text -> Async () -> IO ()
+logAsyncState :: LogAction -> Text -> Async () -> IO Bool
 logAsyncState logger name task = do
   mea <- poll task
   case mea of
-    Nothing -> logInfo logger ("Task " <> name <> " is running")
+    Nothing -> True <$ logInfo logger ("Task " <> name <> " is running")
     Just ea ->
       case ea of
-        Left e -> logException logger ("Task " <> name <> " failed") e
-        Right _ -> logWarn logger ("Task " <> name <> " not running")
+        Left e -> False <$ logException logger ("Task " <> name <> " failed") e
+        Right _ -> False <$ logWarn logger ("Task " <> name <> " not running")
 
-checkTasks :: St i -> IO ()
+checkTasks :: Backend i => St i -> IO Bool
 checkTasks st =
   let logger = stLogger st
   in  withMVar (stRes st) $ \case
-        Nothing -> pure ()
-        Just res ->
-          -- TODO check backend
-          case resGenTask res of
-            Nothing -> logInfo logger "No tasks running"
-            Just genTask -> do
-              logAsyncState logger "gen" genTask
+        Nothing -> pure False
+        Just res -> do
+          genOk <- logAsyncState logger "gen" (resGenTask res)
+          backOk <- backendCheck (stBackend st) logger (mkCallback st)
+          pure (genOk && backOk)
 
 logEvents :: (Pretty q) => LogAction -> Domain q -> Seq (WithPlayMeta q) -> IO ()
 logEvents logger dom pevs =

@@ -6,6 +6,7 @@
 :set prompt "> "
 :set prompt-cont "| "
 
+import Dahdit.Midi.Midi
 import Minipat.Midi.Boot
 
 putStrLn "==== minipat-midi =========================================="

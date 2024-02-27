@@ -15,6 +15,7 @@ defaults:
 
 dependencies:
 - base >= 4.12 && < 5
+- async >= 2.2 && < 2.3
 - containers >= 0.6 && < 0.7
 - dahdit >= 0.5.1 && < 0.6
 - dahdit-midi >= 0.5.5 && < 0.6
