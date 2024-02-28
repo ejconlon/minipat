@@ -9,12 +9,11 @@ import Control.Concurrent.STM (atomically)
 import Control.Concurrent.STM.TVar (TVar, modifyTVar', newTVarIO, readTVarIO, writeTVar)
 import Control.Monad.IO.Class (liftIO)
 import Dahdit.Iface (mutEncode)
-import Dahdit.Midi.Midi (ChanData (..), ChanVoiceData (..), ShortMsg (..))
+import Dahdit.Midi.Midi (ChanData (..), ChanVoiceData (..), Channel, ShortMsg (..))
 import Data.Acquire (mkAcquire)
 import Data.Default (Default (..))
 import Data.Foldable (foldl')
-import Data.Functor ((<&>))
-import Data.Heap (Entry (..), Heap)
+import Data.Heap (Heap)
 import Data.Heap qualified as H
 import Data.Maybe (fromMaybe)
 import Data.Sequence (Seq (..))
@@ -39,26 +38,63 @@ instance Default MidiBackend where
 
 type MidiSt = St MidiBackend
 
-data MidiData = MidiData
-  { mdDevice :: !OutputDevice
-  , mdHeap :: !(TVar (Heap (Entry PosixTime ShortMsg)))
-  , mdSendTask :: !(Async ())
-  }
+-- | We order so that note offs come before other messages
+newtype SortedMsg = SortedMsg {unSortedMsg :: ShortMsg}
+  deriving stock (Show)
+  deriving newtype (Eq)
 
-mkMsgs :: WithPlayMeta ChanData -> Seq (PosixTime, ShortMsg)
+isNoteOff :: ShortMsg -> Bool
+isNoteOff = \case
+  ShortMsgChan _ (ChanDataVoice cvd) ->
+    case cvd of
+      ChanVoiceDataNoteOn _ 0 -> True
+      ChanVoiceDataNoteOff _ _ -> True
+      _ -> False
+  _ -> False
+
+instance Ord SortedMsg where
+  compare (SortedMsg m1) (SortedMsg m2) =
+    let o1 = isNoteOff m1
+        o2 = isNoteOff m2
+        r = compare m1 m2
+    in  if o1
+          then
+            if o2
+              then r
+              else LT
+          else
+            if o2
+              then GT
+              else r
+
+data TimedMsg = TimedMsg
+  { tmTime :: !PosixTime
+  , tmMsg :: !SortedMsg
+  }
+  deriving stock (Eq, Ord, Show)
+
+mkNoteOff :: Channel -> ChanData -> Maybe ShortMsg
+mkNoteOff c = \case
+  ChanDataVoice (ChanVoiceDataNoteOn n v)
+    | v > 0 ->
+        Just (ShortMsgChan c (ChanDataVoice (ChanVoiceDataNoteOn n 0)))
+  _ -> Nothing
+
+mkMsgs :: WithPlayMeta ChanData -> Seq TimedMsg
 mkMsgs (WithPlayMeta pm cd) =
   let Arc t1 t2 = pmRealArc pm
       c = fromInteger (pmOrbit pm)
       m1 = ShortMsgChan c cd
-      s1 = Seq.singleton (t1, m1)
-  in  case cd of
-        ChanDataVoice cvd -> case cvd of
-          ChanVoiceDataNoteOn n v
-            | v > 0 ->
-                let m2 = ShortMsgChan c (ChanDataVoice (ChanVoiceDataNoteOn n 0))
-                in  s1 :|> (t2, m2)
-          _ -> s1
-        _ -> s1
+      s1 = Seq.singleton (TimedMsg t1 (SortedMsg m1))
+  in  case mkNoteOff c cd of
+        Just m2 -> s1 :|> TimedMsg t2 (SortedMsg m2)
+        Nothing -> s1
+
+data MidiData = MidiData
+  { mdDevice :: !OutputDevice
+  , mdHeap :: !(TVar (Heap TimedMsg))
+  , mdSendTask :: !(Async ())
+  }
 
 instance Backend MidiBackend where
   type BackendData MidiBackend = MidiData
@@ -78,13 +114,13 @@ instance Backend MidiBackend where
     _ <- mkAcquire getPort (const (R.closePort device))
     heap <- liftIO (newTVarIO H.empty)
     buf <- liftIO (VSM.new 4)
-    let send (Entry _ m) = do
+    let send (TimedMsg _ (SortedMsg m)) = do
           len <- fmap fromIntegral (mutEncode m buf)
           VSM.unsafeWith buf (\ptr -> R.sendUnsafeMessage device ptr len)
-    fmap (MidiData device heap) (acquireAwait H.priority getPlayingSTM (qhHeap heap) send)
+    fmap (MidiData device heap) (acquireAwait tmTime getPlayingSTM (qhHeap heap) send)
 
   backendSend _ _ cb evs = runCallback cb $ \md ->
-    let entries = evs >>= mkMsgs <&> uncurry Entry
+    let entries = evs >>= mkMsgs
     in  atomically (modifyTVar' (mdHeap md) (\h -> foldl' (flip H.insert) h entries))
 
   backendClear _ _ cb = runCallback cb $ \md ->
@@ -94,6 +130,6 @@ instance Backend MidiBackend where
     h <- readTVarIO (mdHeap md)
     logInfo logger ("Queue length: " <> T.pack (show (H.size h)))
     case H.uncons h of
-      Just (Entry t m, _) -> logInfo logger ("Queue head: " <> T.pack (show t) <> " " <> T.pack (show m))
+      Just (TimedMsg t (SortedMsg m), _) -> logInfo logger ("Queue head: " <> T.pack (show t) <> " " <> T.pack (show m))
       Nothing -> pure ()
     logAsyncState logger "send" (mdSendTask md)
