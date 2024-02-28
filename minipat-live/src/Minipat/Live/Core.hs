@@ -48,7 +48,6 @@ import Data.Acquire (Acquire)
 import Data.Default (Default (..))
 import Data.Foldable (foldl')
 import Data.IORef (IORef, atomicModifyIORef', modifyIORef', newIORef, readIORef)
-import Data.Kind (Type)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Ratio ((%))
@@ -57,11 +56,11 @@ import Data.Sequence qualified as Seq
 import Data.Text (Text)
 import Data.Text qualified as T
 import Minipat.EStream (EStream (..))
+import Minipat.Live.Attrs (Attrs, IsAttrs (..))
 import Minipat.Live.Backend (Backend (..), Callback (..), UninitErr (..), WithPlayMeta)
 import Minipat.Live.Logger (LogAction, logDebug, logException, logInfo, logWarn, nullLogger)
 import Minipat.Live.Play (PlayEnv (..), PlayErr, WithOrbit (..), playTape)
 import Minipat.Live.Resources (RelVar, acquireLoop, relVarAcquire, relVarDispose, relVarUse)
-import Minipat.Live.Squish (Squish (..))
 import Minipat.Print (prettyShow, prettyShowAll)
 import Minipat.Stream (Stream, streamRun, tapeToList)
 import Minipat.Time (Arc (..), CycleArc, CycleTime (..), bpmToCps, cpsToBpm)
@@ -91,17 +90,17 @@ instance Default Env where
 
 -- * State
 
-data Domain q = Domain
+data Domain = Domain
   { domCps :: !(TVar Rational)
   , domGpc :: !(TVar Integer)
   , domPlaying :: !(TVar Bool)
   , domGenCycle :: !(TVar Integer)
   , domAbsGenCycle :: !(TVar Integer)
-  , domOrbits :: !(TVar (Map Integer (Stream q)))
-  , domStream :: !(TVar (Stream (WithOrbit q)))
+  , domOrbits :: !(TVar (Map Integer (Stream Attrs)))
+  , domStream :: !(TVar (Stream (WithOrbit Attrs)))
   }
 
-newDomain :: IO (Domain q)
+newDomain :: IO Domain
 newDomain =
   Domain
     <$> newTVarIO 0
@@ -112,10 +111,10 @@ newDomain =
     <*> newTVarIO mempty
     <*> newTVarIO mempty
 
-initDomain :: Env -> IO (Domain q)
+initDomain :: Env -> IO Domain
 initDomain env = newDomain >>= \d -> d <$ reinitDomain env d
 
-reinitDomain :: Env -> Domain q -> IO ()
+reinitDomain :: Env -> Domain -> IO ()
 reinitDomain (Env cps gpc) dom = atomically $ do
   writeTVar (domCps dom) cps
   writeTVar (domGpc dom) gpc
@@ -135,7 +134,7 @@ data St i = St
   { stLogger :: !LogAction
   , stBackend :: !i
   , stEnv :: !Env
-  , stDom :: !(Domain (BackendAttrs i))
+  , stDom :: !Domain
   , stRes :: !(MVar (Maybe (Resources (BackendData i))))
   }
 
@@ -169,7 +168,7 @@ initSyncSt = initSt True
 stepGenSt
   :: St i
   -> PosixTime
-  -> IO (CycleTime, PosixTime, Seq (WithPlayMeta (BackendAttrs i)))
+  -> IO (CycleTime, PosixTime, Seq (WithPlayMeta Attrs))
 stepGenSt st now = do
   (penv, mresult) <- atomically (genAndAdvanceSTM (stDom st) now)
   let cycleBounds = peCycleBounds penv
@@ -182,7 +181,7 @@ stepGenSt st now = do
       nextRealTime = peRealOrigin penv
   pure (nextCycTime, nextRealTime, events)
 
-stepSendSt :: (Backend i) => St i -> Seq (WithPlayMeta (BackendAttrs i)) -> IO ()
+stepSendSt :: (Backend i) => St i -> Seq (WithPlayMeta Attrs) -> IO ()
 stepSendSt st = backendSend (stBackend st) (stLogger st) (mkCallback st)
 
 disposeSt :: St i -> IO ()
@@ -212,7 +211,7 @@ getAhead = atomically . getAheadSTM . stDom
 getPlaying :: St i -> IO Bool
 getPlaying = readTVarIO . domPlaying . stDom
 
-getStream :: St i -> IO (Stream (WithOrbit (BackendAttrs i)))
+getStream :: St i -> IO (Stream (WithOrbit Attrs))
 getStream = readTVarIO . domStream . stDom
 
 getGenCycle :: St i -> IO Integer
@@ -253,21 +252,21 @@ setCycle st x = atomically $ do
   let y = x * gpc + mod gcyc gpc
   writeTVar (domGenCycle (stDom st)) y
 
-updateOrbits :: St i -> (Map Integer (Stream (BackendAttrs i)) -> Map Integer (Stream (BackendAttrs i))) -> IO ()
+updateOrbits :: St i -> (Map Integer (Stream Attrs) -> Map Integer (Stream Attrs)) -> IO ()
 updateOrbits st f = atomically $ do
   let dom = stDom st
   m' <- stateTVar (domOrbits dom) (\m -> let m' = f m in (m', m'))
   let z = foldl' (\x (o, y) -> x <> fmap (WithOrbit o) y) mempty (Map.toList m')
   writeTVar (domStream dom) z
 
-setOrbit :: (Squish (BackendAttrs i) a) => St i -> Integer -> EStream a -> IO ()
+setOrbit :: (IsAttrs a) => St i -> Integer -> EStream a -> IO ()
 setOrbit st o es =
   case unEStream es of
     Left e -> logException (stLogger st) ("Error setting orbit " <> T.pack (show o)) e
     Right s -> setOrbit' st o s
 
-setOrbit' :: (Squish (BackendAttrs i) a) => St i -> Integer -> Stream a -> IO ()
-setOrbit' st o s = updateOrbits st (Map.insert o (fmap squish s))
+setOrbit' :: (IsAttrs a) => St i -> Integer -> Stream a -> IO ()
+setOrbit' st o s = updateOrbits st (Map.insert o (fmap toAttrs s))
 
 clearOrbit :: St i -> Integer -> IO ()
 clearOrbit st o = updateOrbits st (Map.delete o)
@@ -306,20 +305,22 @@ peek st es =
 
 -- * Recording
 
-data RecordBackend (q :: Type) = RecordBackend
+data RecordBackend = RecordBackend
   deriving stock (Eq, Ord, Show)
 
-newtype RecordData q = RecordData {unRecordData :: IORef (Seq (WithPlayMeta q))}
+instance Default RecordBackend where
+  def = RecordBackend
 
-newRecordData :: IO (RecordData q)
+newtype RecordData = RecordData {unRecordData :: IORef (Seq (WithPlayMeta Attrs))}
+
+newRecordData :: IO RecordData
 newRecordData = fmap RecordData (newIORef Empty)
 
-flushRecordData :: RecordData q -> IO (Seq (WithPlayMeta q))
+flushRecordData :: RecordData -> IO (Seq (WithPlayMeta Attrs))
 flushRecordData (RecordData r) = atomicModifyIORef' r (Empty,)
 
-instance Backend (RecordBackend q) where
-  type BackendData (RecordBackend q) = RecordData q
-  type BackendAttrs (RecordBackend q) = q
+instance Backend RecordBackend where
+  type BackendData RecordBackend = RecordData
 
   backendInit _ _ _ = liftIO newRecordData
   backendSend _ _ cb vs = runCallback cb (\(RecordData r) -> modifyIORef' r (<> vs))
@@ -331,8 +332,8 @@ stepRecord
   -> Integer
   -> Integer
   -> PosixTime
-  -> (CycleTime -> PosixTime -> St (RecordBackend a) -> IO ())
-  -> (CycleTime -> PosixTime -> Seq (WithPlayMeta a) -> IO ())
+  -> (CycleTime -> PosixTime -> St RecordBackend -> IO ())
+  -> (CycleTime -> PosixTime -> Seq (WithPlayMeta Attrs) -> IO ())
   -> IO PosixTime
 stepRecord env start end now0 onEnter onLeave = go
  where
@@ -355,8 +356,8 @@ mergeRecord
   -> Integer
   -> Integer
   -> PosixTime
-  -> (St (RecordBackend a) -> IO ())
-  -> IO (Seq (WithPlayMeta a), PosixTime)
+  -> (St RecordBackend -> IO ())
+  -> IO (Seq (WithPlayMeta Attrs), PosixTime)
 mergeRecord ce start end now0 onInit = do
   let cycStart = fromInteger start
   r <- newIORef Empty
@@ -372,13 +373,13 @@ mergeRecord ce start end now0 onInit = do
   pure (tas, realEnd)
 
 simpleRecord
-  :: (St (RecordBackend a) -> IO ())
-  -> IO (Seq (WithPlayMeta a))
+  :: (St RecordBackend -> IO ())
+  -> IO (Seq (WithPlayMeta Attrs))
 simpleRecord = fmap fst . mergeRecord def 0 1 0
 
 -- Helpers
 
-getCycleArcSTM :: Domain q -> STM CycleArc
+getCycleArcSTM :: Domain -> STM CycleArc
 getCycleArcSTM dom = do
   gpc <- readTVar (domGpc dom)
   gcyc <- readTVar (domGenCycle dom)
@@ -386,17 +387,17 @@ getCycleArcSTM dom = do
       end = CycleTime ((gcyc + 1) % gpc)
   pure (Arc start end)
 
-getRealOriginSTM :: Domain q -> PosixTime -> STM PosixTime
+getRealOriginSTM :: Domain -> PosixTime -> STM PosixTime
 getRealOriginSTM dom now = do
   ahead <- getAheadSTM dom
   pure (addTime now ahead)
 
-clearAllOrbitsSTM :: Domain q -> STM ()
+clearAllOrbitsSTM :: Domain -> STM ()
 clearAllOrbitsSTM dom = do
   writeTVar (domOrbits dom) mempty
   writeTVar (domStream dom) mempty
 
-advanceCycleSTM :: Domain q -> STM ()
+advanceCycleSTM :: Domain -> STM ()
 advanceCycleSTM dom = do
   modifyTVar' (domGenCycle dom) (+ 1)
   modifyTVar' (domAbsGenCycle dom) (+ 1)
@@ -421,20 +422,20 @@ checkTasks st =
           backOk <- backendCheck (stBackend st) logger (mkCallback st)
           pure (genOk && backOk)
 
-logEvents :: (Pretty q) => LogAction -> Domain q -> Seq (WithPlayMeta q) -> IO ()
+logEvents :: (Pretty q) => LogAction -> Domain -> Seq (WithPlayMeta q) -> IO ()
 logEvents logger dom pevs =
   unless (Seq.null pevs) $ do
     arc <- atomically (getCycleArcSTM dom)
     logDebug logger ("Generated @ " <> prettyShow arc <> "\n" <> prettyShowAll "\n" pevs)
 
-getPlayEnvSTM :: Domain q -> PosixTime -> STM PlayEnv
+getPlayEnvSTM :: Domain -> PosixTime -> STM PlayEnv
 getPlayEnvSTM dom now = do
   realOrigin <- getRealOriginSTM dom now
   cycleBounds <- getCycleArcSTM dom
   cps <- readTVar (domCps dom)
   pure (PlayEnv realOrigin cycleBounds cps)
 
-genAndAdvanceSTM :: Domain q -> PosixTime -> STM (PlayEnv, Maybe (Either PlayErr (Seq (WithPlayMeta q))))
+genAndAdvanceSTM :: Domain -> PosixTime -> STM (PlayEnv, Maybe (Either PlayErr (Seq (WithPlayMeta Attrs))))
 genAndAdvanceSTM dom now = do
   penv <- getPlayEnvSTM dom now
   playing <- readTVar (domPlaying dom)
@@ -450,7 +451,7 @@ genAndAdvanceSTM dom now = do
       else pure Nothing
   pure (penv, mresult)
 
-getAheadSTM :: Domain q -> STM TimeDelta
+getAheadSTM :: Domain -> STM TimeDelta
 getAheadSTM dom = do
   cps <- readTVar (domCps dom)
   gpc <- readTVar (domGpc dom)

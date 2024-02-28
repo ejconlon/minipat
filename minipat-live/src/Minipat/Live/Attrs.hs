@@ -11,8 +11,12 @@ module Minipat.Live.Attrs
   , attrsToList
   , DupeAttrErr
   , attrsTryInsert
+  , MissingAttrErr
+  , attrsTryLookup
   , attrsUnalias
   , Attr (..)
+  , IsAttrs (..)
+  , attrsMerge
   )
 where
 
@@ -23,7 +27,6 @@ import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Minipat.Live.Datum (prettyDatum)
-import Minipat.Live.Squish (Squish (..))
 import Prettyprinter (Pretty (..))
 import Prettyprinter qualified as P
 
@@ -76,6 +79,13 @@ attrsTryInsert k v m =
     Nothing -> Right (attrsInsert k v m)
     Just _ -> Left (DupeAttrErr k)
 
+newtype MissingAttrErr = MissingAttrErr {unMissingAttrErr :: Text}
+  deriving stock (Show)
+  deriving newtype (Eq, Ord)
+
+attrsTryLookup :: Text -> Attrs -> Either MissingAttrErr Datum
+attrsTryLookup k = maybe (Left (MissingAttrErr k)) Right . attrsLookup k
+
 attrsUnalias :: [(Text, Text)] -> Attrs -> Either DupeAttrErr Attrs
 attrsUnalias as m0 = foldM go m0 as
  where
@@ -90,5 +100,17 @@ data Attr a = Attr
   }
   deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
 
-instance (IsDatum a) => Squish Attrs (Attr a) where
-  squish (Attr k v) = attrsSingleton k (toDatum v)
+class IsAttrs a where
+  toAttrs :: a -> Attrs
+
+instance (IsDatum a) => IsAttrs (Attr a) where
+  toAttrs (Attr k v) = attrsSingleton k (toDatum v)
+
+instance IsAttrs Attrs where
+  toAttrs = id
+
+instance (IsAttrs a) => IsAttrs (Maybe a) where
+  toAttrs = maybe mempty toAttrs
+
+attrsMerge :: (IsAttrs a, IsAttrs b) => a -> b -> Attrs
+attrsMerge a b = toAttrs a <> toAttrs b

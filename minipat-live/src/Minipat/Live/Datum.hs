@@ -4,10 +4,13 @@ module Minipat.Live.Datum
   ( DatumProxy (..)
   , datumProxyType
   , prettyDatum
+  , DatumTypeErr
+  , castDatum
   )
 where
 
-import Dahdit.Midi.Osc (Datum (..), DatumType (..))
+import Control.Exception (Exception)
+import Dahdit.Midi.Osc (Datum (..), DatumType (..), datumType)
 import Data.Int (Int32, Int64)
 import Data.Text (Text)
 import Prettyprinter (Doc, Pretty (..))
@@ -37,3 +40,19 @@ prettyDatum = \case
   DatumBlob _ -> "<BLOB>"
   DatumTime _ -> "<TIME>"
   DatumMidi _ -> "<MIDI>"
+
+data DatumTypeErr = DatumTypeErr
+  { dteExpected :: !DatumType
+  , dteActual :: !DatumType
+  }
+  deriving stock (Eq, Ord, Show)
+
+instance Exception DatumTypeErr
+
+castDatum :: DatumProxy a -> Datum -> Either DatumTypeErr a
+castDatum DatumProxyInt32 (DatumInt32 x) = Right x
+castDatum DatumProxyInt64 (DatumInt64 x) = Right x
+castDatum DatumProxyFloat (DatumFloat x) = Right x
+castDatum DatumProxyDouble (DatumDouble x) = Right x
+castDatum DatumProxyString (DatumString x) = Right x
+castDatum p d = Left (DatumTypeErr (datumProxyType p) (datumType d))

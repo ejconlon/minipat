@@ -97,7 +97,6 @@ handshake logger timeout oscConn = do
 
 instance Backend DirtBackend where
   type BackendData DirtBackend = DirtData
-  type BackendAttrs DirtBackend = Attrs
 
   backendInit (DirtBackend targetHp listenHp timeout) logger getPlayingSTM = do
     targetAddr <- liftIO (resolveAddr targetHp)

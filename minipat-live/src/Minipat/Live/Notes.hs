@@ -7,8 +7,7 @@ import Dahdit.Midi.Osc (Datum (..))
 import Data.Maybe (fromMaybe)
 import Data.Sequence (Seq)
 import Data.Text (Text)
-import Minipat.Live.Attrs (Attrs, attrsSingleton)
-import Minipat.Live.Squish (Squish (..))
+import Minipat.Live.Attrs (IsAttrs (..), attrsSingleton)
 import Prettyprinter (Pretty (..))
 
 data NoteName
@@ -111,6 +110,8 @@ octNoteIsMidi (OctNote moct nn) =
         | oct == 9 -> nn <= NoteNameG
         | otherwise -> oct >= 0 && oct <= 8
 
+-- TODO Change to LinNote, add DirtNote/MidiNote newtypes, and remove IsAttrs instance
+
 -- | An integral note type that can represent notes outside the MIDI scale.
 -- This is rooted at C5, MIDI note 60, so care must be taken to adjust before
 -- converting to/from MIDI values.
@@ -118,8 +119,8 @@ newtype Note = Note {unNote :: Integer}
   deriving stock (Show)
   deriving newtype (Eq, Ord, Pretty)
 
-instance Squish Attrs Note where
-  squish (Note n) = attrsSingleton "note" (DatumInt32 (fromInteger n))
+instance IsAttrs Note where
+  toAttrs (Note n) = attrsSingleton "note" (DatumInt32 (fromInteger n))
 
 c5MidiNum :: Integer
 c5MidiNum = 72
@@ -140,10 +141,6 @@ noteFreq n =
 noteIsMidi :: Note -> Bool
 noteIsMidi n = let m = noteToMidi n in m >= 0 && m < 128
 
-newtype Interval = Interval {unInterval :: Integer}
-  deriving stock (Show)
-  deriving newtype (Eq, Ord, Num)
-
 noteAddInterval :: Interval -> Note -> Note
 noteAddInterval (Interval i) (Note n) = Note (i + n)
 
@@ -157,6 +154,10 @@ octToNote :: OctNote -> Note
 octToNote (OctNote moct nn) =
   let oct = maybe 5 unOctave moct
   in  Note ((oct + 1) * 12 + noteValue nn - c5MidiNum)
+
+newtype Interval = Interval {unInterval :: Integer}
+  deriving stock (Show)
+  deriving newtype (Eq, Ord, Num)
 
 octAddInterval :: Interval -> OctNote -> OctNote
 octAddInterval i = noteToOct . noteAddInterval i . octToNote

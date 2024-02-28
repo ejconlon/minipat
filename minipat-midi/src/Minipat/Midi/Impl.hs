@@ -7,6 +7,7 @@ module Minipat.Midi.Impl where
 import Control.Concurrent.Async (Async)
 import Control.Concurrent.STM (atomically)
 import Control.Concurrent.STM.TVar (TVar, modifyTVar', newTVarIO, readTVarIO, writeTVar)
+import Control.Exception (Exception, throwIO)
 import Control.Monad.IO.Class (liftIO)
 import Dahdit.Iface (mutEncode)
 import Dahdit.Midi.Midi (ChanData (..), ChanVoiceData (..), Channel, ShortMsg (..))
@@ -20,6 +21,7 @@ import Data.Sequence (Seq (..))
 import Data.Sequence qualified as Seq
 import Data.Text qualified as T
 import Data.Vector.Storable.Mutable qualified as VSM
+import Minipat.Live.Attrs (Attrs)
 import Minipat.Live.Backend (Backend (..), Callback (..), PlayMeta (..), WithPlayMeta (..))
 import Minipat.Live.Core (St, logAsyncState)
 import Minipat.Live.Logger (logInfo)
@@ -28,6 +30,14 @@ import Minipat.Time (Arc (..))
 import Nanotime (PosixTime)
 import Sound.RtMidi (OutputDevice)
 import Sound.RtMidi qualified as R
+
+data MidiConvErr
+  deriving stock (Eq, Ord, Show)
+
+instance Exception MidiConvErr
+
+convertMidiAttrs :: Attrs -> Either MidiConvErr ChanData
+convertMidiAttrs = error "TODO"
 
 newtype MidiBackend = MidiBackend
   { mbPortSel :: String -> Bool
@@ -80,8 +90,8 @@ mkNoteOff c = \case
         Just (ShortMsgChan c (ChanDataVoice (ChanVoiceDataNoteOn n 0)))
   _ -> Nothing
 
-mkMsgs :: WithPlayMeta ChanData -> Seq TimedMsg
-mkMsgs (WithPlayMeta pm cd) =
+mkTimedMsgs :: WithPlayMeta ChanData -> Seq TimedMsg
+mkTimedMsgs (WithPlayMeta pm cd) =
   let Arc t1 t2 = pmRealArc pm
       c = fromInteger (pmOrbit pm)
       m1 = ShortMsgChan c cd
@@ -98,7 +108,6 @@ data MidiData = MidiData
 
 instance Backend MidiBackend where
   type BackendData MidiBackend = MidiData
-  type BackendAttrs MidiBackend = ChanData
 
   backendInit (MidiBackend portSel) logger getPlayingSTM = do
     device <- liftIO R.defaultOutput
@@ -119,9 +128,10 @@ instance Backend MidiBackend where
           VSM.unsafeWith buf (\ptr -> R.sendUnsafeMessage device ptr len)
     fmap (MidiData device heap) (acquireAwait tmTime getPlayingSTM (qhHeap heap) send)
 
-  backendSend _ _ cb evs = runCallback cb $ \md ->
-    let entries = evs >>= mkMsgs
-    in  atomically (modifyTVar' (mdHeap md) (\h -> foldl' (flip H.insert) h entries))
+  backendSend _ _ cb evs = runCallback cb $ \md -> do
+    msgs <- either throwIO pure (traverse (traverse convertMidiAttrs) evs)
+    let timedMsgs = msgs >>= mkTimedMsgs
+    atomically (modifyTVar' (mdHeap md) (\h -> foldl' (flip H.insert) h timedMsgs))
 
   backendClear _ _ cb = runCallback cb $ \md ->
     atomically (writeTVar (mdHeap md) H.empty)

@@ -27,13 +27,13 @@ import Data.Sequence (Seq)
 import Data.Sequence qualified as Seq
 import Minipat.Classes (Flow (..))
 import Minipat.EStream
-import Minipat.Live.Squish (Squish (..), squishMerge)
+import Minipat.Live.Attrs (Attrs, IsAttrs, attrsMerge)
 import Minipat.Time (CycleDelta, CycleTime)
 
 type S = EStream
 
-setIn, (#) :: (Semigroup q, Squish q a, Squish q b) => S a -> S b -> S q
-setIn = flowInnerApply squishMerge
+setIn, (#) :: (IsAttrs a, IsAttrs b) => S a -> S b -> S Attrs
+setIn = flowInnerApply attrsMerge
 (#) = setIn
 
 fast, slow :: S Rational -> S a -> S a

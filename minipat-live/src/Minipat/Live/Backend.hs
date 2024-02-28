@@ -16,8 +16,10 @@ where
 import Control.Concurrent.STM (STM)
 import Control.Exception (Exception)
 import Data.Acquire (Acquire)
+import Data.Default (Default)
 import Data.Kind (Type)
 import Data.Sequence (Seq)
+import Minipat.Live.Attrs (Attrs)
 import Minipat.Live.Logger (LogAction)
 import Minipat.Time (CycleArc, CycleDelta, PosixArc, arcLength)
 import Nanotime (TimeDelta)
@@ -31,9 +33,8 @@ newtype Callback d = Callback {runCallback :: forall r. (d -> IO r) -> IO r}
 
 -- * Backend
 
-class Backend i where
+class (Default i) => Backend i where
   type BackendData i :: Type
-  type BackendAttrs i :: Type
 
   backendInit
     :: i
@@ -45,7 +46,7 @@ class Backend i where
     :: i
     -> LogAction
     -> Callback (BackendData i)
-    -> Seq (WithPlayMeta (BackendAttrs i))
+    -> Seq (WithPlayMeta Attrs)
     -> IO ()
 
   backendClear

@@ -22,11 +22,10 @@ import Looksee qualified as L
 import Minipat.Ast (Ident (..), Select (..))
 import Minipat.EStream (EStream (..))
 import Minipat.Eval (evalPat)
-import Minipat.Live.Attrs (Attr (..), Attrs, attrsInsert)
+import Minipat.Live.Attrs (Attr (..), IsAttrs (..), attrsInsert)
 import Minipat.Live.Combinators (S)
 import Minipat.Live.Datum (DatumProxy (..))
 import Minipat.Live.Notes (ChordName, Note (..), OctNote (..), Octave (..), convChordName, convNoteName, octToNote)
-import Minipat.Live.Squish (Squish (..))
 import Minipat.Parser (P, identP, selectP)
 import Prettyprinter (Pretty (..))
 
@@ -93,8 +92,8 @@ data Sound = Sound
 instance Pretty Sound where
   pretty (Sound so mn) = pretty so <> maybe mempty ((":" <>) . pretty) mn
 
-instance Squish Attrs Sound where
-  squish (Sound so mn) = attrsInsert "sound" (DatumString (unIdent so)) (squish mn)
+instance IsAttrs Sound where
+  toAttrs (Sound so mn) = attrsInsert "sound" (DatumString (unIdent so)) (toAttrs mn)
 
 soundP :: P Sound
 soundP = fmap (\(Select so mn) -> Sound so mn) (selectP identP noteP)
