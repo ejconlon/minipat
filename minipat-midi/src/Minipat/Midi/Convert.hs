@@ -17,6 +17,11 @@ newtype Vel = Vel {unVel :: Int32}
 instance IsAttrs Vel where
   toAttrs (Vel x) = attrsSingleton "vel" (DatumInt32 x)
 
+-- TODO support more:
+-- legato to change note on/off sort order
+-- program change
+-- control change
+-- the rest of ChanDataVoice
 convertMidiAttrs :: Attrs -> Either ConvErr ChanData
 convertMidiAttrs =
   -- Default velocity in something like Ableton is 100
