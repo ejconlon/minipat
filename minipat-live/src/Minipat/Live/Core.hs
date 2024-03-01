@@ -58,6 +58,7 @@ import Data.Text qualified as T
 import Minipat.EStream (EStream (..))
 import Minipat.Live.Attrs (Attrs, IsAttrs (..))
 import Minipat.Live.Backend (Backend (..), Callback (..), UninitErr (..), WithPlayMeta)
+import Minipat.Live.Exception (catchUserErr)
 import Minipat.Live.Logger (LogAction, logDebug, logException, logInfo, logWarn, nullLogger)
 import Minipat.Live.Play (PlayEnv (..), PlayErr, WithOrbit (..), playTape)
 import Minipat.Live.Resources (RelVar, acquireLoop, relVarAcquire, relVarDispose, relVarUse)
@@ -76,7 +77,8 @@ import Prettyprinter (Pretty)
 -- * Environment
 
 data Env = Env
-  { envCps :: !Rational
+  { envDebug :: !Bool
+  , envCps :: !Rational
   , envGpc :: !Integer
   }
   deriving stock (Eq, Ord, Show)
@@ -84,14 +86,16 @@ data Env = Env
 instance Default Env where
   def =
     Env
-      { envCps = 1 % 2 -- 120 bpm, 4 bpc
+      { envDebug = False
+      , envCps = 1 % 2 -- 120 bpm, 4 bpc
       , envGpc = 16 -- Number of gens per cycle
       }
 
 -- * State
 
 data Domain = Domain
-  { domCps :: !(TVar Rational)
+  { domDebug :: !(TVar Bool)
+  , domCps :: !(TVar Rational)
   , domGpc :: !(TVar Integer)
   , domPlaying :: !(TVar Bool)
   , domGenCycle :: !(TVar Integer)
@@ -103,7 +107,8 @@ data Domain = Domain
 newDomain :: IO Domain
 newDomain =
   Domain
-    <$> newTVarIO 0
+    <$> newTVarIO False
+    <*> newTVarIO 0
     <*> newTVarIO 0
     <*> newTVarIO False
     <*> newTVarIO 0
@@ -115,7 +120,8 @@ initDomain :: Env -> IO Domain
 initDomain env = newDomain >>= \d -> d <$ reinitDomain env d
 
 reinitDomain :: Env -> Domain -> IO ()
-reinitDomain (Env cps gpc) dom = atomically $ do
+reinitDomain (Env debug cps gpc) dom = atomically $ do
+  writeTVar (domDebug dom) debug
   writeTVar (domCps dom) cps
   writeTVar (domGpc dom) gpc
   writeTVar (domPlaying dom) False
@@ -182,7 +188,13 @@ stepGenSt st now = do
   pure (nextCycTime, nextRealTime, events)
 
 stepSendSt :: (Backend i) => St i -> Seq (WithPlayMeta Attrs) -> IO ()
-stepSendSt st = backendSend (stBackend st) (stLogger st) (mkCallback st)
+stepSendSt st evs = catchUserErr act report
+ where
+  act = backendSend (stBackend st) (stLogger st) (mkCallback st) evs
+  report err = do
+    logException (stLogger st) "Error on send" err
+    debug <- readTVarIO (domDebug (stDom st))
+    when debug (setPlaying st False)
 
 disposeSt :: St i -> IO ()
 disposeSt st = do

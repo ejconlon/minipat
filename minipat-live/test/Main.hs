@@ -6,6 +6,7 @@ module Main
 where
 
 import Dahdit.Midi.Osc (Datum (..))
+import Data.Default (def)
 import Data.Ratio ((%))
 import Data.Sequence qualified as Seq
 import Minipat.Live.Attrs (attrsSingleton)
@@ -27,7 +28,7 @@ testRecordCase :: (Integer, Integer) -> TestTree
 testRecordCase (tempo, gpc) =
   let cps = bpmToCps 4 (fromInteger tempo)
   in  testCase (show tempo ++ " " ++ show gpc) $ do
-        let env = Env cps gpc
+        let env = def {envCps = cps, envGpc = gpc}
             cycStart = 0
             cycEnd = 2
             realStart = 0

@@ -7,7 +7,7 @@ module Minipat.Midi.Impl where
 import Control.Concurrent.Async (Async)
 import Control.Concurrent.STM (atomically)
 import Control.Concurrent.STM.TVar (TVar, modifyTVar', newTVarIO, readTVarIO, writeTVar)
-import Control.Exception (Exception, throwIO)
+import Control.Exception (throwIO)
 import Control.Monad.IO.Class (liftIO)
 import Dahdit.Iface (mutEncode)
 import Dahdit.Midi.Midi (ChanData (..), ChanVoiceData (..), Channel, ShortMsg (..))
@@ -21,23 +21,15 @@ import Data.Sequence (Seq (..))
 import Data.Sequence qualified as Seq
 import Data.Text qualified as T
 import Data.Vector.Storable.Mutable qualified as VSM
-import Minipat.Live.Attrs (Attrs)
 import Minipat.Live.Backend (Backend (..), Callback (..), PlayMeta (..), WithPlayMeta (..))
 import Minipat.Live.Core (St, logAsyncState)
 import Minipat.Live.Logger (logInfo)
 import Minipat.Live.Resources (acquireAwait, qhHeap)
+import Minipat.Midi.Convert (convertMidiAttrs)
 import Minipat.Time (Arc (..))
 import Nanotime (PosixTime)
 import Sound.RtMidi (OutputDevice)
 import Sound.RtMidi qualified as R
-
-data MidiConvErr
-  deriving stock (Eq, Ord, Show)
-
-instance Exception MidiConvErr
-
-convertMidiAttrs :: Attrs -> Either MidiConvErr ChanData
-convertMidiAttrs = error "TODO"
 
 newtype MidiBackend = MidiBackend
   { mbPortSel :: String -> Bool

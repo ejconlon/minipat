@@ -17,9 +17,10 @@ newtype Vel = Vel {unVel :: Int32}
 instance IsAttrs Vel where
   toAttrs (Vel x) = attrsSingleton "vel" (DatumInt32 x)
 
-convertMidiAttrs :: Vel -> Attrs -> Either ConvErr ChanData
-convertMidiAttrs defVel =
-  let defVelDatum = DatumInt32 (unVel defVel)
+convertMidiAttrs :: Attrs -> Either ConvErr ChanData
+convertMidiAttrs =
+  -- Default velocity in something like Ableton is 100
+  let defVelDatum = DatumInt32 100
   in  runConvM $ do
         note <- getM "note" >>= matchM DatumProxyInt32 <&> fromIntegral
         vel <- lookupDefaultM defVelDatum "vel" >>= matchM DatumProxyInt32 <&> fromIntegral

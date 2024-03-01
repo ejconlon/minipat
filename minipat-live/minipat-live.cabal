@@ -31,6 +31,7 @@ library
       Minipat.Live.Convert
       Minipat.Live.Core
       Minipat.Live.Datum
+      Minipat.Live.Exception
       Minipat.Live.Extra
       Minipat.Live.Logger
       Minipat.Live.Notes
@@ -77,6 +78,7 @@ library
     , containers ==0.6.*
     , dahdit-midi >=0.5.5 && <0.6
     , data-default ==0.7.*
+    , exceptions ==0.10.*
     , heaps ==0.4.*
     , little-logger ==1.0.*
     , looksee >=0.5.2 && <0.6
@@ -133,6 +135,7 @@ test-suite minipat-live-test
     , containers ==0.6.*
     , dahdit-midi >=0.5.5 && <0.6
     , data-default ==0.7.*
+    , exceptions ==0.10.*
     , heaps ==0.4.*
     , little-logger ==1.0.*
     , looksee >=0.5.2 && <0.6
