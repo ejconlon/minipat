@@ -9,7 +9,7 @@ where
 
 import Control.Concurrent.Async (Async)
 import Control.Concurrent.STM (atomically)
-import Control.Concurrent.STM.TQueue (TQueue, flushTQueue, newTQueueIO, writeTQueue)
+import Control.Concurrent.STM.TQueue (TQueue, flushTQueue, newTQueueIO, tryPeekTQueue, writeTQueue)
 import Control.Exception (SomeException, throwIO)
 import Control.Monad (void)
 import Control.Monad.IO.Class (liftIO)
@@ -21,9 +21,10 @@ import Data.Foldable (foldl', for_)
 import Data.Functor ((<&>))
 import Data.Sequence (Seq (..))
 import Data.Text (Text)
+import Data.Text qualified as T
 import Minipat.Live.Attrs (Attrs, DupeAttrErr, attrsInsertDefault, attrsToList, attrsTryInsert, attrsUnalias)
 import Minipat.Live.Backend (Backend (..), Callback (..), PlayMeta (..), WithPlayMeta (..), pmRealLength)
-import Minipat.Live.Core (St (..))
+import Minipat.Live.Core (St (..), logAsyncState)
 import Minipat.Live.Logger (LogAction, logError, logException, logInfo)
 import Minipat.Live.Resources (acquireAwait, qhTQueue, withTimeout)
 import Minipat.Time (Arc (..))
@@ -115,8 +116,12 @@ instance Backend DirtBackend where
 
   backendClear _ _ cb = runCallback cb (atomically . void . flushTQueue . ddEventQueue)
 
-  -- TODO really check
-  backendCheck _ _ _ = pure True
+  backendCheck _ logger cb = runCallback cb $ \dd -> do
+    mayHd <- atomically (tryPeekTQueue (ddEventQueue dd))
+    case mayHd of
+      Just hd -> logInfo logger ("Queue head: " <> T.pack (show hd))
+      Nothing -> logInfo logger "Empty queue"
+    logAsyncState logger "send" (ddSendTask dd)
 
 namedPayload :: Attrs -> Seq Datum
 namedPayload = foldl' go Empty . attrsToList

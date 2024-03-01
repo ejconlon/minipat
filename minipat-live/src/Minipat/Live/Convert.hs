@@ -1,3 +1,4 @@
+-- | Utilities to convert 'Attrs' to more useful types.
 module Minipat.Live.Convert
   ( ConvErr (..)
   , ConvM

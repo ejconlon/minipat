@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+-- | An internal module focused on turning streams into sequences of events.
 module Minipat.Live.Play
   ( PlayErr (..)
   , WithOrbit (..)

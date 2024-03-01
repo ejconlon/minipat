@@ -1,3 +1,4 @@
+-- | Classes that generalize patterns and streams.
 module Minipat.Classes
   ( Pattern (..)
   , PatternUnwrap (..)
@@ -74,67 +75,105 @@ mkPatRel = \case
     let adjust = unPat . fst
     in  mkPat (PatGroup (Group 1 (GroupTypeSeq SeqPresSpace) (fmap adjust xs)))
 
--- | 'Pat' and 'Stream' can be constructed abstractly with this
+-- | 'Pat' and 'Stream' can be constructed abstractly with this. The 'PatM' and
+-- 'PatA' associated types are to generalize operations between 'Pat' (which is
+-- annotated at every level with source locations) and 'Stream' (which has no such
+-- annotations). "Primed" variants eliminate monad layers with default annotations.
 class (Functor f, Monad (PatM f), Default (PatA f)) => Pattern f where
+  -- | The monad `f` is constructed in.
   type PatM f :: Type -> Type
+
+  -- | The annotation `f` requires for construction.
   type PatA f :: Type
 
+  -- | "Unwraps" 'PatM'
   patCon' :: PatM f (f a) -> PatA f -> f a
+
   patCon :: PatM f (f a) -> f a
   patCon = flip patCon' def
 
+  -- | 'Applicative' pure - single event repeats every cycle
   patPure' :: a -> PatM f (f a)
+
   patPure :: a -> f a
   patPure = patCon . patPure'
 
+  -- | Empty pattern (no events)
   patEmpty' :: PatM f (f a)
+
   patEmpty :: f a
   patEmpty = patCon patEmpty'
 
+  -- | Parallel composition (all in one cycle, looping)
   patPar' :: Seq (f a) -> PatM f (f a)
+
   patPar :: Seq (f a) -> f a
   patPar = patCon . patPar'
 
+  -- | Alternating composition (one per cycle, looping)
   patAlt' :: Seq (f a) -> PatM f (f a)
+
   patAlt :: Seq (f a) -> f a
   patAlt = patCon . patAlt'
 
+  -- | Random composition (one per cycle, drawing with replacement)
   patRand' :: Seq (f a) -> PatM f (f a)
+
   patRand :: Seq (f a) -> f a
   patRand = patCon . patRand'
 
+  -- | Sequential composition (all compressed to one cycle, looping)
   patSeq' :: Seq (f a) -> PatM f (f a)
+
   patSeq :: Seq (f a) -> f a
   patSeq = patCon . patSeq'
 
+  -- | Relative sequential composition (given fractional widths)
   patRel' :: Seq (f a, Rational) -> PatM f (f a)
+
   patRel :: Seq (f a, Rational) -> f a
   patRel = patCon . patRel'
 
+  -- | Euclidean repetition
   patEuc' :: Euclid -> f a -> PatM f (f a)
+
   patEuc :: Euclid -> f a -> f a
   patEuc e = patCon . patEuc' e
 
+  -- | Simple repetition
   patRep' :: Integer -> f a -> PatM f (f a)
+
   patRep :: Integer -> f a -> f a
   patRep i = patCon . patRep' i
 
+  -- | Adjusts the speed of playback, squeezing more or less into a cycle
+  -- These variants accept the speed factor as a time-varying signal.
   patFast', patSlow' :: f Rational -> f a -> PatM f (f a)
+
   patFast :: f Rational -> f a -> f a
   patFast p = patCon . patFast' p
   patSlow :: f Rational -> f a -> f a
   patSlow p = patCon . patSlow' p
 
+  -- | Adjusts the speed of playback, squeezing more or less into a cycle
+  -- These variants accept a constant speed factor.
   patFastBy', patSlowBy' :: Rational -> f a -> PatM f (f a)
+
   patFastBy, patSlowBy :: Rational -> f a -> f a
   patFastBy r = patCon . patFastBy' r
   patSlowBy r = patCon . patSlowBy' r
 
+  -- | "Degrades" playback by omitting events with the given probability.
+  -- This variant accepts the probability as a time-varying signal.
   patDeg' :: f Rational -> f a -> PatM f (f a)
+
   patDeg :: f Rational -> f a -> f a
   patDeg p = patCon . patDeg' p
 
+  -- | "Degrades" playback by omitting events with the given probability.
+  -- This variant accepts a constant probability.
   patDegBy' :: Rational -> f a -> PatM f (f a)
+
   patDegBy :: Rational -> f a -> f a
   patDegBy r = patCon . patDegBy' r
 
@@ -159,22 +198,39 @@ instance (Default b) => Pattern (Pat b) where
   patDegBy' = mkPatDegBy
 
 -- | Sometimes you can construct patterns with other types of annotations.
+-- For example, you can eliminate the 'PatM' layer of a 'Stream' ('Identity')
+-- with any old value.
 class (Pattern f) => PatternUnwrap b f where
   patUnwrap' :: PatM f (f a) -> b -> f a
 
 instance (Default b) => PatternUnwrap b (Pat b) where
   patUnwrap' = patCon'
 
+-- | A 'Stream' exposes 'Applicative' and time-aware operations.
 class (Alternative f, Pattern f) => Flow f where
+  -- | 'Applicative' 'liftA2' with configurable merging of whole arcs.
   flowApply :: MergeStrat -> (a -> b -> c) -> f a -> f b -> f c
+
   flowInnerApply :: (a -> b -> c) -> f a -> f b -> f c
   flowInnerApply = flowApply MergeStratInner
   flowOuterApply :: (a -> b -> c) -> f a -> f b -> f c
   flowOuterApply = flowApply MergeStratOuter
   flowMixedApply :: (a -> b -> c) -> f a -> f b -> f c
   flowMixedApply = flowApply MergeStratMixed
+
+  -- | Keeps events that satisfy the predicate.
   flowFilter :: (a -> Bool) -> f a -> f a
+
+  -- | Shifts events in cycle time.
+  -- These variants accept the delta as a time-varying signal.
   flowEarlyBy, flowLateBy :: CycleDelta -> f a -> f a
+
+  -- | Shifts events in cycle time.
+  -- These variants accept a constant delta.
   flowEarly, flowLate :: f CycleDelta -> f a -> f a
+
+  -- | Switch from one flow to another at the given cycle time.
   flowSwitch :: f a -> CycleTime -> f a -> f a
+
+  -- | Switch from one flow to the next sequentially.
   flowPieces :: f a -> Seq (CycleTime, f a) -> f a

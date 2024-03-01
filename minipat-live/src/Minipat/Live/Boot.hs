@@ -1,4 +1,6 @@
--- | Controls and prelude for the live system
+-- | Controls and prelude for the live system. `Boot` modules are
+-- generally intended to be imported unqualified into the REPL to
+-- provide full functionality.
 module Minipat.Live.Boot
   ( LiveSt (..)
   , allocate

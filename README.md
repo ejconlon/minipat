@@ -9,29 +9,49 @@ even play music using [SuperDirt](https://github.com/musikinformatik/SuperDirt)!
 What does `minipat` add?
 
 * Swappable backends - see how small `minipat-dirt` is!
+* A live MIDI backend (`minipat-midi`)
 * Patterns can be pretty-printed back into textual form.
 * The pattern language has a plain old syntax tree (`Pat`) with standard
   functions for traversal and recursion (even through location annotations).
 * Lots of tiny changes...
 
 If you have `stack` installed, and you have `supercollider` running for use
-with `tidal`, you should be able to run `bin/dirt-ghci` to enter `ghci` with
+with `tidal`, you should be able to run `bin/minipat-repl dirt` to enter `ghci` with
 everything set up:
 
     [Info] Initializing
     [Info] Handshaking ...
     [Info] ... handshake succeeded
-    Loaded GHCi configuration from BootDirt.hs
 
     -- Play kick-snare in orbit 1
     > d1 $ s "bd sd"
 
-## TODO
+The MIDI backend requies basically no setup (`bin/minipat-repl midi`):
 
-* Finish midi notes/chords/arps
+    -- Send some MIDI note on/off events
+    > d1 $ n "c5 d6"
+
+However, if you have different port settings for SuperDirt or want to use a non-default
+MIDI output, you will probably have to edit the `Repl.ghci` files in either backend or
+run `reallocate myBackendOptions myCoreOptions >>= initialize` in the REPL.
+
+Please be aware that this is young software in an "it works for me" state!
+
+## Contributions
+
+Your help is very welcome. Some TODOs follow.
+
+### TODO
+
 * Implement polymeters
-* Add documentation
+* Implement chords/arps
+* Add more MIDI channel voice events
+* Support rendering to MIDI file (with `dahdit-midi`)
 * Additional combinators like `arp, off, jux, |+, every, squiz, range`
-* Backends for... Plain old MIDI? Renoise?
-* Backend with push/pull of textual patterns
+* Backends for... Bitwig? Renoise?
+* Backend with push/pull of textual patterns from DAW
 * More meaningful `Pretty` subclasses for pattern rep or plain old logging
+* More and better documentation
+* Ensure that common exceptions have a useful `displayException`
+* Ensure that live errors do/don't interrupt playback based on debug state
+* More thoughtful handling of "continuous" streams/signals (including sampling rate)

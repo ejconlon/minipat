@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+-- | Logging via `little-logger`/`monad-logger`
 module Minipat.Live.Logger
   ( LogAction
   , LogLevel (..)

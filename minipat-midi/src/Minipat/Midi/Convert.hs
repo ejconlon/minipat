@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+-- | Converts attrs to MIDI events
 module Minipat.Midi.Convert where
 
 import Dahdit.Midi.Midi (ChanData (..), ChanVoiceData (..))

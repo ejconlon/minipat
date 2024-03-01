@@ -16,6 +16,7 @@ import Minipat.Interp (InterpErr, customInterpPat)
 import Minipat.Parser (Loc, identP, selectP)
 import Minipat.Time (CycleDelta (..))
 
+-- | Thrown when we can't match pattern or effect identifiers in 'ur'
 data UrErr k
   = UrErrPat !k
   | UrErrXform !Ident
@@ -23,6 +24,8 @@ data UrErr k
 
 instance (Show k, Typeable k) => Exception (UrErr k)
 
+-- | Interpret a pattern over a given number of cycles, splicing in
+-- named patterns and effects.
 ur
   :: (PatternEval f)
   => CycleDelta
@@ -35,6 +38,7 @@ ur del txt ks xs = do
   let ea = urTyped @Loc del pat ks xs
   either (Left . SomeException) Right ea
 
+-- | 'ur' but skipping the parse step
 urTyped
   :: (PatternUnwrap b f, Ord k)
   => CycleDelta

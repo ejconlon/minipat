@@ -1,8 +1,38 @@
 {-# LANGUAGE UndecidableInstances #-}
 
-module Minipat.EStream where
-
--- TODO explicit exports
+-- | Instead of simply returning an empty stream when failing to parse a pattern, we can
+-- save the error and report it at the top level (after applying all the usual combinators
+-- like `#`, `fast`, etc). 'EStream' is a wrapper around 'Stream' that does just that.
+module Minipat.EStream
+  ( EStream (..)
+  , estreamMap
+  , estreamLiftA2
+  , estreamBind
+  , estreamApply
+  , estreamThrow
+  , estreamFilter
+  , estreamFastBy
+  , estreamSlowBy
+  , estreamFast
+  , estreamSlow
+  , estreamEarlyBy
+  , estreamLateBy
+  , estreamEarly
+  , estreamLate
+  , estreamDegBy
+  , estreamDeg
+  , estreamSeq
+  , estreamRel
+  , estreamRep
+  , estreamCont
+  , estreamEuc
+  , estreamRand
+  , estreamAlt
+  , estreamPar
+  , estreamSwitch
+  , estreamPieces
+  )
+where
 
 import Control.Applicative (Alternative (..))
 import Control.Exception (Exception, SomeException (..))
@@ -12,11 +42,11 @@ import Data.Semigroup (Semigroup (..))
 import Data.Sequence (Seq)
 import Minipat.Ast (Euclid)
 import Minipat.Classes (Flow (..), Pattern (..), PatternUnwrap (..))
-import Minipat.Stream
+import Minipat.Stream (Stream)
 import Minipat.Stream qualified as S
 import Minipat.Time (CycleDelta, CycleTime, MergeStrat)
 
--- Tracks errors in stream creation for later logging
+-- | Tracks errors in stream creation for later logging
 newtype EStream (a :: Type) = EStream {unEStream :: Either SomeException (Stream a)}
   deriving stock (Functor)
 
@@ -46,7 +76,7 @@ estreamBind :: EStream a -> (Stream a -> EStream b) -> EStream b
 estreamBind (EStream c) f = EStream (c >>= unEStream . f)
 
 estreamApply :: MergeStrat -> (a -> b -> c) -> EStream a -> EStream b -> EStream c
-estreamApply ms = estreamLiftA2 . streamApply ms
+estreamApply ms = estreamLiftA2 . S.streamApply ms
 
 estreamThrow :: (Exception e) => e -> EStream a
 estreamThrow = EStream . Left . SomeException
@@ -55,56 +85,56 @@ estreamFilter :: (a -> Bool) -> EStream a -> EStream a
 estreamFilter = estreamMap . S.streamFilter
 
 estreamFastBy, estreamSlowBy :: Rational -> EStream a -> EStream a
-estreamFastBy = estreamMap . streamFastBy
-estreamSlowBy = estreamMap . streamSlowBy
+estreamFastBy = estreamMap . S.streamFastBy
+estreamSlowBy = estreamMap . S.streamSlowBy
 
 estreamFast, estreamSlow :: EStream Rational -> EStream a -> EStream a
-estreamFast = estreamLiftA2 streamFast
-estreamSlow = estreamLiftA2 streamSlow
+estreamFast = estreamLiftA2 S.streamFast
+estreamSlow = estreamLiftA2 S.streamSlow
 
 estreamEarlyBy, estreamLateBy :: CycleDelta -> EStream a -> EStream a
-estreamEarlyBy = estreamMap . streamEarlyBy
-estreamLateBy = estreamMap . streamLateBy
+estreamEarlyBy = estreamMap . S.streamEarlyBy
+estreamLateBy = estreamMap . S.streamLateBy
 
 estreamEarly, estreamLate :: EStream CycleDelta -> EStream a -> EStream a
-estreamEarly = estreamLiftA2 streamEarly
-estreamLate = estreamLiftA2 streamLate
+estreamEarly = estreamLiftA2 S.streamEarly
+estreamLate = estreamLiftA2 S.streamLate
 
 estreamDegBy :: Rational -> EStream a -> EStream a
-estreamDegBy = estreamMap . streamDegBy
+estreamDegBy = estreamMap . S.streamDegBy
 
 estreamDeg :: EStream Rational -> EStream a -> EStream a
-estreamDeg = estreamLiftA2 streamDeg
+estreamDeg = estreamLiftA2 S.streamDeg
 
 estreamSeq :: Seq (EStream a) -> EStream a
 estreamSeq = estreamRel . fmap (,1)
 
 estreamRel :: Seq (EStream a, Rational) -> EStream a
-estreamRel = EStream . fmap streamRel . traverse (\(EStream e, r) -> fmap (,r) e)
+estreamRel = EStream . fmap S.streamRel . traverse (\(EStream e, r) -> fmap (,r) e)
 
 estreamRep :: Integer -> EStream a -> EStream a
-estreamRep = estreamMap . streamRep
+estreamRep = estreamMap . S.streamRep
 
 estreamCont :: Integer -> (CycleTime -> a) -> EStream a
-estreamCont sr = EStream . Right . streamCont sr
+estreamCont sr = EStream . Right . S.streamCont sr
 
 estreamEuc :: Euclid -> EStream a -> EStream a
-estreamEuc = estreamMap . streamEuc
+estreamEuc = estreamMap . S.streamEuc
 
 estreamRand :: Seq (EStream a) -> EStream a
-estreamRand = EStream . fmap streamRand . traverse unEStream
+estreamRand = EStream . fmap S.streamRand . traverse unEStream
 
 estreamAlt :: Seq (EStream a) -> EStream a
-estreamAlt = EStream . fmap streamAlt . traverse unEStream
+estreamAlt = EStream . fmap S.streamAlt . traverse unEStream
 
 estreamPar :: Seq (EStream a) -> EStream a
-estreamPar = EStream . fmap streamPar . traverse unEStream
+estreamPar = EStream . fmap S.streamPar . traverse unEStream
 
 estreamSwitch :: EStream a -> CycleTime -> EStream a -> EStream a
-estreamSwitch e1 t = estreamLiftA2 (`streamSwitch` t) e1
+estreamSwitch e1 t = estreamLiftA2 (`S.streamSwitch` t) e1
 
 estreamPieces :: EStream a -> Seq (CycleTime, EStream a) -> EStream a
-estreamPieces e1 = EStream . liftA2 streamPieces (unEStream e1) . traverse (\(t, EStream e) -> fmap (t,) e)
+estreamPieces e1 = EStream . liftA2 S.streamPieces (unEStream e1) . traverse (\(t, EStream e) -> fmap (t,) e)
 
 instance Pattern EStream where
   type PatM EStream = Identity

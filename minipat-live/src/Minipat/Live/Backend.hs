@@ -28,20 +28,34 @@ import Prettyprinter qualified as P
 
 -- * Callback
 
+-- | Allows a backend to access its data behind a mutex
 newtype Callback d = Callback {runCallback :: forall r. (d -> IO r) -> IO r}
   deriving stock (Functor)
 
 -- * Backend
 
+-- | 'Minipat.Live.Core' manages the system state, but uses these methods to
+-- manipulate the backend-specific state. Note that values of the implementing
+-- type `i` should be _immutable_ - all state should be in `BackendData i`.
 class (Default i) => Backend i where
+  -- | Whatever data is useful to a particular backend, e.g. async task handles,
+  -- queues, network connections.
   type BackendData i :: Type
 
+  -- | Initialize a new instance of the backend. This may be called multiple times
+  -- a session, but it is guaranteed that old data will have been disposed by the
+  -- time this is invoked.
   backendInit
     :: i
     -> LogAction
     -> STM Bool
+    -- ^ Gets the current play state (useful for pausing event sends)
     -> Acquire (BackendData i)
 
+  -- | Enqueue the given events for sending async. Typically a sender thread and queue
+  -- will be allocated in 'backendInit' and this will use the callback to write to
+  -- the queue. Any exceptions thrown (e.g. in processing nonsensical attributes)
+  -- will be logged.
   backendSend
     :: i
     -> LogAction
@@ -49,12 +63,15 @@ class (Default i) => Backend i where
     -> Seq (WithPlayMeta Attrs)
     -> IO ()
 
+  -- | Invoked on hush - clear the sending queue (if relevant).
   backendClear
     :: i
     -> LogAction
     -> Callback (BackendData i)
     -> IO ()
 
+  -- | Check the health of the backend and log any useful information,
+  -- returning True if healthy.
   backendCheck
     :: i
     -> LogAction
@@ -71,6 +88,7 @@ instance Exception UninitErr
 
 -- * PlayMeta
 
+-- | Metadata around play events
 data PlayMeta = PlayMeta
   { pmOrbit :: !Integer
   , pmRealArc :: !PosixArc

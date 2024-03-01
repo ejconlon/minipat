@@ -252,8 +252,6 @@ newtype Replicate = Replicate {unReplicate :: Maybe Integer}
 instance Pretty Replicate where
   pretty (Replicate mi) = "!" <> maybe mempty pretty mi
 
--- TODO add elongate/replicate constructors here
-
 -- | Controls that can be applied to a given pattern
 data ModType b
   = ModTypeDegrade !(Degrade b)

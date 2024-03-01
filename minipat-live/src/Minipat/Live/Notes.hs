@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE OverloadedStrings #-}
 
+-- | All about notes, chords, and the like.
 module Minipat.Live.Notes where
 
 import Data.Sequence (Seq)

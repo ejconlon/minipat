@@ -1,3 +1,4 @@
+-- | Just some junk to handle non-async exceptions.
 module Minipat.Live.Exception
   ( isUserErr
   , catchUserErr

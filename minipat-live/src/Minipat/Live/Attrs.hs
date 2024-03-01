@@ -1,5 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+-- | This subproject is all about assembling streams of 'Attrs' to send to backends.
+-- `Map String Any` is a terrible type in general, but it is the least bad
+-- option for assembling events incrementally! See 'Minipat.Live.Convert' for
+-- a structured way to map this to a more appropriate type for a given backend.
 module Minipat.Live.Attrs
   ( Attrs
   , attrsSingleton
@@ -98,6 +102,7 @@ attrsUnalias as m0 = foldM go m0 as
       Nothing -> pure m
       Just v -> attrsTryInsert y v (attrsDelete x m)
 
+-- | For when you need something anonymous with an 'IsAttrs' instance.
 data Attr a = Attr
   { attrKey :: !Text
   , attrVal :: !a

@@ -1,8 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Minipat.Midi.Impl where
-
--- TODO explicit exports
+-- | Live MIDI backend implementation
+module Minipat.Midi.Impl
+  ( MidiBackend (..)
+  , MidiSt
+  )
+where
 
 import Control.Concurrent.Async (Async)
 import Control.Concurrent.STM (atomically)

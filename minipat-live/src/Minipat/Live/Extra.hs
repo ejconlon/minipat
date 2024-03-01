@@ -1,5 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+-- | Some extra combinators that are too specific for all backends, but
+-- may be useful for more than one backend.
 module Minipat.Live.Extra
   ( parsePat
   , parseDatum
@@ -193,7 +195,7 @@ data Chord n = Chord
   }
   deriving stock (Eq, Ord, Show)
 
--- TODO
+-- TODO implement
 -- parseChord :: Text -> S Chord
 
 -- * Arp
@@ -209,6 +211,6 @@ arpP = ordP arpMap (fmap unIdent identP)
 parseArp :: Text -> S Arp
 parseArp = parsePat arpP
 
--- TODO
+-- TODO implement
 -- strum :: S Arp -> S Chord -> S Note
 -- strum arps chords = undefined

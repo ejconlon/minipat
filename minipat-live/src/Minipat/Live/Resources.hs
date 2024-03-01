@@ -1,3 +1,4 @@
+-- | Primitives for resource management via `resourcet`
 module Minipat.Live.Resources
   ( RelVar
   , relVarInit

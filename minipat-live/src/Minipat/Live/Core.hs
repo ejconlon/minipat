@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+-- | A bunch of stuff to actually run the live environment
 module Minipat.Live.Core
   ( Env (..)
   , St
@@ -431,7 +432,8 @@ checkTasks st =
         Nothing -> pure False
         Just res -> do
           genOk <- logAsyncState logger "gen" (resGenTask res)
-          backOk <- backendCheck (stBackend st) logger (mkCallback st)
+          let cb = Callback (\f -> f (resData res))
+          backOk <- backendCheck (stBackend st) logger cb
           pure (genOk && backOk)
 
 logEvents :: (Pretty q) => LogAction -> Domain -> Seq (WithPlayMeta q) -> IO ()

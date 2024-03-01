@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+-- | Basic 'Datum'-related stuff
 module Minipat.Live.Datum
   ( DatumProxy (..)
   , datumProxyType

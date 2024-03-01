@@ -43,6 +43,7 @@ import Prettyprinter qualified as P
 midpoint :: (Fractional a) => a -> a -> a
 midpoint s e = s + (e - s) / 2
 
+-- | Things for which a difference makes sense
 class Measurable b a | a -> b where
   -- | `measure start end` is `end - start`
   measure :: a -> a -> b
@@ -50,6 +51,7 @@ class Measurable b a | a -> b where
 instance Measurable TimeDelta PosixTime where
   measure s e = diffTime e s
 
+-- | Abstract time. In general we repeat patterns once per cycle, e.g. `[0, 1], [1, 2], ...`
 newtype CycleTime = CycleTime {unCycleTime :: Rational}
   deriving stock (Show)
   deriving newtype (Eq, Ord, Num, Fractional, Real, RealFrac)
@@ -57,6 +59,7 @@ newtype CycleTime = CycleTime {unCycleTime :: Rational}
 instance Pretty CycleTime where
   pretty = prettyRat . unCycleTime
 
+-- | Typed length of cycle time
 newtype CycleDelta = CycleDelta {unCycleDelta :: Rational}
   deriving stock (Show)
   deriving newtype (Eq, Ord, Num, Fractional, Real, RealFrac)
@@ -67,11 +70,14 @@ instance Pretty CycleDelta where
 instance Measurable CycleDelta CycleTime where
   measure s e = CycleDelta (unCycleTime e - unCycleTime s)
 
+-- | An interval of the given time type
 data Arc a = Arc {arcStart :: !a, arcEnd :: !a}
   deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
 
+-- | An "abstract" time interval
 type CycleArc = Arc CycleTime
 
+-- | A "real" time interval
 type PosixArc = Arc PosixTime
 
 instance (Pretty a) => Pretty (Arc a) where
@@ -112,6 +118,10 @@ arcMerge = \case
 arcLength :: (Measurable b a) => Arc a -> b
 arcLength (Arc s e) = measure s e
 
+-- | A time interval along with a larger interval it is a part of.
+-- For example, events may have their start or end truncated by the window we are
+-- focused on, so we carry the full information here. If there is no "whole"
+-- then the event associated with this is "signal-like".
 data Span a = Span
   { spanActive :: !(Arc a)
   , spanWhole :: !(Maybe (Arc a))
