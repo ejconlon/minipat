@@ -1,4 +1,15 @@
-module Minipat.Live.Convert where
+module Minipat.Live.Convert
+  ( ConvErr (..)
+  , ConvM
+  , runConvM
+  , lookupM
+  , defaultM
+  , getM
+  , Branch (..)
+  , branchM
+  , branchM'
+  )
+where
 
 import Control.Exception (Exception)
 import Control.Monad.Except (Except, MonadError (..), runExcept)
@@ -11,15 +22,15 @@ import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
-import Minipat.Live.Attrs (Attrs, attrsLookup, attrsLookupDefault)
-import Minipat.Live.Datum (DatumProxy)
+import Minipat.Live.Attrs (Attrs, attrsLookup)
+import Minipat.Live.Datum (DatumProxy, DatumTypeErr (..), castDatum)
 
 data ConvErr
   = ConvErrFail !Text
   | ConvErrMissing !Text
   | ConvErrMissingAll !(Set Text)
   | ConvErrExclusive !(Set Text) !Text !Text
-  | ConvErrMatch !DatumType !DatumType
+  | ConvErrMatch !Text !DatumType !DatumType
   deriving stock (Eq, Ord, Show)
 
 instance Exception ConvErr
@@ -36,17 +47,19 @@ runConvM m = runExcept . runReaderT (unConvM m)
 mkConvM :: (Attrs -> Either ConvErr a) -> ConvM a
 mkConvM f = ask >>= \as -> either throwError pure (f as)
 
-lookupM :: Text -> ConvM (Maybe Datum)
-lookupM k = asks (attrsLookup k)
+lookupM :: Text -> DatumProxy a -> ConvM (Maybe a)
+lookupM k p = asks (attrsLookup k) >>= traverse (matchM k p)
 
-lookupDefaultM :: Datum -> Text -> ConvM Datum
-lookupDefaultM v k = asks (attrsLookupDefault v k)
+defaultM :: Text -> DatumProxy a -> a -> ConvM a
+defaultM k p d = asks (attrsLookup k) >>= maybe (pure d) (matchM k p)
 
-getM :: Text -> ConvM Datum
-getM k = lookupM k >>= maybe (throwError (ConvErrMissing k)) pure
+getM :: Text -> DatumProxy a -> ConvM a
+getM k p = lookupM k p >>= maybe (throwError (ConvErrMissing k)) pure
 
-matchM :: DatumProxy a -> Datum -> ConvM a
-matchM = error "TODO"
+matchM :: Text -> DatumProxy a -> Datum -> ConvM a
+matchM k p v = case castDatum p v of
+  Left (DatumTypeErr expected actual) -> throwError (ConvErrMatch k expected actual)
+  Right val -> pure val
 
 exclusiveM :: (Foldable f) => f Text -> ConvM (Text, Datum)
 exclusiveM = exclusiveM' . Set.fromList . toList
@@ -59,18 +72,24 @@ exclusiveM' ks0 = go Nothing (toList ks0)
       Nothing -> throwError (ConvErrMissingAll ks0)
       Just kv -> pure kv
     k : ks -> do
-      mv <- lookupM k
+      mv <- asks (attrsLookup k)
       case mv of
         Nothing -> go racc ks
         Just v -> case racc of
           Nothing -> go (Just (k, v)) ks
           Just (k', _) -> throwError (ConvErrExclusive ks0 k' k)
 
-branchM :: (Foldable f) => f (Text, Datum -> ConvM a) -> ConvM a
+data Branch a where
+  Branch :: DatumProxy z -> (z -> ConvM a) -> Branch a
+
+runBranch :: Branch a -> Text -> Datum -> ConvM a
+runBranch (Branch p f) k v = matchM k p v >>= f
+
+branchM :: (Foldable f) => f (Text, Branch a) -> ConvM a
 branchM = branchM' . Map.fromList . toList
 
-branchM' :: Map Text (Datum -> ConvM a) -> ConvM a
+branchM' :: Map Text (Branch a) -> ConvM a
 branchM' kfs = do
   (k, v) <- exclusiveM' (Map.keysSet kfs)
-  let f = kfs Map.! k
-  f v
+  let b = kfs Map.! k
+  runBranch b k v

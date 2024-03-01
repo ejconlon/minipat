@@ -4,7 +4,7 @@ module Minipat.Live.Datum
   ( DatumProxy (..)
   , datumProxyType
   , prettyDatum
-  , DatumTypeErr
+  , DatumTypeErr (..)
   , castDatum
   )
 where

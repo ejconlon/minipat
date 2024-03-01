@@ -86,7 +86,7 @@ data Env = Env
 instance Default Env where
   def =
     Env
-      { envDebug = False
+      { envDebug = True
       , envCps = 1 % 2 -- 120 bpm, 4 bpc
       , envGpc = 16 -- Number of gens per cycle
       }
