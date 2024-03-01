@@ -21,7 +21,7 @@ import Data.Foldable (foldl', for_)
 import Data.Functor ((<&>))
 import Data.Sequence (Seq (..))
 import Data.Text (Text)
-import Minipat.Live.Attrs (Attrs, DupeAttrErr, attrsDefault, attrsToList, attrsTryInsert, attrsUnalias)
+import Minipat.Live.Attrs (Attrs, DupeAttrErr, attrsInsertDefault, attrsToList, attrsTryInsert, attrsUnalias)
 import Minipat.Live.Backend (Backend (..), Callback (..), PlayMeta (..), WithPlayMeta (..), pmRealLength)
 import Minipat.Live.Core (St (..))
 import Minipat.Live.Logger (LogAction, logError, logException, logInfo)
@@ -81,7 +81,7 @@ attrsConvert aliases (WithPlayMeta pm attrs) = do
   attrsUnalias aliases attrs
     >>= attrsTryInsert "delta" (DatumFloat delta)
     >>= attrsTryInsert "cps" (DatumFloat cps)
-    <&> attrsDefault "orbit" (DatumInt32 (fromInteger orbit))
+    <&> attrsInsertDefault "orbit" (DatumInt32 (fromInteger orbit))
 
 -- Handshake with SuperDirt
 handshake :: LogAction -> TimeDelta -> OscConn -> IO ()

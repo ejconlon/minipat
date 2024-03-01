@@ -25,6 +25,7 @@ source-repository head
 library
   exposed-modules:
       Minipat.Midi.Boot
+      Minipat.Midi.Convert
       Minipat.Midi.Impl
   other-modules:
       Paths_minipat_midi

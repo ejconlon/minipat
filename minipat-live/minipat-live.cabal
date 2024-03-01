@@ -28,6 +28,7 @@ library
       Minipat.Live.Backend
       Minipat.Live.Boot
       Minipat.Live.Combinators
+      Minipat.Live.Convert
       Minipat.Live.Core
       Minipat.Live.Datum
       Minipat.Live.Extra

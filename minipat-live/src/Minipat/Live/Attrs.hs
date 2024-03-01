@@ -5,8 +5,9 @@ module Minipat.Live.Attrs
   , attrsSingleton
   , attrsFromList
   , attrsLookup
+  , attrsLookupDefault
   , attrsInsert
-  , attrsDefault
+  , attrsInsertDefault
   , attrsDelete
   , attrsToList
   , DupeAttrErr
@@ -53,11 +54,14 @@ attrsFromList = Attrs . Map.fromList
 attrsLookup :: Text -> Attrs -> Maybe Datum
 attrsLookup k (Attrs m) = Map.lookup k m
 
+attrsLookupDefault :: Datum -> Text -> Attrs -> Datum
+attrsLookupDefault v k (Attrs m) = Map.findWithDefault v k m
+
 attrsInsert :: Text -> Datum -> Attrs -> Attrs
 attrsInsert k v (Attrs m) = Attrs (Map.insert k v m)
 
-attrsDefault :: Text -> Datum -> Attrs -> Attrs
-attrsDefault k v a@(Attrs m) = case Map.lookup k m of
+attrsInsertDefault :: Text -> Datum -> Attrs -> Attrs
+attrsInsertDefault k v a@(Attrs m) = case Map.lookup k m of
   Nothing -> Attrs (Map.insert k v m)
   Just _ -> a
 

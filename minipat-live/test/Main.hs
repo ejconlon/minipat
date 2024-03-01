@@ -11,7 +11,7 @@ import Data.Sequence qualified as Seq
 import Minipat.Live.Attrs (attrsSingleton)
 import Minipat.Live.Backend (PlayMeta (..), WithPlayMeta (..))
 import Minipat.Live.Core (Env (..), mergeRecord, setOrbit)
-import Minipat.Live.Extra (sound)
+import Minipat.Live.Extra (parseSound)
 import Minipat.Time (arcStart, bpmToCps)
 import Nanotime (PosixTime, addTime, timeDeltaFromFracSecs)
 import Test.Tasty (TestTree, defaultMain, testGroup)
@@ -43,7 +43,7 @@ testRecordCase (tempo, gpc) =
                 ]
             expectedEnd = addTime (time (fromInteger cycEnd)) (negate ahead)
         (actualEvs, actualEnd) <- mergeRecord env cycStart cycEnd realStart $ \st ->
-          setOrbit st 1 (sound "bd sd")
+          setOrbit st 1 (parseSound "bd sd")
         let actualEvs' = fmap projectR actualEvs
         actualEvs' @?= expectedEvs
         actualEnd @?= expectedEnd
