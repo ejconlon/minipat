@@ -16,7 +16,7 @@ What does `minipat` add?
 * Lots of tiny changes...
 
 If you have `stack` installed, and you have `supercollider` running for use
-with `tidal`, you should be able to run `bin/minipat-repl dirt` to enter `ghci` with
+with `tidal`, you should be able to run `bin/minipat dirt` to enter `ghci` with
 everything set up:
 
     [Info] Initializing
@@ -26,7 +26,7 @@ everything set up:
     -- Play kick-snare in orbit 1
     > d1 $ s "bd sd"
 
-The MIDI backend requies basically no setup (`bin/minipat-repl midi`):
+The MIDI backend requies basically no setup (`bin/minipat midi`):
 
     -- Send some MIDI note on/off events
     > d1 $ n "c5 d6"

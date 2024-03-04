@@ -17,10 +17,13 @@ To use this, add it to your `lazy.nvim` plugins:
       init = function()
         vim.filetype.add { extension = { minipat = 'minipat' } }
       end,
-      opts = {
-        minipat_cmd = 'my_custom_cmd my_args',
-      },
     },
 
 The plugin will be lazy-loaded when you open a `*.minipat` file. Then you can start
 `minipat` with `:MinipatLaunch` and stop with `:MinipatQuit`.
+
+By default it will look for `minipat` on your `$PATH` - add it to your shell with
+
+    export PATH="/path/to/minipat/bin:${PATH}"
+
+Check the source (`lua/minipat.lua`) for configurable options and defaults.

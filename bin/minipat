@@ -1,0 +1,27 @@
+#!/bin/bash
+
+set -e
+
+cd "$(dirname "$0")/.."
+
+DEFAULT_BACKEND="midi"
+USE_STRING="minipat [BACKEND]"
+
+if [ $# -eq 0 ]; then
+  echo "No backend specified, using default backend ${DEFAULT_BACKEND}"
+  echo "If this is not what you want, use: ${USE_STRING}"
+  BACKEND="${DEFAULT_BACKEND}"
+else
+  BACKEND="$1"
+  shift
+fi
+
+if [ "${BACKEND}" == "help" ] ||
+    [ "${BACKEND}" == "--help" ] ||
+    [ "${BACKEND}" == "-h" ]; then
+  echo "Use: ${USE_STRING}"
+  exit 0
+fi
+
+stack build --fast minipat-${BACKEND}
+exec stack exec -- ghci -package minipat-${BACKEND} -ghci-script minipat-${BACKEND}/Repl.ghci

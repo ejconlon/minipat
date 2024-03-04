@@ -1,6 +1,0 @@
-#!/bin/bash
-set -eu
-BACKEND="$1"
-shift
-cd "$(dirname "$0")/.."
-exec stack exec -- ghci -package minipat-${BACKEND} -ghci-script minipat-${BACKEND}/Repl.ghci $@

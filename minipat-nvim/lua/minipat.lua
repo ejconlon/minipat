@@ -3,8 +3,9 @@ local M = {}
 local treesitter = require('vim.treesitter')
 
 local DEFAULTS = {
-  boot = {
-    minipat_cmd = 'minipat-repl midi',
+  config = {
+    minipat_cmd = 'minipat',
+    file_ext = 'minipat',
     split = 'v',
   },
   keymaps = {
@@ -151,7 +152,7 @@ function M.setup(args)
   args = vim.tbl_deep_extend('force', DEFAULTS, args)
 
   local launch_fn = function()
-    launch_minipat(args.boot)
+    launch_minipat(args.config)
   end
 
   local enter_fn = function()
@@ -165,7 +166,7 @@ function M.setup(args)
   vim.api.nvim_create_user_command('MinipatLaunch', launch_fn, { desc = 'launches Minipat instance' })
   vim.api.nvim_create_user_command('MinipatQuit', exit_minipat, { desc = 'quits Minipat instance' })
   vim.api.nvim_create_autocmd({ 'BufEnter', 'BufWinEnter' }, {
-    pattern = { '*.minipat' },
+    pattern = { '*.' .. args.config.file_ext },
     callback = enter_fn,
   })
 end
