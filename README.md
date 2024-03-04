@@ -37,6 +37,11 @@ run `reallocate myBackendOptions myCoreOptions >>= initialize` in the REPL.
 
 Please be aware that this is young software in an "it works for me" state!
 
+## Editor integration
+
+There is a Neovim plugin - see the [README](minipat-nvim/README.md) for installation
+instructions.
+
 ## Contributions
 
 Your help is very welcome. Some TODOs follow.
