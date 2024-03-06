@@ -9,10 +9,11 @@ module Minipat.Live.Extra
   , pF
   , Sound (..)
   , parseSound
-  , DirtNote (..)
-  , parseDirtNote
-  , MidiNote (..)
+  , Note (..)
+  , parseNote
   , parseMidiNote
+  , midiToNote
+  , noteToMidi
   , Chord (..)
   , Arp (..)
   , parseArp
@@ -100,7 +101,7 @@ pI k = fmap (Attr k . fromIntegral)
 
 data Sound = Sound
   { soundIdent :: !Ident
-  , soundNote :: !(Maybe DirtNote)
+  , soundNote :: !(Maybe Note)
   }
   deriving stock (Eq, Ord, Show)
 
@@ -111,81 +112,68 @@ instance IsAttrs Sound where
   toAttrs (Sound so mn) = attrsInsert "sound" (DatumString (unIdent so)) (toAttrs mn)
 
 soundP :: P Sound
-soundP = fmap (\(Select so mn) -> Sound so mn) (selectP identP dirtNoteP)
+soundP = fmap (\(Select so mn) -> Sound so mn) (selectP identP noteP)
 
 parseSound :: Text -> S Sound
 parseSound = parsePat soundP
 
--- * DirtNote
+-- * Note
 
 -- | This is rooted at C5, MIDI note 60, so care must be taken to adjust before
 -- converting to/from MIDI values.
-newtype DirtNote = DirtNote {unDirtNote :: Int32}
+newtype Note = Note {unNote :: Int32}
   deriving stock (Show)
   deriving newtype (Eq, Ord, Pretty)
 
-instance IsAttrs DirtNote where
-  toAttrs (DirtNote x) = attrsSingleton "note" (DatumInt32 x)
+instance IsAttrs Note where
+  toAttrs (Note x) = attrsSingleton "note" (DatumInt32 x)
 
-dirtLinOffset :: Integer
-dirtLinOffset = 72
+noteLinOffset :: Integer
+noteLinOffset = 72
 
-dirtDefaultOctave :: Integer
-dirtDefaultOctave = 5
+noteDefaultOctave :: Integer
+noteDefaultOctave = 5
 
-dirtToLin :: DirtNote -> LinNote
-dirtToLin = LinNote . (dirtLinOffset +) . fromIntegral . unDirtNote
+noteToLin :: Note -> LinNote
+noteToLin = LinNote . (noteLinOffset +) . fromIntegral . unNote
 
-linToDirt :: LinNote -> DirtNote
-linToDirt = DirtNote . fromInteger . subtract dirtLinOffset . unLinNote
+linToNote :: LinNote -> Note
+linToNote = Note . fromInteger . subtract noteLinOffset . unLinNote
 
-dirtToOct :: DirtNote -> OctNote
-dirtToOct = linToOct . dirtToLin
+noteToOct :: Note -> OctNote
+noteToOct = linToOct . noteToLin
 
-octToDirt :: OctNote -> DirtNote
-octToDirt = linToDirt . octToLin
+octToNote :: OctNote -> Note
+octToNote = linToNote . octToLin
 
-dirtNoteP :: P DirtNote
-dirtNoteP =
-  fmap octToDirt (octNoteP dirtDefaultOctave) <|> fmap (DirtNote . fromInteger) L.intP
+noteP :: P Note
+noteP =
+  fmap octToNote (octNoteP noteDefaultOctave)
+    <|> fmap (Note . fromInteger) L.intP
 
-parseDirtNote :: Text -> S DirtNote
-parseDirtNote = parsePat dirtNoteP
+parseNote :: Text -> S Note
+parseNote = parsePat noteP
 
 -- * MidiNote
 
--- | This is rooted at C-1, MIDI note 0
-newtype MidiNote = MidiNote {unMidiNote :: Int32}
-  deriving stock (Show)
-  deriving newtype (Eq, Ord, Pretty)
-
-instance IsAttrs MidiNote where
-  toAttrs (MidiNote x) = attrsSingleton "note" (DatumInt32 x)
-
-midiLinOffset :: Integer
+midiLinOffset :: Int32
 midiLinOffset = 0
 
-midiDefaultOctave :: Integer
-midiDefaultOctave = -1
-
-midiToLin :: MidiNote -> LinNote
-midiToLin = LinNote . (midiLinOffset +) . fromIntegral . unMidiNote
-
-linToMidi :: LinNote -> MidiNote
-linToMidi = MidiNote . fromInteger . subtract midiLinOffset . unLinNote
-
-midiToOct :: MidiNote -> OctNote
-midiToOct = linToOct . midiToLin
-
-octToMidi :: OctNote -> MidiNote
-octToMidi = linToMidi . octToLin
-
-midiNoteP :: P MidiNote
+midiNoteP :: P Note
 midiNoteP =
-  fmap octToMidi (octNoteP midiDefaultOctave) <|> fmap (MidiNote . fromInteger) L.intP
+  fmap octToNote (octNoteP noteDefaultOctave)
+    <|> fmap (midiToNote . fromInteger) L.intP
 
-parseMidiNote :: Text -> S MidiNote
+midiToNote :: Int32 -> Note
+midiToNote = Note . subtract midiLinOffset
+
+noteToMidi :: Note -> Int32
+noteToMidi = (midiLinOffset +) . unNote
+
+parseMidiNote :: Text -> S Note
 parseMidiNote = parsePat midiNoteP
+
+-- * Note conversions
 
 -- * Chord
 

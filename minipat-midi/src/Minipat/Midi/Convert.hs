@@ -8,7 +8,7 @@ import Dahdit.Midi.Osc (Datum (..))
 import Data.Functor ((<&>))
 import Data.Int (Int32)
 import Minipat.Live.Attrs (Attrs, IsAttrs (..), attrsSingleton)
-import Minipat.Live.Convert (ConvErr, defaultM, getM, runConvM)
+import Minipat.Live.Convert (Branch (..), ConvErr, ConvM, branchM, defaultM, runConvM)
 import Minipat.Live.Datum (DatumProxy (..))
 
 newtype Vel = Vel {unVel :: Int32}
@@ -24,10 +24,19 @@ instance IsAttrs Vel where
 -- control change
 -- the rest of ChanDataVoice
 convertMidiAttrs :: Attrs -> Either ConvErr ChanData
-convertMidiAttrs =
-  -- Default velocity in something like Ableton is 100
-  let defVel = 100
-  in  runConvM $ do
-        note <- getM "note" DatumProxyInt32 <&> fromIntegral
-        vel <- defaultM "vel" DatumProxyInt32 defVel <&> fromIntegral
-        pure (ChanDataVoice (ChanVoiceDataNoteOn note vel))
+convertMidiAttrs = runConvM rootM
+
+-- Default velocity in something like Ableton is 100
+defVel :: Int32
+defVel = 100
+
+rootM :: ConvM ChanData
+rootM =
+  branchM
+    [
+      ( "note"
+      , Branch DatumProxyInt32 $ \(fromIntegral -> note) -> do
+          vel <- defaultM "vel" DatumProxyInt32 defVel <&> fromIntegral
+          pure (ChanDataVoice (ChanVoiceDataNoteOn note vel))
+      )
+    ]

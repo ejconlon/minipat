@@ -9,6 +9,8 @@ module Minipat.Live.Convert
   , Branch (..)
   , branchM
   , branchM'
+  , optBranchM
+  , optBranchM'
   )
 where
 
@@ -92,5 +94,28 @@ branchM = branchM' . Map.fromList . toList
 branchM' :: Map Text (Branch a) -> ConvM a
 branchM' kfs = do
   (k, v) <- exclusiveM' (Map.keysSet kfs)
-  let b = kfs Map.! k
-  runBranch b k v
+  runBranch (kfs Map.! k) k v
+
+optBranchM :: (Foldable f) => ConvM a -> f (Text, Branch a) -> ConvM a
+optBranchM m0 = optBranchM' m0 . Map.fromList . toList
+
+optBranchM' :: ConvM a -> Map Text (Branch a) -> ConvM a
+optBranchM' m0 kfs = do
+  mkv <- catchError (fmap Just (exclusiveM' (Map.keysSet kfs))) $ \case
+    ConvErrExclusive {} -> pure Nothing
+    err -> throwError err
+  case mkv of
+    Nothing -> m0
+    Just (k, v) -> runBranch (kfs Map.! k) k v
+
+-- enumM :: (Foldable f, Ord z) => Text -> DatumProxy z -> f (z, ConvM a) ->ConvM a
+-- enumM k p = enumM' k p . Map.fromList . toList
+--
+-- enumM' :: Text -> DatumProxy z -> Map z (ConvM a) -> ConvM a
+-- enumM' k p vms = undefined
+--
+-- optEnumM :: (Foldable f, Ord z) => Text -> DatumProxy z -> ConvM a -> f (z, ConvM a) -> ConvM a
+-- optEnumM k p m0 = optEnumM' k p m0 . Map.fromList . toList
+--
+-- optEnumM' :: Text -> DatumProxy z -> ConvM a -> Map z (ConvM a) -> ConvM a
+-- optEnumM' k p m0 vms = undefined

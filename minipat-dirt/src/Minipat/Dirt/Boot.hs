@@ -6,6 +6,7 @@ module Minipat.Dirt.Boot
   , s
   , note
   , n
+  , midinote
   , module Minipat.Dirt.Params
   , module Minipat.Live.Boot
   , module Minipat.Live.Extra
@@ -24,6 +25,9 @@ sound, s :: Text -> S Sound
 sound = parseSound
 s = sound
 
-note, n :: Text -> S DirtNote
-note = parseDirtNote
+note, n :: Text -> S Note
+note = parseNote
 n = note
+
+midinote :: Text -> S Note
+midinote = parseMidiNote
