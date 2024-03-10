@@ -9,12 +9,15 @@ module Minipat.Live.Extra
   , pF
   , Sound (..)
   , parseSound
-  , Note (..)
+  , LiveNote (..)
   , parseNote
+  , noteToLin
+  , linToNote
+  , noteToOct
+  , octToNote
   , parseMidiNote
   , midiToNote
   , noteToMidi
-  , Chord (..)
   , Arp (..)
   , parseArp
   )
@@ -121,7 +124,7 @@ parseSound = parsePat soundP
 
 -- | This is rooted at C5, MIDI note 60, so care must be taken to adjust before
 -- converting to/from MIDI values.
-newtype Note = Note {unNote :: Int32}
+newtype LiveNote = LiveNote {unLiveNote :: Note}
   deriving stock (Show)
   deriving newtype (Eq, Ord, Pretty)
 
@@ -173,8 +176,6 @@ noteToMidi = (midiLinOffset +) . unNote
 parseMidiNote :: Text -> S Note
 parseMidiNote = parsePat midiNoteP
 
--- * Note conversions
-
 -- * Chord
 
 data Chord n = Chord
@@ -202,3 +203,5 @@ parseArp = parsePat arpP
 -- TODO implement
 -- strum :: S Arp -> S Chord -> S Note
 -- strum arps chords = undefined
+
+-- transposeBy :: Transposable a => Interval -> S a -> S a

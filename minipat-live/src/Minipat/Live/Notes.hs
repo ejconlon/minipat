@@ -103,36 +103,33 @@ octNoteIsMidi (OctNote (Octave oct) nn) =
 
 -- | An integral note type that can represent notes outside the MIDI scale.
 -- This is rooted at C-1, MIDI note 0.
-newtype LinNote = LinNote {unLinNote :: Integer}
+newtype Note = Note {unNote :: Integer}
   deriving stock (Show)
   deriving newtype (Eq, Ord, Pretty)
 
-linFreq :: (Floating a) => LinNote -> a
-linFreq (LinNote n) = 440 * (2 ** ((fromInteger n - 69) / 12))
+noteFreq :: (Floating a) => Note -> a
+noteFreq (Note n) = 440 * (2 ** ((fromInteger n - 69) / 12))
 
 -- Midi notes are between 0 (C-1) and 127 (G9)
 -- Piano notes are between 21 (A0) and 108 (C8)
-linIsMidi :: LinNote -> Bool
-linIsMidi (LinNote n) = n >= 0 && n < 128
+noteIsMidi :: Note -> Bool
+noteIsMidi (Note n) = n >= 0 && n < 128
 
-linAddInterval :: Interval -> LinNote -> LinNote
-linAddInterval (Interval i) (LinNote n) = LinNote (i + n)
+noteToOct :: Note -> OctNote
+noteToOct (Note n) = OctNote (Octave (div n 12 - 1)) (toEnum (mod (fromInteger n) 12))
 
-linToOct :: LinNote -> OctNote
-linToOct (LinNote n) = OctNote (Octave (div n 12 - 1)) (toEnum (mod (fromInteger n) 12))
+octToNote :: OctNote -> Note
+octToNote (OctNote (Octave oct) nn) = Note ((oct + 1) * 12 + noteValue nn)
 
-linSubInterval :: LinNote -> LinNote -> Interval
-linSubInterval (LinNote a) (LinNote b) = Interval (a - b)
+noteAddInterval :: Interval -> Note -> Note
+noteAddInterval (Interval i) (Note n) = Note (i + n)
 
-octToLin :: OctNote -> LinNote
-octToLin (OctNote (Octave oct) nn) = LinNote ((oct + 1) * 12 + noteValue nn)
+noteSubInterval :: Note -> Note -> Interval
+noteSubInterval (Note a) (Note b) = Interval (a - b)
 
 newtype Interval = Interval {unInterval :: Integer}
   deriving stock (Show)
   deriving newtype (Eq, Ord, Num)
-
-octAddInterval :: Interval -> OctNote -> OctNote
-octAddInterval i = linToOct . linAddInterval i . octToLin
 
 convNoteName :: Text -> Maybe NoteName
 convNoteName = \case
@@ -385,8 +382,8 @@ convChordName = \case
   "9sus4" -> Just ChordName9Sus4
   _ -> Nothing
 
-chordNotes :: ChordName -> Seq Int
-chordNotes = \case
+chordNameNotes :: ChordName -> Seq Interval
+chordNameNotes = \case
   ChordNameMaj -> [0, 4, 7]
   ChordNameAug -> [0, 4, 8]
   ChordName6 -> [0, 4, 7, 9]
@@ -430,3 +427,24 @@ chordNotes = \case
   ChordName7Sus2 -> [0, 2, 7, 10]
   ChordName7Sus4 -> [0, 5, 7, 10]
   ChordName9Sus4 -> [0, 5, 7, 10, 14]
+
+data Chord = Chord
+  { chordRoot :: !Note
+  , chordNotes :: !(Seq Interval)
+  } deriving stock (Eq, Ord, Show)
+
+class Transposable a where
+  transposeValue :: Interval -> a -> a
+
+instance Transposable Interval where
+  transposeValue (Interval i) (Interval j) = Interval (i + j)
+
+instance Transposable Note where
+  transposeValue (Interval i) (Note j) = Note (i + j)
+
+instance Transposable OctNote where
+  transposeValue i = noteToOct . transposeValue i . octToNote
+
+instance Transposable Chord where
+  transposeValue i (Chord root notes) = Chord (transposeValue i root) notes
+
