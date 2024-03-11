@@ -11,12 +11,20 @@ module Minipat.Live.Convert
   , branchM'
   , optBranchM
   , optBranchM'
+  , finiteM
+  , finiteM'
+  , optFiniteM
+  , optFiniteM'
+  , enumM
+  , optEnumM
+  , restM
   )
 where
 
 import Control.Exception (Exception)
-import Control.Monad.Except (Except, MonadError (..), runExcept)
+import Control.Monad.Except (Except, MonadError (..), runExcept, tryError)
 import Control.Monad.Reader (MonadReader (..), ReaderT (..), asks)
+import Control.Monad.State (MonadState (..), StateT (..), modify')
 import Dahdit.Midi.Osc (Datum, DatumType)
 import Data.Foldable (toList)
 import Data.Map.Strict (Map)
@@ -25,8 +33,9 @@ import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
-import Minipat.Live.Attrs (Attrs, attrsLookup)
-import Minipat.Live.Datum (DatumProxy, DatumTypeErr (..), castDatum)
+import Minipat.Live.Attrs (Attrs (..), attrsLookup)
+import Minipat.Live.Datum (DatumProxy (..), DatumTypeErr (..), castDatum, datumProxyType)
+import Minipat.Live.EnumString (EnumString (..))
 
 data ConvErr
   = ConvErrFail !Text
@@ -34,34 +43,47 @@ data ConvErr
   | ConvErrMissingAll !(Set Text)
   | ConvErrExclusive !(Set Text) !Text !Text
   | ConvErrMatch !Text !DatumType !DatumType
+  | ConvErrFinite !Text !DatumType
+  | ConvErrEnum !Text !Text
   deriving stock (Eq, Ord, Show)
 
 instance Exception ConvErr
 
-newtype ConvM a = ConvM {unConvM :: ReaderT Attrs (Except ConvErr) a}
-  deriving newtype (Functor, Applicative, Monad, MonadReader Attrs, MonadError ConvErr)
+newtype ConvM a = ConvM {unConvM :: ReaderT Attrs (StateT (Set Text) (Except ConvErr)) a}
+  deriving newtype (Functor, Applicative, Monad)
 
 instance MonadFail ConvM where
-  fail = throwError . ConvErrFail . T.pack
+  fail = ConvM . throwError . ConvErrFail . T.pack
 
 runConvM :: ConvM a -> Attrs -> Either ConvErr a
-runConvM m = runExcept . runReaderT (unConvM m)
+runConvM m at = fmap fst (implRunConvM m at Set.empty)
 
-mkConvM :: (Attrs -> Either ConvErr a) -> ConvM a
-mkConvM f = ask >>= \as -> either throwError pure (f as)
+implRunConvM :: ConvM a -> Attrs -> Set Text -> Either ConvErr (a, Set Text)
+implRunConvM m at s = runExcept (runStateT (runReaderT (unConvM m) at) s)
+
+implLookupM :: Text -> ConvM (Maybe Datum)
+implLookupM k = ConvM $ do
+  mv <- asks (attrsLookup k)
+  case mv of
+    Nothing -> pure ()
+    Just _ -> modify' (Set.insert k)
+  pure mv
+
+implTryErrorM :: ConvM a -> ConvM (Either ConvErr a)
+implTryErrorM m = ConvM (tryError (unConvM m))
 
 lookupM :: Text -> DatumProxy a -> ConvM (Maybe a)
-lookupM k p = asks (attrsLookup k) >>= traverse (matchM k p)
+lookupM k p = implLookupM k >>= traverse (matchM k p)
 
 defaultM :: Text -> DatumProxy a -> a -> ConvM a
-defaultM k p d = asks (attrsLookup k) >>= maybe (pure d) (matchM k p)
+defaultM k p d = implLookupM k >>= maybe (pure d) (matchM k p)
 
 getM :: Text -> DatumProxy a -> ConvM a
-getM k p = lookupM k p >>= maybe (throwError (ConvErrMissing k)) pure
+getM k p = lookupM k p >>= maybe (ConvM (throwError (ConvErrMissing k))) pure
 
 matchM :: Text -> DatumProxy a -> Datum -> ConvM a
 matchM k p v = case castDatum p v of
-  Left (DatumTypeErr expected actual) -> throwError (ConvErrMatch k expected actual)
+  Left (DatumTypeErr expected actual) -> ConvM (throwError (ConvErrMatch k expected actual))
   Right val -> pure val
 
 exclusiveM :: (Foldable f) => f Text -> ConvM (Text, Datum)
@@ -72,15 +94,15 @@ exclusiveM' ks0 = go Nothing (toList ks0)
  where
   go !racc = \case
     [] -> case racc of
-      Nothing -> throwError (ConvErrMissingAll ks0)
-      Just kv -> pure kv
+      Nothing -> ConvM (throwError (ConvErrMissingAll ks0))
+      Just kv@(k, _) -> kv <$ ConvM (modify' (Set.insert k))
     k : ks -> do
-      mv <- asks (attrsLookup k)
+      mv <- ConvM (asks (attrsLookup k))
       case mv of
         Nothing -> go racc ks
         Just v -> case racc of
           Nothing -> go (Just (k, v)) ks
-          Just (k', _) -> throwError (ConvErrExclusive ks0 k' k)
+          Just (k', _) -> ConvM (throwError (ConvErrExclusive ks0 k' k))
 
 data Branch a where
   Branch :: DatumProxy z -> (z -> ConvM a) -> Branch a
@@ -96,26 +118,53 @@ branchM' kfs = do
   (k, v) <- exclusiveM' (Map.keysSet kfs)
   runBranch (kfs Map.! k) k v
 
-optBranchM :: (Foldable f) => ConvM a -> f (Text, Branch a) -> ConvM a
-optBranchM m0 = optBranchM' m0 . Map.fromList . toList
+optBranchM :: (Foldable f) => f (Text, Branch a) -> ConvM (Maybe a)
+optBranchM = optBranchM' . Map.fromList . toList
 
-optBranchM' :: ConvM a -> Map Text (Branch a) -> ConvM a
-optBranchM' m0 kfs = do
-  mkv <- catchError (fmap Just (exclusiveM' (Map.keysSet kfs))) $ \case
-    ConvErrExclusive {} -> pure Nothing
-    err -> throwError err
+optBranchM' :: Map Text (Branch a) -> ConvM (Maybe a)
+optBranchM' kfs = do
+  ea <- implTryErrorM (exclusiveM' (Map.keysSet kfs))
+  mkv <- case ea of
+    Left (ConvErrExclusive {}) -> pure Nothing
+    Left err -> ConvM (throwError err)
+    Right kv -> pure (Just kv)
   case mkv of
-    Nothing -> m0
-    Just (k, v) -> runBranch (kfs Map.! k) k v
+    Nothing -> pure Nothing
+    Just (k, v) -> fmap Just (runBranch (kfs Map.! k) k v)
 
--- enumM :: (Foldable f, Ord z) => Text -> DatumProxy z -> f (z, ConvM a) ->ConvM a
--- enumM k p = enumM' k p . Map.fromList . toList
---
--- enumM' :: Text -> DatumProxy z -> Map z (ConvM a) -> ConvM a
--- enumM' k p vms = undefined
---
--- optEnumM :: (Foldable f, Ord z) => Text -> DatumProxy z -> ConvM a -> f (z, ConvM a) -> ConvM a
--- optEnumM k p m0 = optEnumM' k p m0 . Map.fromList . toList
---
--- optEnumM' :: Text -> DatumProxy z -> ConvM a -> Map z (ConvM a) -> ConvM a
--- optEnumM' k p m0 vms = undefined
+restM :: ConvM Attrs
+restM = ConvM (liftA2 (\at ks -> Attrs (Map.withoutKeys (unAttrs at) ks)) ask get)
+
+implFiniteM :: (Ord z) => Text -> DatumProxy z -> Map z (ConvM a) -> z -> ConvM a
+implFiniteM k p vms z = case Map.lookup z vms of
+  Nothing -> ConvM (throwError (ConvErrFinite k (datumProxyType p)))
+  Just ma -> ma
+
+finiteM :: (Foldable f, Ord z) => Text -> DatumProxy z -> f (z, ConvM a) -> ConvM a
+finiteM k p = finiteM' k p . Map.fromList . toList
+
+finiteM' :: (Ord z) => Text -> DatumProxy z -> Map z (ConvM a) -> ConvM a
+finiteM' k p vms = getM k p >>= implFiniteM k p vms
+
+optFiniteM :: (Foldable f, Ord z) => Text -> DatumProxy z -> f (z, ConvM a) -> ConvM (Maybe a)
+optFiniteM k p = optFiniteM' k p . Map.fromList . toList
+
+optFiniteM' :: (Ord z) => Text -> DatumProxy z -> Map z (ConvM a) -> ConvM (Maybe a)
+optFiniteM' k p vms =
+  lookupM k p >>= \case
+    Nothing -> pure Nothing
+    Just v -> fmap Just (implFiniteM k p vms v)
+
+implEnumM :: (EnumString z) => Text -> Text -> ConvM z
+implEnumM k v = case toEnumString (T.unpack v) of
+  Nothing -> ConvM (throwError (ConvErrEnum k v))
+  Just z -> pure z
+
+enumM :: (EnumString z) => Text -> ConvM z
+enumM k = getM k DatumProxyString >>= implEnumM k
+
+optEnumM :: (EnumString z) => Text -> ConvM (Maybe z)
+optEnumM k =
+  lookupM k DatumProxyString >>= \case
+    Nothing -> pure Nothing
+    Just v -> fmap Just (implEnumM k v)

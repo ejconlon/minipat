@@ -31,11 +31,14 @@ library
       Minipat.Live.Convert
       Minipat.Live.Core
       Minipat.Live.Datum
+      Minipat.Live.EnumString
       Minipat.Live.Exception
       Minipat.Live.Extra
       Minipat.Live.Logger
       Minipat.Live.Notes
+      Minipat.Live.OscRpc
       Minipat.Live.Play
+      Minipat.Live.Renoise
       Minipat.Live.Resources
   other-modules:
       Paths_minipat_live
@@ -88,6 +91,7 @@ library
     , prettyprinter ==1.7.*
     , resourcet ==1.3.*
     , stm ==2.5.*
+    , template-haskell ==2.20.*
     , text ==2.0.*
   default-language: GHC2021
 
@@ -148,5 +152,6 @@ test-suite minipat-live-test
     , stm ==2.5.*
     , tasty ==1.4.*
     , tasty-hunit ==0.10.*
+    , template-haskell ==2.20.*
     , text ==2.0.*
   default-language: GHC2021

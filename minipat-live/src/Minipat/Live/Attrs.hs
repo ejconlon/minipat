@@ -5,15 +5,17 @@
 -- option for assembling events incrementally! See 'Minipat.Live.Convert' for
 -- a structured way to map this to a more appropriate type for a given backend.
 module Minipat.Live.Attrs
-  ( Attrs
+  ( Attrs (..)
   , attrsSingleton
   , attrsFromList
+  , attrsFromMap
   , attrsLookup
   , attrsLookupDefault
   , attrsInsert
   , attrsInsertDefault
   , attrsDelete
   , attrsToList
+  , attrsToMap
   , DupeAttrErr
   , attrsTryInsert
   , MissingAttrErr
@@ -53,7 +55,10 @@ attrsSingleton :: Text -> Datum -> Attrs
 attrsSingleton k v = Attrs (Map.singleton k v)
 
 attrsFromList :: [(Text, Datum)] -> Attrs
-attrsFromList = Attrs . Map.fromList
+attrsFromList = attrsFromMap . Map.fromList
+
+attrsFromMap :: Map Text Datum -> Attrs
+attrsFromMap = Attrs
 
 attrsLookup :: Text -> Attrs -> Maybe Datum
 attrsLookup k (Attrs m) = Map.lookup k m
@@ -73,7 +78,10 @@ attrsDelete :: Text -> Attrs -> Attrs
 attrsDelete k (Attrs m) = Attrs (Map.delete k m)
 
 attrsToList :: Attrs -> [(Text, Datum)]
-attrsToList = Map.toList . unAttrs
+attrsToList = Map.toList . attrsToMap
+
+attrsToMap :: Attrs -> Map Text Datum
+attrsToMap = unAttrs
 
 newtype DupeAttrErr = DupeAttrErr {unDupeAttrErr :: Text}
   deriving stock (Show)
