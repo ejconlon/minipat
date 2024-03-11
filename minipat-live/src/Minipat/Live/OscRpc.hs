@@ -1,9 +1,23 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+{-|
+ - We define an RPC-over-OSC protocol (like the one in SuperDirt):
+ -
+ - * Messages can be one-shot or request-response
+ - * Replies should be send to the original OSC address with the
+ -  additional suffix `/reply`
+ -    * Example: `/dirt/handshake` to `/dirt/handshake/reply`
+ - * Messages contain lists of key-value pairs (string datum, then
+ -  any kind of datum, repeating).
+ - * Attribute names starting with `!` are system level attributes and
+ -  should be removed before further processing.
+ -    * `!requestId` is one such attribute that should be carried
+ -      over into a responses.
+ -}
 module Minipat.Live.OscRpc where
 
 import Control.Exception (Exception)
-import Dahdit.Midi.Osc (Datum (..), DatumType (..), Msg (..), Packet (..))
+import Dahdit.Midi.Osc (Datum (..), DatumType (..), Msg (..))
 import Dahdit.Midi.OscAddr (RawAddrPat)
 import Data.Foldable (foldl')
 import Data.Int (Int32)
@@ -14,7 +28,7 @@ import Data.Sequence qualified as Seq
 import Data.Text (Text)
 import Data.Text qualified as T
 import Minipat.Live.Attrs (Attrs, IsAttrs (..), attrsSingleton, attrsToList)
-import Minipat.Live.Convert (ConvErr, ConvM)
+import Minipat.Live.Convert (ConvErr, ConvM, runConvM)
 import Minipat.Live.EnumString (EnumString, allEnumStrings)
 
 -- * General classes and data types
@@ -71,13 +85,18 @@ namedPayload = foldl' go Empty . attrsToList
  where
   go !acc (k, v) = acc :|> DatumString k :|> v
 
-mkCmdReq :: (RpcCmd t c) => RequestId -> c r -> Packet
+mkCmdReq :: (RpcCmd t c) => RequestId -> c r -> Msg
 mkCmdReq rid cmd =
   let ty = rcType cmd
       addr = rtAddr ty
       args = rcMkReq cmd
       attrs = toAttrs rid <> args
-  in  PacketMsg (Msg addr (namedPayload attrs))
+  in  Msg addr (namedPayload attrs)
+
+parseCmdRep :: (RpcCmd t c) => c r -> Attrs -> Either ConvErr r
+parseCmdRep cmd at = case rcParseRep cmd of
+  Left r -> Right r
+  Right p -> runConvM p at
 
 -- rpc :: RpcCmd c => (Value -> IO Value) -> TVar RequestId -> c r -> IO (Either RpcErr r)
 -- rpc act rv cmd = do

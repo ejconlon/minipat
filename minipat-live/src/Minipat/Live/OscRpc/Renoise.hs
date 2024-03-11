@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module Minipat.Live.Renoise where
+module Minipat.Live.OscRpc.Renoise where
 
 import Dahdit.Midi.Osc (DatumType (..))
 import Dahdit.Midi.OscAddr (RawAddrPat (..))

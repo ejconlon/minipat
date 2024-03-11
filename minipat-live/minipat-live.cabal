@@ -37,8 +37,8 @@ library
       Minipat.Live.Logger
       Minipat.Live.Notes
       Minipat.Live.OscRpc
+      Minipat.Live.OscRpc.Renoise
       Minipat.Live.Play
-      Minipat.Live.Renoise
       Minipat.Live.Resources
   other-modules:
       Paths_minipat_live
