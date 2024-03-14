@@ -13,6 +13,17 @@
  -  should be removed before further processing.
  -    * `!requestId` is one such attribute that should be carried
  -      over into a responses.
+   - * Errors can be signaled by the attribute `!error` mapping to a string.
+ - * Type checking of requests and responses should be lenient -
+ -  it's OK to have unrecognized attributes.
+ -  datum containing a reason.
+ - * Responses should carry the corresponding `!requestId`, but if they
+ -  do not, they should be associated with the last request to the original
+ -  address.
+ -    * Clients may enforce that reply addresses are also correct.
+ -    * `!requestId` values should be distinct.
+ - * It is expected that requests or replies may be lost or reordered, so
+ -  plan accordingly.
  -}
 module Minipat.Live.OscRpc where
 
@@ -30,6 +41,10 @@ import Data.Text qualified as T
 import Minipat.Live.Attrs (Attrs, IsAttrs (..), attrsSingleton, attrsToList)
 import Minipat.Live.Convert (ConvErr, ConvM, runConvM)
 import Minipat.Live.EnumString (EnumString, allEnumStrings)
+import Nanotime (PosixTime, TimeDelta)
+import Control.Concurrent.STM (atomically)
+import Control.Concurrent.STM.TVar (TVar, newTVarIO)
+import Control.Concurrent.STM.TMVar (TMVar, newEmptyTMVarIO)
 
 -- * General classes and data types
 
@@ -51,7 +66,7 @@ type AttrTypes = Map Text (Required, AttrType)
 class RpcType t where
   rtAddr :: t -> RawAddrPat
   rtReqTypes :: t -> AttrTypes
-  rtRepTypes :: t -> AttrTypes
+  rtRepTypes :: t -> Maybe AttrTypes
 
 class (RpcType t) => RpcCmd t c | c -> t where
   rcType :: c r -> t
@@ -60,25 +75,36 @@ class (RpcType t) => RpcCmd t c | c -> t where
 
 -- * RPC impl
 
-newtype RemoteErr = RemoteErr {unRemoteErr :: Text}
-  deriving stock (Show)
-  deriving newtype (Eq, Ord)
-
-instance Exception RemoteErr
-
-data RpcErr
-  = RpcErrRemote !RemoteErr
-  | RpcErrConv !ConvErr
-  deriving stock (Eq, Ord, Show)
-
-instance Exception RpcErr
-
 newtype RequestId = RequestId {unRequestId :: Int32}
   deriving stock (Show)
   deriving newtype (Eq, Ord, Num, Enum)
 
 instance IsAttrs RequestId where
   toAttrs (RequestId x) = attrsSingleton "!requestId" (DatumInt32 x)
+
+newtype RemoteErr = RemoteErr {unRemoteErr :: Text}
+  deriving stock (Show)
+  deriving newtype (Eq, Ord)
+
+instance Exception RemoteErr
+
+instance IsAttrs RemoteErr where
+  toAttrs (RemoteErr x) = attrsSingleton "!error" (DatumString x)
+
+data RpcErr
+  = RpcErrRemote !RemoteErr
+  -- ^ Remote side signaled an error
+  | RpcErrConv !ConvErr
+  -- ^ Response parsing failed
+  | RpcErrUnmatchedRep !RequestId !RawAddrPat
+  -- ^ No match for reply with id and address
+  | RpcErrAddrMismatch !RequestId !RawAddrPat !RawAddrPat
+  -- ^ Mismatch of reply (args: rid, actual, expected)
+  | RpcErrTimeoutRep !RequestId !RawAddrPat !PosixTime
+  -- ^ Timeout waiting for reply
+  deriving stock (Eq, Ord, Show)
+
+instance Exception RpcErr
 
 namedPayload :: Attrs -> Seq Datum
 namedPayload = foldl' go Empty . attrsToList
@@ -98,14 +124,51 @@ parseCmdRep cmd at = case rcParseRep cmd of
   Left r -> Right r
   Right p -> runConvM p at
 
--- rpc :: RpcCmd c => (Value -> IO Value) -> TVar RequestId -> c r -> IO (Either RpcErr r)
--- rpc act rv cmd = do
---   let ep = mkRpcCmdEndpoint cmd
---       args = mkRpcCmdArgs cmd
---   rid <- atomically (stateTVar rv (\s -> (s, succ s)))
---   let wreq = WireReq rid ep args
---       vreq = mkReqValue wreq
---   vrep <- act vreq
---   case runP parseRepValue vrep of
---     Left err -> pure (Left (RpcErrParse err))
---     Right wrep ->
+-- * Implementation
+
+type WaitVar r = TMVar (Either RpcErr r)
+
+data Waiter c where
+  Waiter :: RequestId -> c r -> RawAddrPat -> PosixTime -> WaitVar r -> Waiter c
+
+waiterMatches :: Msg -> Waiter c -> Bool
+waiterMatches = error "TODO"
+
+waiterExpired :: PosixTime -> Waiter c -> Bool
+waiterExpired = error "TODO"
+
+waiterRun :: Msg -> Waiter c -> IO (Either RpcErr ())
+waiterRun = error "TODO"
+
+data OscProtoEnv c = OscProtoEnv
+  { opeTimeout :: !TimeDelta
+  , opeIdSource :: !(TVar RequestId)
+  , opeWaiters :: !(TVar (Seq (Waiter c)))
+  }
+
+newOscProtoEnvIO :: TimeDelta -> RequestId -> IO (OscProtoEnv c)
+newOscProtoEnvIO to rid = OscProtoEnv to <$> newTVarIO rid <*> newTVarIO Empty
+
+expireWaiters :: OscProtoEnv c -> PosixTime -> IO Int
+expireWaiters (OscProtoEnv _to _ _wes) _now = error "TODO"
+
+handleRecvMsg :: OscProtoEnv c -> Msg -> IO (Either RpcErr a)
+handleRecvMsg = error "TODO"
+
+-- sendMsgWith :: (RpcCmd t c) => (Msg -> IO ()) -> OscProtoEnv c -> c r -> IO (WaitVar r)
+-- sendMsgWith send ope cmd = error "TODO"
+
+-- data OscTaskEnv c a = OscTaskEnv
+--   { oteSend :: !(Msg -> IO ())
+--   , oteRecv :: !(IO Msg)
+--   , oteProtoEnv :: !(OscProtoEnv c a)
+--   , oteExpireTask :: !(Async ())
+--   , oteRecvTask :: !(Async ())
+--   }
+--
+-- newOscTaskEnv :: (Msg -> IO ()) -> IO Msg -> OscProtoEnv c a -> OscTaskEnv c a
+-- newOscTaskEnv = error "TODO"
+--
+-- sendMsg :: OscTaskEnv c a -> c r -> IO (WaitVar r)
+-- sendMsg = undefined
+

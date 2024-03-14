@@ -37,6 +37,7 @@ library
       Minipat.Live.Logger
       Minipat.Live.Notes
       Minipat.Live.OscRpc
+      Minipat.Live.OscRpc.Dirt
       Minipat.Live.OscRpc.Renoise
       Minipat.Live.Play
       Minipat.Live.Resources
