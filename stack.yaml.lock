@@ -54,9 +54,9 @@ packages:
   original:
     hackage: little-logger-1.0.2
 - completed:
-    hackage: falsify-0.2.0@sha256:a9ec175cfb20dc5afeedac69f424c77589729fce23733030abf22dc2053abc41,5265
+    hackage: falsify-0.2.0@sha256:82ad5e999a80bf9e7a5bcb2fe17c2b9524a95893ff19fcdbf3ef4a671303e444,5451
     pantry-tree:
-      sha256: c798208320e84b3d05564d73a63c6686499a68d667e33e2b8873035f15eaf81b
+      sha256: 94ee859a00223f18c04e5ee0135ca81e50a47d75d23f2084ae3b5784c1d62c2e
       size: 3378
   original:
     hackage: falsify-0.2.0
