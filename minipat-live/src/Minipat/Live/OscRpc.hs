@@ -42,9 +42,8 @@ import Minipat.Live.Attrs (Attrs, IsAttrs (..), attrsSingleton, attrsToList)
 import Minipat.Live.Convert (ConvErr, ConvM, runConvM)
 import Minipat.Live.EnumString (EnumString, allEnumStrings)
 import Nanotime (PosixTime, TimeDelta)
-import Control.Concurrent.STM (atomically)
 import Control.Concurrent.STM.TVar (TVar, newTVarIO)
-import Control.Concurrent.STM.TMVar (TMVar, newEmptyTMVarIO)
+import Control.Concurrent.STM.TMVar (TMVar)
 
 -- * General classes and data types
 
@@ -149,11 +148,11 @@ data OscProtoEnv c = OscProtoEnv
 newOscProtoEnvIO :: TimeDelta -> RequestId -> IO (OscProtoEnv c)
 newOscProtoEnvIO to rid = OscProtoEnv to <$> newTVarIO rid <*> newTVarIO Empty
 
-expireWaiters :: OscProtoEnv c -> PosixTime -> IO Int
-expireWaiters (OscProtoEnv _to _ _wes) _now = error "TODO"
+-- expireWaiters :: OscProtoEnv c -> PosixTime -> IO Int
+-- expireWaiters (OscProtoEnv _to _ _wes) _now = error "TODO"
 
-handleRecvMsg :: OscProtoEnv c -> Msg -> IO (Either RpcErr a)
-handleRecvMsg = error "TODO"
+-- handleRecvMsg :: OscProtoEnv c -> Msg -> IO (Either RpcErr a)
+-- handleRecvMsg = error "TODO"
 
 -- sendMsgWith :: (RpcCmd t c) => (Msg -> IO ()) -> OscProtoEnv c -> c r -> IO (WaitVar r)
 -- sendMsgWith send ope cmd = error "TODO"

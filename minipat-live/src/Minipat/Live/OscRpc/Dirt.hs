@@ -3,18 +3,14 @@
 
 module Minipat.Live.OscRpc.Dirt where
 
-import Dahdit.Midi.Osc (DatumType (..))
 import Dahdit.Midi.OscAddr (RawAddrPat (..))
-import Data.Int (Int32)
 import Data.Map.Strict qualified as Map
-import Data.Proxy (Proxy (..))
-import Data.Text (Text)
 import Data.Text qualified as T
 import Minipat.Live.EnumString (EnumString (..), deriveEnumString)
-import Minipat.Live.OscRpc (AttrType (..), Required (..), RpcCmd (..), RpcType (..), atEnum)
+import Minipat.Live.OscRpc (RpcCmd (..), RpcType (..))
 import Minipat.Live.Attrs (Attrs)
 
--- * Renoise impl
+-- * Dirt impl
 
 deriveEnumString "DiType" ["handshake", "play"]
 
