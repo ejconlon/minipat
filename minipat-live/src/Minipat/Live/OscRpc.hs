@@ -147,6 +147,8 @@ data OscProtoEnv c = OscProtoEnv
 newOscProtoEnvIO :: TimeDelta -> RequestId -> IO (OscProtoEnv c)
 newOscProtoEnvIO to rid = OscProtoEnv to <$> newTVarIO rid <*> newTVarIO Empty
 
+-- TODO finish implementing
+
 -- expireWaiters :: OscProtoEnv c -> PosixTime -> IO Int
 -- expireWaiters (OscProtoEnv _to _ _wes) _now = error "TODO"
 

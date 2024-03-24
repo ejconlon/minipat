@@ -55,7 +55,7 @@ setChorus = flip setControl 93
 allSoundsOff :: Int -> Seq ShortMsg
 allSoundsOff part = setControl part 120 0
 
--- Turn of non-sustained notes
+-- Turn off non-sustained notes
 allNotesOff :: Int -> Seq ShortMsg
 allNotesOff part = setControl part 123 0
 
