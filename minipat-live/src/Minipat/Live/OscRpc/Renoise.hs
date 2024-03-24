@@ -50,13 +50,15 @@ instance RpcType ReType where
     ReTypeHandshake -> Just Map.empty
     ReTypeShow -> Nothing
     ReTypeNumTracks ->
-      Just $ Map.fromList
-        [ ("numTracks", (RequiredYes, AttrTypeDatum DatumTypeInt32))
-        ]
+      Just $
+        Map.fromList
+          [ ("numTracks", (RequiredYes, AttrTypeDatum DatumTypeInt32))
+          ]
     ReTypeTrackType ->
-      Just $ Map.fromList
-        [ ("trackType", (RequiredYes, atEnum (Proxy @TrackType)))
-        ]
+      Just $
+        Map.fromList
+          [ ("trackType", (RequiredYes, atEnum (Proxy @TrackType)))
+          ]
     ReTypeTrackOp -> Just Map.empty
 
 data ReCmd r where

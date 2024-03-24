@@ -48,5 +48,5 @@ lint-apply:
 # Run a dirt session in ghci
 backend target:
   just build minipat-{{ target }}
-  bin/minipat-repl {{ target }}
+  bin/minipat {{ target }}
 

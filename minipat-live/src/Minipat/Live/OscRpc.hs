@@ -1,32 +1,33 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-{-|
- - We define an RPC-over-OSC protocol (like the one in SuperDirt):
- -
- - * Messages can be one-shot or request-response
- - * Replies should be send to the original OSC address with the
- -  additional suffix `/reply`
- -    * Example: `/dirt/handshake` to `/dirt/handshake/reply`
- - * Messages contain lists of key-value pairs (string datum, then
- -  any kind of datum, repeating).
- - * Attribute names starting with `!` are system level attributes and
- -  should be removed before further processing.
- -    * `!requestId` is one such attribute that should be carried
- -      over into a responses.
-   - * Errors can be signaled by the attribute `!error` mapping to a string.
- - * Type checking of requests and responses should be lenient -
- -  it's OK to have unrecognized attributes.
- -  datum containing a reason.
- - * Responses should carry the corresponding `!requestId`, but if they
- -  do not, they should be associated with the last request to the original
- -  address.
- -    * Clients may enforce that reply addresses are also correct.
- -    * `!requestId` values should be distinct.
- - * It is expected that requests or replies may be lost or reordered, so
- -  plan accordingly.
- -}
+-- |
+--  - We define an RPC-over-OSC protocol (like the one in SuperDirt):
+--  -
+--  - * Messages can be one-shot or request-response
+--  - * Replies should be send to the original OSC address with the
+--  -  additional suffix `/reply`
+--  -    * Example: `/dirt/handshake` to `/dirt/handshake/reply`
+--  - * Messages contain lists of key-value pairs (string datum, then
+--  -  any kind of datum, repeating).
+--  - * Attribute names starting with `!` are system level attributes and
+--  -  should be removed before further processing.
+--  -    * `!requestId` is one such attribute that should be carried
+--  -      over into a responses.
+--    - * Errors can be signaled by the attribute `!error` mapping to a string.
+--  - * Type checking of requests and responses should be lenient -
+--  -  it's OK to have unrecognized attributes.
+--  -  datum containing a reason.
+--  - * Responses should carry the corresponding `!requestId`, but if they
+--  -  do not, they should be associated with the last request to the original
+--  -  address.
+--  -    * Clients may enforce that reply addresses are also correct.
+--  -    * `!requestId` values should be distinct.
+--  - * It is expected that requests or replies may be lost or reordered, so
+--  -  plan accordingly.
 module Minipat.Live.OscRpc where
 
+import Control.Concurrent.STM.TMVar (TMVar)
+import Control.Concurrent.STM.TVar (TVar, newTVarIO)
 import Control.Exception (Exception)
 import Dahdit.Midi.Osc (Datum (..), DatumType (..), Msg (..))
 import Dahdit.Midi.OscAddr (RawAddrPat)
@@ -42,8 +43,6 @@ import Minipat.Live.Attrs (Attrs, IsAttrs (..), attrsSingleton, attrsToList)
 import Minipat.Live.Convert (ConvErr, ConvM, runConvM)
 import Minipat.Live.EnumString (EnumString, allEnumStrings)
 import Nanotime (PosixTime, TimeDelta)
-import Control.Concurrent.STM.TVar (TVar, newTVarIO)
-import Control.Concurrent.STM.TMVar (TMVar)
 
 -- * General classes and data types
 
@@ -91,16 +90,16 @@ instance IsAttrs RemoteErr where
   toAttrs (RemoteErr x) = attrsSingleton "!error" (DatumString x)
 
 data RpcErr
-  = RpcErrRemote !RemoteErr
-  -- ^ Remote side signaled an error
-  | RpcErrConv !ConvErr
-  -- ^ Response parsing failed
-  | RpcErrUnmatchedRep !RequestId !RawAddrPat
-  -- ^ No match for reply with id and address
-  | RpcErrAddrMismatch !RequestId !RawAddrPat !RawAddrPat
-  -- ^ Mismatch of reply (args: rid, actual, expected)
-  | RpcErrTimeoutRep !RequestId !RawAddrPat !PosixTime
-  -- ^ Timeout waiting for reply
+  = -- | Remote side signaled an error
+    RpcErrRemote !RemoteErr
+  | -- | Response parsing failed
+    RpcErrConv !ConvErr
+  | -- | No match for reply with id and address
+    RpcErrUnmatchedRep !RequestId !RawAddrPat
+  | -- | Mismatch of reply (args: rid, actual, expected)
+    RpcErrAddrMismatch !RequestId !RawAddrPat !RawAddrPat
+  | -- | Timeout waiting for reply
+    RpcErrTimeoutRep !RequestId !RawAddrPat !PosixTime
   deriving stock (Eq, Ord, Show)
 
 instance Exception RpcErr
@@ -170,4 +169,3 @@ newOscProtoEnvIO to rid = OscProtoEnv to <$> newTVarIO rid <*> newTVarIO Empty
 --
 -- sendMsg :: OscTaskEnv c a -> c r -> IO (WaitVar r)
 -- sendMsg = undefined
-

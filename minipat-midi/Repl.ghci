@@ -14,6 +14,7 @@ putStrLn "Show documentation with `:doc someFunctionName`"
 putStrLn "============================================================"
 
 import Minipat.Midi.Boot
+import Minipat.Midi.SC qualified as SC
 stRef <- allocate @MidiBackend
 instance LiveSt where { type LiveBackend = MidiBackend; liveStRef = stRef }
 initialize

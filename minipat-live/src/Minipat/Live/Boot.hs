@@ -3,6 +3,7 @@
 -- provide full functionality.
 module Minipat.Live.Boot
   ( LiveSt (..)
+  , readLiveSt
   , allocate
   , initialize
   , reallocate

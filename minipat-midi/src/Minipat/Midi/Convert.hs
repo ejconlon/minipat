@@ -37,6 +37,6 @@ rootM =
       ( "note"
       , Branch DatumProxyInt32 $ \(fromIntegral -> note) -> do
           vel <- defaultM "vel" DatumProxyInt32 defVel <&> fromIntegral
-          pure (ChanDataVoice (ChanVoiceDataNoteOn note vel))
+          pure (ChanDataVoice (ChanVoiceDataNoteOn (note + 60) vel))
       )
     ]

@@ -4,6 +4,7 @@
 module Minipat.Midi.Impl
   ( MidiBackend (..)
   , MidiSt
+  , sendMsgs
   )
 where
 
@@ -16,7 +17,7 @@ import Dahdit.Iface (mutEncode)
 import Dahdit.Midi.Midi (ChanData (..), ChanVoiceData (..), Channel, ShortMsg (..))
 import Data.Acquire (mkAcquire)
 import Data.Default (Default (..))
-import Data.Foldable (foldl')
+import Data.Foldable (foldl', traverse_)
 import Data.Heap (Heap)
 import Data.Heap qualified as H
 import Data.Maybe (fromMaybe)
@@ -25,7 +26,7 @@ import Data.Sequence qualified as Seq
 import Data.Text qualified as T
 import Data.Vector.Storable.Mutable qualified as VSM
 import Minipat.Live.Backend (Backend (..), Callback (..), PlayMeta (..), WithPlayMeta (..))
-import Minipat.Live.Core (St, logAsyncState)
+import Minipat.Live.Core (St, logAsyncState, useCallback)
 import Minipat.Live.Logger (logInfo)
 import Minipat.Live.Resources (acquireAwait, qhHeap)
 import Minipat.Midi.Convert (convertMidiAttrs)
@@ -34,6 +35,7 @@ import Nanotime (PosixTime)
 import Sound.RtMidi (OutputDevice)
 import Sound.RtMidi qualified as R
 
+-- TODO add max msg length
 newtype MidiBackend = MidiBackend
   { mbPortSel :: String -> Bool
   }
@@ -88,7 +90,7 @@ mkNoteOff c = \case
 mkTimedMsgs :: WithPlayMeta ChanData -> Seq TimedMsg
 mkTimedMsgs (WithPlayMeta pm cd) =
   let Arc t1 t2 = pmRealArc pm
-      c = fromInteger (pmOrbit pm)
+      c = fromInteger (pmOrbit pm - 1)
       m1 = ShortMsgChan c cd
       s1 = Seq.singleton (TimedMsg t1 (SortedMsg m1))
   in  case mkNoteOff c cd of
@@ -100,6 +102,17 @@ data MidiData = MidiData
   , mdHeap :: !(TVar (Heap TimedMsg))
   , mdSendTask :: !(Async ())
   }
+
+sendShortMsgs :: (Foldable f) => f ShortMsg -> OutputDevice -> IO ()
+sendShortMsgs ms device = do
+  buf <- liftIO (VSM.new 4)
+  let send m = do
+        len <- fmap fromIntegral (mutEncode m buf)
+        VSM.unsafeWith buf (\ptr -> R.sendUnsafeMessage device ptr len)
+  traverse_ send ms
+
+sendMsgs :: (Foldable f) => St MidiBackend -> f ShortMsg -> IO ()
+sendMsgs st ms = useCallback st (sendShortMsgs ms . mdDevice)
 
 instance Backend MidiBackend where
   type BackendData MidiBackend = MidiData
