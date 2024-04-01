@@ -4,16 +4,16 @@
 -- | Midi message makers for SC-88 and the like
 module Minipat.Midi.SC where
 
-import Dahdit.Midi.Midi (ChanData (..), ChanVoiceData (..), ShortMsg (..))
+import Dahdit.Midi.Midi (ChanData (..), ChanVoiceData (..), LiveMsg (..))
 import Data.Sequence (Seq)
 import Data.Sequence qualified as Seq
 import Data.Text (Text)
 import Data.Text qualified as T
 
-setControl :: Int -> Int -> Int -> Seq ShortMsg
+setControl :: Int -> Int -> Int -> Seq LiveMsg
 setControl part control value =
   Seq.singleton
-    ( ShortMsgChan
+    ( LiveMsgChan
         (fromIntegral part)
         ( ChanDataVoice
             ( ChanVoiceControlChange
@@ -23,10 +23,10 @@ setControl part control value =
         )
     )
 
-setProgram :: Int -> Int -> Seq ShortMsg
+setProgram :: Int -> Int -> Seq LiveMsg
 setProgram part program =
   Seq.singleton
-    ( ShortMsgChan
+    ( LiveMsgChan
         (fromIntegral part)
         ( ChanDataVoice
             ( ChanVoiceProgramChange
@@ -35,7 +35,7 @@ setProgram part program =
         )
     )
 
-setSound :: Int -> Int -> Int -> Seq ShortMsg
+setSound :: Int -> Int -> Int -> Seq LiveMsg
 setSound part inst var =
   mconcat
     [ setControl part 0 var
@@ -43,26 +43,26 @@ setSound part inst var =
     , setProgram part inst
     ]
 
-setLevel :: Int -> Int -> Seq ShortMsg
+setLevel :: Int -> Int -> Seq LiveMsg
 setLevel = flip setControl 7
 
-setPan :: Int -> Int -> Seq ShortMsg
+setPan :: Int -> Int -> Seq LiveMsg
 setPan = flip setControl 10
 
-setReverb :: Int -> Int -> Seq ShortMsg
+setReverb :: Int -> Int -> Seq LiveMsg
 setReverb = flip setControl 91
 
-setChorus :: Int -> Int -> Seq ShortMsg
+setChorus :: Int -> Int -> Seq LiveMsg
 setChorus = flip setControl 93
 
-allSoundsOff :: Int -> Seq ShortMsg
+allSoundsOff :: Int -> Seq LiveMsg
 allSoundsOff part = setControl part 120 0
 
 -- Turn off non-sustained notes
-allNotesOff :: Int -> Seq ShortMsg
+allNotesOff :: Int -> Seq LiveMsg
 allNotesOff part = setControl part 123 0
 
-reinit :: Int -> Seq ShortMsg
+reinit :: Int -> Seq LiveMsg
 reinit part =
   mconcat
     [ setSound part 0 0
@@ -84,7 +84,7 @@ findInstrument t =
             instruments
         )
 
-setSoundNamed :: Int -> Text -> Seq ShortMsg
+setSoundNamed :: Int -> Text -> Seq LiveMsg
 setSoundNamed part frag =
   case findInstrument frag of
     Just (inst1, var, _) -> setSound part (inst1 - 1) var

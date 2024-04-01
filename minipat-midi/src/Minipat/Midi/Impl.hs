@@ -14,7 +14,7 @@ import Control.Concurrent.STM.TVar (TVar, modifyTVar', newTVarIO, readTVarIO, wr
 import Control.Exception (throwIO)
 import Control.Monad.IO.Class (liftIO)
 import Dahdit.Iface (mutEncode)
-import Dahdit.Midi.Midi (ChanData (..), ChanVoiceData (..), Channel, ShortMsg (..))
+import Dahdit.Midi.Midi (ChanData (..), ChanVoiceData (..), Channel, LiveMsg (..))
 import Data.Acquire (mkAcquire)
 import Data.Default (Default (..))
 import Data.Foldable (foldl', traverse_)
@@ -26,7 +26,7 @@ import Data.Sequence qualified as Seq
 import Data.Text qualified as T
 import Data.Vector.Storable.Mutable qualified as VSM
 import Minipat.Live.Backend (Backend (..), Callback (..), PlayMeta (..), WithPlayMeta (..))
-import Minipat.Live.Core (St, logAsyncState, useCallback)
+import Minipat.Live.Core (St, logAsyncState, stBackend, useCallback)
 import Minipat.Live.Logger (logInfo)
 import Minipat.Live.Resources (acquireAwait, qhHeap)
 import Minipat.Midi.Convert (convertMidiAttrs)
@@ -35,24 +35,28 @@ import Nanotime (PosixTime)
 import Sound.RtMidi (OutputDevice)
 import Sound.RtMidi qualified as R
 
+defaultMaxMsgLen :: Int
+defaultMaxMsgLen = 1024
+
 -- TODO add max msg length
-newtype MidiBackend = MidiBackend
-  { mbPortSel :: String -> Bool
+data MidiBackend = MidiBackend
+  { mbPortSel :: !(String -> Bool)
+  , mbMaxMsgLen :: !Int
   }
 
 instance Default MidiBackend where
-  def = MidiBackend (const True)
+  def = MidiBackend (const True) defaultMaxMsgLen
 
 type MidiSt = St MidiBackend
 
 -- | We order so that note offs come before other messages
-newtype SortedMsg = SortedMsg {unSortedMsg :: ShortMsg}
+newtype SortedMsg = SortedMsg {unSortedMsg :: LiveMsg}
   deriving stock (Show)
   deriving newtype (Eq)
 
-isNoteOff :: ShortMsg -> Bool
+isNoteOff :: LiveMsg -> Bool
 isNoteOff = \case
-  ShortMsgChan _ (ChanDataVoice cvd) ->
+  LiveMsgChan _ (ChanDataVoice cvd) ->
     case cvd of
       ChanVoiceDataNoteOn _ 0 -> True
       ChanVoiceDataNoteOff _ _ -> True
@@ -80,18 +84,18 @@ data TimedMsg = TimedMsg
   }
   deriving stock (Eq, Ord, Show)
 
-mkNoteOff :: Channel -> ChanData -> Maybe ShortMsg
+mkNoteOff :: Channel -> ChanData -> Maybe LiveMsg
 mkNoteOff c = \case
   ChanDataVoice (ChanVoiceDataNoteOn n v)
     | v > 0 ->
-        Just (ShortMsgChan c (ChanDataVoice (ChanVoiceDataNoteOn n 0)))
+        Just (LiveMsgChan c (ChanDataVoice (ChanVoiceDataNoteOn n 0)))
   _ -> Nothing
 
 mkTimedMsgs :: WithPlayMeta ChanData -> Seq TimedMsg
 mkTimedMsgs (WithPlayMeta pm cd) =
   let Arc t1 t2 = pmRealArc pm
       c = fromInteger (pmOrbit pm - 1)
-      m1 = ShortMsgChan c cd
+      m1 = LiveMsgChan c cd
       s1 = Seq.singleton (TimedMsg t1 (SortedMsg m1))
   in  case mkNoteOff c cd of
         Just m2 -> s1 :|> TimedMsg t2 (SortedMsg m2)
@@ -103,21 +107,21 @@ data MidiData = MidiData
   , mdSendTask :: !(Async ())
   }
 
-sendShortMsgs :: (Foldable f) => f ShortMsg -> OutputDevice -> IO ()
-sendShortMsgs ms device = do
-  buf <- liftIO (VSM.new 4)
+sendLiveMsgs :: (Foldable f) => Int -> f LiveMsg -> OutputDevice -> IO ()
+sendLiveMsgs maxLen ms device = do
+  buf <- liftIO (VSM.new maxLen)
   let send m = do
         len <- fmap fromIntegral (mutEncode m buf)
         VSM.unsafeWith buf (\ptr -> R.sendUnsafeMessage device ptr len)
   traverse_ send ms
 
-sendMsgs :: (Foldable f) => St MidiBackend -> f ShortMsg -> IO ()
-sendMsgs st ms = useCallback st (sendShortMsgs ms . mdDevice)
+sendMsgs :: (Foldable f) => St MidiBackend -> f LiveMsg -> IO ()
+sendMsgs st ms = useCallback st (sendLiveMsgs (mbMaxMsgLen (stBackend st)) ms . mdDevice)
 
 instance Backend MidiBackend where
   type BackendData MidiBackend = MidiData
 
-  backendInit (MidiBackend portSel) logger getPlayingSTM = do
+  backendInit (MidiBackend portSel maxLen) logger getPlayingSTM = do
     device <- liftIO R.defaultOutput
     let getPort = do
           mp <- R.findPort device portSel
@@ -130,7 +134,7 @@ instance Backend MidiBackend where
               logInfo logger "Connected"
     _ <- mkAcquire getPort (const (R.closePort device))
     heap <- liftIO (newTVarIO H.empty)
-    buf <- liftIO (VSM.new 4)
+    buf <- liftIO (VSM.new maxLen)
     let send (TimedMsg _ (SortedMsg m)) = do
           len <- fmap fromIntegral (mutEncode m buf)
           VSM.unsafeWith buf (\ptr -> R.sendUnsafeMessage device ptr len)

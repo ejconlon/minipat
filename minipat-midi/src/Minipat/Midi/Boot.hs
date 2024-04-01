@@ -13,7 +13,7 @@ module Minipat.Midi.Boot
   )
 where
 
-import Dahdit.Midi.Midi (ShortMsg)
+import Dahdit.Midi.Midi (LiveMsg)
 import Data.Sequence (Seq)
 import Data.Text (Text)
 import Minipat.Live.Boot
@@ -35,5 +35,5 @@ vel, v :: Text -> S Vel
 vel = fmap Vel . parseDatum DatumProxyInt32
 v = vel
 
-midi :: (MidiLiveSt) => Seq ShortMsg -> IO ()
+midi :: (MidiLiveSt) => Seq LiveMsg -> IO ()
 midi ms = readLiveSt >>= \st -> I.sendMsgs st ms

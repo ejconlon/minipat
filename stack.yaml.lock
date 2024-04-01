@@ -83,7 +83,7 @@ packages:
     hackage: RtMidi-0.8.0.0
 snapshots:
 - completed:
-    sha256: 6f0bea3ba5b07360f25bc886e8cff8d847767557a492a6f7f6dcb06e3cc79ee9
-    size: 712905
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/22/13.yaml
-  original: lts-22.13
+    sha256: 5b002d57c51092aa58a8696ccf0993e74fa6ed2efd48e2bbca349e9c2f67c5ef
+    size: 713334
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/22/15.yaml
+  original: lts-22.15
