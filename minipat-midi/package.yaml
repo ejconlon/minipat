@@ -16,6 +16,7 @@ defaults:
 dependencies:
 - base >= 4.12 && < 5
 - async >= 2.2 && < 2.3
+- bytestring >= 0.11 && < 0.12
 - containers >= 0.6 && < 0.7
 - dahdit >= 0.5.1 && < 0.6
 - dahdit-midi >= 0.5.5 && < 0.6
@@ -33,3 +34,15 @@ dependencies:
 library:
   source-dirs: src
 
+tests:
+  minipat-midi-test:
+    main: Main.hs
+    source-dirs: test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - minipat-midi
+    - tasty >= 1.4 && < 1.5
+    - tasty-hunit >= 0.10 && < 0.11
