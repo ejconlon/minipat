@@ -11,10 +11,10 @@ import Data.Text (Text)
 import Data.Text qualified as T
 
 setControl :: Int -> Int -> Int -> Seq LiveMsg
-setControl part control value =
+setControl chan control value =
   Seq.singleton
     ( LiveMsgChan
-        (fromIntegral part)
+        (fromIntegral chan)
         ( ChanDataVoice
             ( ChanVoiceControlChange
                 (fromIntegral control)
@@ -24,10 +24,10 @@ setControl part control value =
     )
 
 setProgram :: Int -> Int -> Seq LiveMsg
-setProgram part program =
+setProgram chan program =
   Seq.singleton
     ( LiveMsgChan
-        (fromIntegral part)
+        (fromIntegral chan)
         ( ChanDataVoice
             ( ChanVoiceProgramChange
                 (fromIntegral program)
@@ -36,11 +36,11 @@ setProgram part program =
     )
 
 setSound :: Int -> Int -> Int -> Seq LiveMsg
-setSound part inst var =
+setSound chan inst var =
   mconcat
-    [ setControl part 0 var
-    , setControl part 32 0
-    , setProgram part inst
+    [ setControl chan 0 var
+    , setControl chan 32 0
+    , setProgram chan inst
     ]
 
 setLevel :: Int -> Int -> Seq LiveMsg
@@ -56,27 +56,38 @@ setChorus :: Int -> Int -> Seq LiveMsg
 setChorus = flip setControl 93
 
 allSoundsOff :: Int -> Seq LiveMsg
-allSoundsOff part = setControl part 120 0
+allSoundsOff chan = setControl chan 120 0
 
 -- Turn off non-sustained notes
 allNotesOff :: Int -> Seq LiveMsg
-allNotesOff part = setControl part 123 0
+allNotesOff chan = setControl chan 123 0
 
 reinit :: Int -> Seq LiveMsg
-reinit part =
+reinit chan =
   mconcat
-    [ setSound part 0 0
-    , setLevel part 100
-    , setPan part 64
-    , setReverb part 40
-    , setChorus part 0
+    [ setSound chan 0 0
+    , setLevel chan 100
+    , setPan chan 64
+    , setReverb chan 40
+    , setChorus chan 0
     ]
 
-findInstrument :: Text -> Maybe (Int, Int, Text)
+data Inst = Inst
+  { instIx :: !Int
+  , instProg :: !Int
+  , instVar :: !Int
+  , instName :: !Text
+  }
+  deriving stock (Eq, Ord, Show)
+
+mkInst :: Int -> (Int, Int, Text) -> Inst
+mkInst i (p, v, n) = Inst i (p - 1) v n
+
+findInstrument :: Text -> Maybe Inst
 findInstrument t =
   let t' = T.toLower t
   in  fmap
-        (Seq.index instruments)
+        (\i -> mkInst i (Seq.index instruments i))
         ( Seq.findIndexL
             ( \(_, _, v) ->
                 not (T.null (snd (T.breakOn t' (T.toLower v))))
@@ -84,10 +95,19 @@ findInstrument t =
             instruments
         )
 
+firstInstrument :: Inst
+firstInstrument = mkInst 0 (Seq.index instruments 0)
+
+nextInstrument :: Inst -> Inst
+nextInstrument (Inst i _ _ _) =
+  if i >= Seq.length instruments
+    then mkInst 0 (Seq.index instruments 0)
+    else let j = i + 1 in mkInst j (Seq.index instruments j)
+
 setSoundNamed :: Int -> Text -> Seq LiveMsg
-setSoundNamed part frag =
+setSoundNamed chan frag =
   case findInstrument frag of
-    Just (inst1, var, _) -> setSound part (inst1 - 1) var
+    Just (Inst _ prog var _) -> setSound chan (prog - 1) var
     Nothing -> error ("Could not find instrument: " <> T.unpack frag)
 
 instruments :: Seq (Int, Int, Text)
