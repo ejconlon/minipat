@@ -6,10 +6,23 @@ module Minipat.Midi.Mpk where
 
 import Control.Monad.ST (runST)
 import Dahdit
+  ( Binary (..)
+  , BinaryRep (..)
+  , Int8
+  , StaticByteSized
+  , StaticBytes (..)
+  , StaticSeq
+  , ViaBinaryRep (..)
+  , ViaBoundedEnum (..)
+  , ViaStaticGeneric (..)
+  , Word8
+  , putTarget
+  )
 import Dahdit.Midi.Midi (LiveMsg (..), Manf (..), ManfSysEx (..), SysExData (..))
 import Data.ByteString.Short qualified as BSS
 import Data.Default (Default (..))
 import Data.String (IsString)
+import GHC.Generics (Generic)
 
 akaiManf :: Manf
 akaiManf = ManfShort 0x47
