@@ -42,7 +42,7 @@ readHexBytes = go mempty . BSS.unpack . BSS.filter (/= 0x20)
 testMpkRequest :: TestTree
 testMpkRequest = testCase "mpk manual" $ do
   let expected = "f0 47 7f 49 66 00 01 01 f7"
-      actual = showHexBytes (runST (D.encode (requestProgConfig (ProgBank 1))))
+      actual = showHexBytes (runST (D.encode (requestProgConfig (ProgBank 0))))
   actual @?= expected
 
 testMpkSend :: TestTree
@@ -57,7 +57,7 @@ testMpkSend = testCase "mpk send" $ do
   cfg <- either throwIO pure (fst result)
   let encodedBs = runST (D.encode cfg)
   encodedBs @?= payloadBs
-  let finalStr = showHexBytes (runST (D.encode (sendProgConfig (ProgBank 1) cfg)))
+  let finalStr = showHexBytes (runST (D.encode (sendProgConfig (ProgBank 0) cfg)))
   finalStr @?= expectedStr
 
 testMpk :: TestTree

@@ -45,11 +45,11 @@ data Prog = ProgRam | ProgBank !Int
 instance BinaryRep Word8 Prog where
   toBinaryRep = \case
     ProgRam -> 0
-    ProgBank n -> clamp 8 (fromIntegral n)
+    ProgBank n -> clamp 9 (fromIntegral (n + 1))
   fromBinaryRep =
     Right . \case
       0 -> ProgRam
-      n -> ProgBank (fromIntegral (clamp 8 n))
+      n -> ProgBank (subtract 1 (fromIntegral (clamp 9 n)))
 
 instance Default Prog where
   def = ProgRam
@@ -63,9 +63,9 @@ instance Default ShortName where
 
 data ProgConfig = ProgConfig
   { pcName :: !ShortName
-  , pcMidiChan :: !Word8
+  , pcPadMidiChan :: !Word8
   , pcAftertouch :: !Aftertouch
-  , pcKeybedControl :: !KeybedControl
+  , pcKeyMidiChan :: !Word8
   , pcOctave :: !Octave
   , pcArpConfig :: !ArpConfig
   , pcJsConfig :: !JsConfig
@@ -90,17 +90,6 @@ data Aftertouch
 
 instance Default Aftertouch where
   def = AftertouchOff
-
--- TODO figure this one out
-data KeybedControl
-  = KeybedControl0
-  | KeybedControl1
-  deriving stock (Eq, Ord, Show, Enum, Bounded)
-  deriving (BinaryRep Word8) via (ViaBoundedEnum Word8 KeybedControl)
-  deriving (StaticByteSized, Binary) via (ViaBinaryRep Word8 KeybedControl)
-
-instance Default KeybedControl where
-  def = KeybedControl0
 
 newtype Octave = Octave {unOctave :: Int8}
   deriving stock (Show)

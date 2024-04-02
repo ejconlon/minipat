@@ -29,6 +29,7 @@ library
       Minipat.Midi.Impl
       Minipat.Midi.Mpk
       Minipat.Midi.SC
+      Minipat.Midi.Setup
   other-modules:
       Paths_minipat_midi
   hs-source-dirs:

@@ -32,7 +32,7 @@ defVel = 100
 
 rootM :: ConvM ChanData
 rootM =
-  branchM
+  branchM @[]
     [
       ( "note"
       , Branch DatumProxyInt32 $ \(fromIntegral -> note) -> do
