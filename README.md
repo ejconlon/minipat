@@ -60,3 +60,8 @@ Your help is very welcome. Some TODOs follow.
 * Ensure that common exceptions have a useful `displayException`
 * Ensure that live errors do/don't interrupt playback based on debug state
 * More thoughtful handling of "continuous" streams/signals (including sampling rate)
+
+## License
+
+This project is BSD-licensed. It is a bottom-up semi-compatible rewrite of Tidal that uses certain
+APIs, algorithms, names, types, and constants according to "fair use."
