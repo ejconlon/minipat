@@ -5,7 +5,7 @@ set -e
 cd "$(dirname "$0")/.."
 
 DEFAULT_BACKEND="midi"
-USE_STRING="minipat [BACKEND]"
+USE_STRING="minipat [BACKEND [SCRIPT]]"
 
 if [ $# -eq 0 ]; then
   echo "No backend specified, using default backend ${DEFAULT_BACKEND}"
@@ -23,5 +23,21 @@ if [ "${BACKEND}" == "help" ] ||
   exit 0
 fi
 
-stack build --fast minipat-${BACKEND}
-exec stack exec -- ghci -package minipat-${BACKEND} -ghci-script minipat-${BACKEND}/Repl.ghci
+SCRIPT="minipat-${BACKEND}/Repl.ghci"
+
+if [ $# -ne 0 ]; then
+  SCRIPT="$1"
+  shift
+fi
+
+if [ $# -ne 0 ]; then
+  echo "Unhandled arguments: $*"
+  echo "Use: ${USE_STRING}"
+  exit 1
+fi
+
+set -x
+
+stack build --fast "minipat-${BACKEND}"
+
+exec stack exec -- ghci -package "minipat-${BACKEND}" -ghci-script "${SCRIPT}"
