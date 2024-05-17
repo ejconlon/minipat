@@ -48,6 +48,7 @@ Your help is very welcome. Some TODOs follow.
 
 ### TODO
 
+* Implement swing
 * Implement polymeters
 * Implement chords/arps
 * Add more MIDI channel voice events

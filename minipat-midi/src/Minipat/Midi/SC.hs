@@ -5,6 +5,9 @@
 module Minipat.Midi.SC where
 
 import Dahdit.Midi.Midi (ChanData (..), ChanVoiceData (..), LiveMsg (..))
+import Data.Char (toLower)
+import Data.Foldable (toList)
+import Data.Map.Strict qualified as Map
 import Data.Sequence (Seq)
 import Data.Sequence qualified as Seq
 import Data.Text (Text)
@@ -83,17 +86,29 @@ data Inst = Inst
 mkInst :: Int -> (Int, Int, Text) -> Inst
 mkInst i (p, v, n) = Inst i (p - 1) v n
 
-findInstrument :: Text -> Maybe Inst
-findInstrument t =
-  let t' = T.toLower t
+processName :: Text -> Text
+processName = T.map $ \case
+  '-' -> ' '
+  '_' -> ' '
+  c -> toLower c
+
+matchName :: Text -> Text -> Bool
+matchName t' n =
+  let n' = processName n
+  in  not (T.null (snd (T.breakOn t' n')))
+
+findThing :: (x -> Text) -> (Int -> x -> y) -> Seq x -> Text -> Maybe y
+findThing xName mkY xs t =
+  let t' = processName t
   in  fmap
-        (\i -> mkInst i (Seq.index instruments i))
+        (\i -> mkY i (Seq.index xs i))
         ( Seq.findIndexL
-            ( \(_, _, v) ->
-                not (T.null (snd (T.breakOn t' (T.toLower v))))
-            )
-            instruments
+            (matchName t' . xName)
+            xs
         )
+
+findInstrument :: Text -> Maybe Inst
+findInstrument = findThing (\(_, _, n) -> n) mkInst instruments
 
 firstInstrument :: Inst
 firstInstrument = mkInst 0 (Seq.index instruments 0)
@@ -531,3 +546,125 @@ instruments =
   , (128, 2, "Lasergun")
   , (128, 3, "Explosion")
   ]
+
+standardSet1 :: Seq (Int, Text)
+standardSet1 =
+  [ (25, "Snare Roll")
+  , (26, "Finger Snap")
+  , (27, "High Q")
+  , (28, "Slap")
+  , (29, "Scratch Push")
+  , (30, "Scratch Pull")
+  , (31, "Sticks")
+  , (32, "Square Click")
+  , (33, "Metronome Click")
+  , (34, "Metronome Bell")
+  , (35, "Standard 1 Kick 2")
+  , (36, "Standard 1 Kick 1")
+  , (37, "Side Stick")
+  , (38, "Standard 1 Snare 1")
+  , (39, "Hand Clap")
+  , (40, "Standard 1 Snare 2")
+  , (41, "Low Tom2")
+  , (42, "Closed Hi-hat1")
+  , (43, "Low Tom1")
+  , (44, "Pedal Hi-hat")
+  , (45, "Mid Tom2")
+  , (46, "Open Hi-hat1")
+  , (47, "Mid Tom1")
+  , (48, "High Tom2")
+  , (49, "Crash Cymbal1")
+  , (50, "High Tom1")
+  , (51, "Ride Cymbal1")
+  , (52, "Chinese Cymbal")
+  , (53, "Ride Bell")
+  , (54, "Tambourine")
+  , (55, "Splash Cymbal")
+  , (56, "Cowbell")
+  , (57, "Crash Cymbal2")
+  , (58, "Vibra-slap")
+  , (59, "Ride Cymbal2")
+  , (60, "High Bongo")
+  , (61, "Low Bongo")
+  , (62, "Mute High Conga")
+  , (63, "Open High Conga")
+  , (64, "Low Conga")
+  , (65, "High Timbale")
+  , (66, "Low Timbale")
+  , (67, "High Agogo")
+  , (68, "Low Agogo")
+  , (69, "Cabasa")
+  , (70, "Maracas")
+  , (71, "Short Hi Whistle")
+  , (72, "Long Low Whistle")
+  , (73, "Short Guiro")
+  , (74, "Long Guiro")
+  , (75, "Claves")
+  , (76, "High Wood Block")
+  , (77, "Low Wood Block")
+  , (78, "Mute Cuica")
+  , (79, "Open Cuica")
+  , (80, "Mute Triangle")
+  , (81, "Open Triangle")
+  , (82, "Shaker")
+  , (83, "Jingle Bell")
+  , (84, "Bell Tree")
+  , (85, "Castanets")
+  , (86, "Mute Surdo")
+  , (87, "Open Surdo")
+  ]
+
+override :: (Ord k) => Seq (k, v) -> Seq (k, v) -> Seq (k, v)
+override defs overs = Seq.fromList (Map.toList (Map.fromList (toList overs) <> Map.fromList (toList defs)))
+
+overrideStandardSet1 :: Seq (Int, Text) -> Seq (Int, Text)
+overrideStandardSet1 = override standardSet1
+
+standardSet2 :: Seq (Int, Text)
+standardSet2 =
+  overrideStandardSet1
+    [ (35, "Standard 2 Kick 2")
+    , (36, "Standard 2 Kick 1")
+    , (38, "Standard 2 Snare 1")
+    , (40, "Standard 2 Snare 2")
+    , (42, "Closed Hi-hat2")
+    , (46, "Open Hi-hat2")
+    , (84, "Bar Chimes")
+    ]
+
+roomSet :: Seq (Int, Text)
+roomSet =
+  overrideStandardSet1
+    [ (35, "Room Kick 2")
+    , (36, "Room Kick 1")
+    , (38, "Room Snare 1")
+    , (40, "Room Snare 2")
+    , (41, "Room Low Tom2")
+    , (42, "Closed Hi-hat3")
+    , (43, "Room Low Tom1")
+    , (45, "Room Mid Tom2")
+    , (46, "Open Hi-hat2")
+    , (47, "Room Mid Tom1")
+    , (50, "Room Hi Tom1")
+    ]
+
+drumSets :: Seq (Int, Text, Seq (Int, Text))
+drumSets =
+  [ (1, "STANDARD Set1", standardSet1)
+  , (2, "STANDARD Set2", standardSet2)
+  , (9, "ROOM Set", roomSet)
+  ]
+
+data DrumSet = DrumSet
+  { dsIx :: !Int
+  , dsProg :: !Int
+  , dsName :: !Text
+  , dsHits :: !(Seq (Int, Text))
+  }
+  deriving stock (Eq, Ord, Show)
+
+mkDrumSet :: Int -> (Int, Text, Seq (Int, Text)) -> DrumSet
+mkDrumSet i (p, n, hs) = DrumSet i p n hs
+
+findDrumSet :: Text -> Maybe DrumSet
+findDrumSet = findThing (\(_, n, _) -> n) mkDrumSet drumSets
