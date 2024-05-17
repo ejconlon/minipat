@@ -49,20 +49,24 @@ local state = {
   minipat_process = nil,
 }
 
-local function boot_minipat(args)
+local function boot_minipat(args, extra_args)
   if state.minipat then
     local ok = pcall(vim.api.nvim_set_current_buf, state.minipat)
     if not ok then
       state.minipat = nil
-      boot_minipat(args)
+      boot_minipat(args, extra_args)
       return
     end
   else
     state.minipat = vim.api.nvim_create_buf(false, false)
-    boot_minipat(args)
+    boot_minipat(args, extra_args)
     return
   end
-  state.minipat_process = vim.fn.termopen(args.minipat_cmd, {
+  local full_cmd = args.minipat_cmd
+  if extra_args ~= nil then
+    full_cmd = full_cmd .. " " .. extra_args
+  end
+  state.minipat_process = vim.fn.termopen(full_cmd, {
     on_exit = function()
       if #vim.fn.win_findbuf(state.minipat) > 0 then
         vim.api.nvim_win_close(vim.fn.win_findbuf(state.minipat)[1], true)
@@ -74,13 +78,13 @@ local function boot_minipat(args)
   })
 end
 
-local function launch_minipat(args)
+local function launch_minipat(args, extra_args)
   local current_win = vim.api.nvim_get_current_win()
   if state.launched then
     return
   end
   vim.cmd(args.split == 'v' and 'vsplit' or 'split')
-  boot_minipat(args)
+  boot_minipat(args, extra_args)
   vim.api.nvim_set_current_win(current_win)
   state.launched = true
 end
@@ -151,8 +155,8 @@ end
 function M.setup(args)
   args = vim.tbl_deep_extend('force', DEFAULTS, args)
 
-  local launch_fn = function()
-    launch_minipat(args.config)
+  local launch_fn = function(fn_args)
+    launch_minipat(args.config, fn_args['args'])
   end
 
   local enter_fn = function()
@@ -163,7 +167,7 @@ function M.setup(args)
     end
   end
 
-  vim.api.nvim_create_user_command('MinipatLaunch', launch_fn, { desc = 'launches Minipat instance' })
+  vim.api.nvim_create_user_command('MinipatLaunch', launch_fn, { desc = 'launches Minipat instance (can pass extra args)', nargs = '*' })
   vim.api.nvim_create_user_command('MinipatQuit', exit_minipat, { desc = 'quits Minipat instance' })
   vim.api.nvim_create_autocmd({ 'BufEnter', 'BufWinEnter' }, {
     pattern = { '*.' .. args.config.file_ext },
