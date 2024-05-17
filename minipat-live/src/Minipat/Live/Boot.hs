@@ -5,6 +5,7 @@ module Minipat.Live.Boot
   ( LiveSt (..)
   , readLiveSt
   , allocate
+  , allocateWith
   , initialize
   , reallocate
   , dispose
@@ -63,9 +64,12 @@ readLiveSt :: (LiveSt) => IO (C.St LiveBackend)
 readLiveSt = readIORef liveStRef
 
 allocate :: (Default i) => IO (IORef (C.St i))
-allocate = do
+allocate = allocateWith def
+
+allocateWith :: i -> IO (IORef (C.St i))
+allocateWith be = do
   logger <- L.newLogger
-  st <- C.newSt logger def def
+  st <- C.newSt logger be def
   newIORef st
 
 initialize :: (LiveSt) => IO ()
