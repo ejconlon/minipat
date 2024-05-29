@@ -4,11 +4,15 @@
 module Minipat.Midi.Setup where
 
 import Control.Concurrent.STM (atomically)
-import Control.Concurrent.STM.TVar (TVar, modifyTVar', newTVarIO, readTVarIO, writeTVar)
+import Control.Concurrent.STM.TVar (TVar, modifyTVar', newTVarIO, readTVarIO)
+import Control.Monad (unless)
 import Dahdit (StaticSeq (..))
 import Dahdit.Midi.Midi (LiveMsg)
 import Data.Default (def)
+import Data.Foldable (toList)
 import Data.List (isPrefixOf)
+import Data.Map.Strict (Map)
+import Data.Map.Strict qualified as Map
 import Data.Sequence (Seq)
 import Data.Sequence qualified as Seq
 import Data.String (fromString)
@@ -19,8 +23,9 @@ import Minipat.Midi.Mpk
 import Minipat.Midi.SC
 import Nanotime (timeDeltaFromFracSecs)
 
-mkCfg :: Int -> ProgConfig
-mkCfg i = c
+-- Mpk config for Sc control
+mkMpkCfg :: Int -> ProgConfig
+mkMpkCfg i = c
  where
   k name cc = Knob KnobModeAbs cc 0 127 name
   c =
@@ -64,30 +69,59 @@ scBackend =
 withSc :: Seq LiveMsg -> IO ()
 withSc = connectAndSendMsgs scBackend
 
-sendCfgs :: IO ()
-sendCfgs = withMpk (Seq.fromList [sendProgConfig (ProgBank i) (mkCfg i) | i <- [0 .. 7]])
+-- Send mpk config
+sendMpkCfgs :: IO ()
+sendMpkCfgs = withMpk (Seq.fromList [sendProgConfig (ProgBank i) (mkMpkCfg i) | i <- [0 .. 7]])
 
-type InstVar = TVar Inst
+midiChannels :: Seq Int
+midiChannels = Seq.fromList [0 .. 15]
 
-newInstVar :: IO InstVar
-newInstVar = newTVarIO firstInstrument
+guardChannel :: (MonadFail m) => Int -> m ()
+guardChannel c = unless (c >= 0 && c < 16) (fail ("Invalid MIDI channel: " ++ show c))
 
-findInstVar :: Text -> InstVar -> IO ()
-findInstVar t v = do
-  i <- maybe (error ("Inst not found: " ++ T.unpack t)) pure (findInstrument t)
-  atomically (writeTVar v i)
+type ScConf = Map Int Inst
 
-nextInstVar :: InstVar -> IO ()
-nextInstVar v = atomically (modifyTVar' v nextInstrument)
+newScConf :: ScConf
+newScConf = Map.fromList (fmap (,firstInstrument) (toList midiChannels))
 
-sendInstVar :: Int -> InstVar -> IO ()
-sendInstVar chan v = do
-  Inst _ prog var _ <- readTVarIO v
-  withSc (setSound chan prog var)
+getInst :: Int -> ScVar -> IO Inst
+getInst chan v = do
+  guardChannel chan
+  fmap (Map.! chan) (readTVarIO v)
 
-reinitAll :: IO ()
-reinitAll = withSc $ do
-  chan <- Seq.fromList [0 .. 15]
+findInst :: Int -> Text -> ScVar -> IO ()
+findInst chan t v = do
+  guardChannel chan
+  i <- maybe (fail ("Inst not found: " ++ T.unpack t)) pure (findInstrument t)
+  atomically (modifyTVar' v (Map.insert chan i))
+
+nextInst :: Int -> ScVar -> IO ()
+nextInst chan v = do
+  guardChannel chan
+  atomically (modifyTVar' v (Map.adjust nextInstrument chan))
+
+sendInst :: Int -> ScVar -> IO ()
+sendInst chan v = do
+  guardChannel chan
+  Inst _ prog variant _ <- fmap (Map.! chan) (readTVarIO v)
+  withSc (setSound chan prog variant)
+
+sendAllInsts :: ScVar -> IO ()
+sendAllInsts v = do
+  conf <- readTVarIO v
+  let msgs = do
+        (chan, Inst _ prog variant _) <- Seq.fromList (Map.toList conf)
+        setSound chan prog variant
+  withSc msgs
+
+type ScVar = TVar ScConf
+
+newScVar :: IO ScVar
+newScVar = newTVarIO newScConf
+
+reinitSc :: IO ()
+reinitSc = withSc $ do
+  chan <- midiChannels
   mconcat
     [ allSoundsOff chan
     , setSound chan 0 0
