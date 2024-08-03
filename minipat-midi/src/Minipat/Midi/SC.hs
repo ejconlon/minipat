@@ -668,3 +668,18 @@ mkDrumSet i (p, n, hs) = DrumSet i p n hs
 
 findDrumSet :: Text -> Maybe DrumSet
 findDrumSet = findThing (\(_, n, _) -> n) mkDrumSet drumSets
+
+firstDrumSet :: DrumSet
+firstDrumSet = mkDrumSet 0 (Seq.index drumSets 0)
+
+nextDrumSet :: DrumSet -> DrumSet
+nextDrumSet (DrumSet i _ _ _) =
+  if i >= Seq.length drumSets
+    then firstDrumSet
+    else let j = i + 1 in mkDrumSet j (Seq.index drumSets j)
+
+-- setSoundNamed :: Int -> Text -> Seq LiveMsg
+-- setSoundNamed chan frag =
+--   case findInstrument frag of
+--     Just (Inst _ prog var _) -> setSound chan (prog - 1) var
+--     Nothing -> error ("Could not find instrument: " <> T.unpack frag)
