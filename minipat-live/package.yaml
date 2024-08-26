@@ -22,7 +22,7 @@ dependencies:
 - exceptions >= 0.10 && < 0.11
 - heaps >= 0.4 && < 0.5
 - little-logger >= 1.0 && < 1.1
-- looksee >= 0.5.2 && < 0.6
+- looksee >= 0.6.0 && < 0.7
 - minipat >= 0.1 && < 0.2
 - mtl >= 2.3 && < 2.4
 - nanotime >= 0.3.2 && < 0.4

@@ -18,6 +18,6 @@ extra-deps:
 - daytripper-0.3.1
 - little-logger-1.0.2
 - falsify-0.2.0@r1
-- looksee-0.5.2
+- looksee-0.6.0
 - nanotime-0.3.2
 - RtMidi-0.8.0.0

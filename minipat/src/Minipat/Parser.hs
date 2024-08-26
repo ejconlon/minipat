@@ -45,7 +45,7 @@ data ParseErr
   deriving stock (Eq, Ord, Show)
 
 instance L.HasErrMessage ParseErr where
-  getErrMessage = \case
+  getErrMessage _ = \case
     ParseErrDotForbidden -> ["Dot is not allowed in this position"]
     ParseErrElongate -> ["Elongate is not allowed in this position"]
     ParseErrRatioChar c -> ["Invalid ratio " <> T.singleton c]

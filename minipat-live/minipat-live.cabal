@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.36.0.
+-- This file has been generated from package.yaml by hpack version 0.37.0.
 --
 -- see: https://github.com/sol/hpack
 
@@ -85,7 +85,7 @@ library
     , exceptions ==0.10.*
     , heaps ==0.4.*
     , little-logger ==1.0.*
-    , looksee >=0.5.2 && <0.6
+    , looksee >=0.6.0 && <0.7
     , minipat ==0.1.*
     , mtl ==2.3.*
     , nanotime >=0.3.2 && <0.4
@@ -143,7 +143,7 @@ test-suite minipat-live-test
     , exceptions ==0.10.*
     , heaps ==0.4.*
     , little-logger ==1.0.*
-    , looksee >=0.5.2 && <0.6
+    , looksee >=0.6.0 && <0.7
     , minipat ==0.1.*
     , minipat-live
     , mtl ==2.3.*

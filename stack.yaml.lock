@@ -61,12 +61,12 @@ packages:
   original:
     hackage: falsify-0.2.0
 - completed:
-    hackage: looksee-0.5.2@sha256:47046ae5f719348ed4d90d757fb89d231c20dac944c06848f430bd7dfaeeac85,3158
+    hackage: looksee-0.6.0@sha256:3d681ac6d8f23cf6c9bf2e7cd555a98e35f1c567fdaea7a9bc207b5223ed275c,3261
     pantry-tree:
-      sha256: 95484bf869be4460ab8df3a49c2b76947bd07309cf4a8cf4c65d188a4f69a3d3
+      sha256: 916891c6448851d00c7315a60a2fb16edb17f3e452c00711d110ecfed66843c5
       size: 279
   original:
-    hackage: looksee-0.5.2
+    hackage: looksee-0.6.0
 - completed:
     hackage: nanotime-0.3.2@sha256:fe49cf850141904340401d1af79a1685009cfd7b615f8cbe3ae45105db535db6,2827
     pantry-tree:
