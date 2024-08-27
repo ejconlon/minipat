@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.36.0.
+-- This file has been generated from package.yaml by hpack version 0.37.0.
 --
 -- see: https://github.com/sol/hpack
 
@@ -75,6 +75,7 @@ library
     , dahdit-midi >=0.5.5 && <0.6
     , data-default ==0.7.*
     , heaps ==0.4.*
+    , libremidi >=0.1.0 && <0.2.0
     , minipat ==0.1.*
     , minipat-live ==0.1.*
     , nanotime >=0.3.2 && <0.4
@@ -132,6 +133,7 @@ test-suite minipat-midi-test
     , dahdit-midi >=0.5.5 && <0.6
     , data-default ==0.7.*
     , heaps ==0.4.*
+    , libremidi >=0.1.0 && <0.2.0
     , minipat ==0.1.*
     , minipat-live ==0.1.*
     , minipat-midi

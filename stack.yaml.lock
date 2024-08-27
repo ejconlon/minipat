@@ -81,6 +81,19 @@ packages:
       size: 861
   original:
     hackage: RtMidi-0.8.0.0
+- completed:
+    commit: f5a0712134201498366d2955dc99bb46fc824e57
+    git: git@github.com:ejconlon/libremidi-haskell.git
+    name: libremidi
+    pantry-tree:
+      sha256: 677b6f5de9e2889cebe5c56512b8d4ad2615d0dfee0a9e20e59e1cefa1732b9e
+      size: 11223
+    subdir: libremidi
+    version: 0.1.0
+  original:
+    commit: f5a0712134201498366d2955dc99bb46fc824e57
+    git: git@github.com:ejconlon/libremidi-haskell.git
+    subdir: libremidi
 snapshots:
 - completed:
     sha256: 098936027eaa1ef14e2b8eb39d9933a973894bb70a68684a1bbf00730249879b
