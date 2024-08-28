@@ -26,11 +26,13 @@ dependencies:
 - minipat-live >= 0.1 && < 0.2
 - nanotime >= 0.3.2 && < 0.4
 - resourcet >= 1.3 && < 1.4
-- RtMidi >= 0.8 && < 1.0
 - stm >= 2.5 && < 2.6
 - text >= 2.0 && < 2.1
 - vector >= 0.13 && < 0.14
 - libremidi >= 0.1.0 && < 0.2.0
+- mtl >= 2.3.1 && < 2.4
+- exceptions >= 0.10.7 && < 0.11
+- prettyprinter >= 1.7.1 && < 1.8
 
 library:
   source-dirs: src

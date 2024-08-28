@@ -20,8 +20,7 @@ extra-deps:
 - falsify-0.2.0@r1
 - looksee-0.6.0
 - nanotime-0.3.2
-- RtMidi-0.8.0.0
 - git: git@github.com:ejconlon/libremidi-haskell.git
-  commit: f5a0712134201498366d2955dc99bb46fc824e57
+  commit: 64fe2ad4720f014eb55f3a1d2a3e63313d2debce
   subdirs:
   - libremidi

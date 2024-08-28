@@ -8,12 +8,14 @@ module Minipat.Midi.Boot
   , Vel
   , vel
   , v
+  , PortName
+  , port
   , midi
   , module Minipat.Live.Boot
   )
 where
 
-import Dahdit.Midi.Midi (LiveMsg)
+import Minipat.Midi.Midi (PortMsg)
 import Data.Sequence (Seq)
 import Data.Text (Text)
 import Minipat.Live.Boot
@@ -21,6 +23,7 @@ import Minipat.Live.Datum (DatumProxy (..))
 import Minipat.Live.Extra (Note, parseDatum, parseMidiNote, parseNote)
 import Minipat.Midi.Convert (Vel (..))
 import Minipat.Midi.Impl qualified as I
+import Minipat.Midi.Midi (PortName (..))
 
 type MidiLiveSt = (LiveSt, LiveBackend ~ I.MidiBackend)
 
@@ -35,5 +38,8 @@ vel, v :: Text -> S Vel
 vel = fmap Vel . parseDatum DatumProxyInt32
 v = vel
 
-midi :: (MidiLiveSt) => Seq LiveMsg -> IO ()
+port :: Text -> S PortName
+port = fmap PortName . parseDatum DatumProxyString
+
+midi :: (MidiLiveSt) => Seq PortMsg -> IO ()
 midi ms = readLiveSt >>= \st -> I.sendMsgs st ms
