@@ -32,9 +32,10 @@ import Minipat.Live.Core (St, logAsyncState, stBackend, useCallback)
 import Minipat.Live.Logger (logInfo)
 import Minipat.Live.Resources (acquireAwait, qhHeap)
 import Minipat.Midi.Convert (convertMidiAttrs)
+import Minipat.Midi.Midi (MidiState, SortedMsg (..), TimedMsg (..))
 import Minipat.Time (Arc (..))
 import Nanotime (PosixTime, TimeDelta, threadDelayDelta)
-import Minipat.Midi.Midi (SortedMsg (..), TimedMsg (..), PortState)
+
 -- import Sound.RtMidi (OutputDevice)
 -- import Sound.RtMidi qualified as R
 
@@ -65,7 +66,7 @@ mkTimedMsgs (WithPlayMeta pm cd) =
         Nothing -> s1
 
 data MidiData = MidiData
-  { mdPortState :: !PortState
+  { mdMidiState :: !MidiState
   , mdObsTask :: !(Async ())
   , mdSendTask :: !(Async ())
   }

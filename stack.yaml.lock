@@ -75,16 +75,16 @@ packages:
   original:
     hackage: nanotime-0.3.2
 - completed:
-    commit: 64fe2ad4720f014eb55f3a1d2a3e63313d2debce
+    commit: 2edd8317f1f2e3a2f43bfcd2e7dc46aaf2fb1022
     git: git@github.com:ejconlon/libremidi-haskell.git
     name: libremidi
     pantry-tree:
-      sha256: 2dd97c2cf27101f3f7dd41f6e30a979742ce6649ed0c665b736c54a763d52736
+      sha256: 993949807ef804a05372a7c0fc5db5f2739a71fbd0c6ff17808fe4c819f4d3f3
       size: 11229
     subdir: libremidi
     version: 0.1.0
   original:
-    commit: 64fe2ad4720f014eb55f3a1d2a3e63313d2debce
+    commit: 2edd8317f1f2e3a2f43bfcd2e7dc46aaf2fb1022
     git: git@github.com:ejconlon/libremidi-haskell.git
     subdir: libremidi
 snapshots:

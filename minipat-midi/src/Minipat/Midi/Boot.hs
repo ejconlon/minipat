@@ -15,7 +15,6 @@ module Minipat.Midi.Boot
   )
 where
 
-import Minipat.Midi.Midi (PortMsg)
 import Data.Sequence (Seq)
 import Data.Text (Text)
 import Minipat.Live.Boot
@@ -23,7 +22,7 @@ import Minipat.Live.Datum (DatumProxy (..))
 import Minipat.Live.Extra (Note, parseDatum, parseMidiNote, parseNote)
 import Minipat.Midi.Convert (Vel (..))
 import Minipat.Midi.Impl qualified as I
-import Minipat.Midi.Midi (PortName (..))
+import Minipat.Midi.Midi (PortMsg, PortName (..))
 
 type MidiLiveSt = (LiveSt, LiveBackend ~ I.MidiBackend)
 

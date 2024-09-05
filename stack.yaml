@@ -21,6 +21,6 @@ extra-deps:
 - looksee-0.6.0
 - nanotime-0.3.2
 - git: git@github.com:ejconlon/libremidi-haskell.git
-  commit: 64fe2ad4720f014eb55f3a1d2a3e63313d2debce
+  commit: 2edd8317f1f2e3a2f43bfcd2e7dc46aaf2fb1022
   subdirs:
   - libremidi
