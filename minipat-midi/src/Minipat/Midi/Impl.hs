@@ -32,65 +32,61 @@ import Minipat.Live.Core (St, logAsyncState, stBackend, useCallback)
 import Minipat.Live.Logger (logInfo)
 import Minipat.Live.Resources (acquireAwait, qhHeap)
 import Minipat.Midi.Convert (convertMidiAttrs)
-import Minipat.Midi.Midi (MidiState, SortedMsg (..), TimedMsg (..))
+import Minipat.Midi.Midi (MidiState (..), SortedMsg (..), TimedMsg (..), PortName, PortMsg, MidiEnv (..), PortData)
 import Minipat.Time (Arc (..))
 import Nanotime (PosixTime, TimeDelta, threadDelayDelta)
-
--- import Sound.RtMidi (OutputDevice)
--- import Sound.RtMidi qualified as R
+import Libremidi.Api (Api (..))
 
 defaultMaxMsgLen :: Int
 defaultMaxMsgLen = 1024
 
--- TODO add max msg length
 data MidiBackend = MidiBackend
-  { mbOpenPred :: !(PortName -> Bool)
-  , mbDefaultPred :: !(PortName -> Bool)
+  { mbApi :: !Api
   , mbMaxMsgLen :: !Int
   , mbDelay :: !(Maybe TimeDelta)
   }
 
 instance Default MidiBackend where
-  def = MidiBackend (const False) (const False) defaultMaxMsgLen Nothing
+  def = MidiBackend ApiUnspecified defaultMaxMsgLen Nothing
 
 type MidiSt = St MidiBackend
 
-mkTimedMsgs :: WithPlayMeta ChanData -> Seq TimedMsg
-mkTimedMsgs (WithPlayMeta pm cd) =
+mkTimedMsgs :: WithPlayMeta PortData -> Seq TimedMsg
+mkTimedMsgs (WithPlayMeta pm pd) =
   let Arc t1 t2 = pmRealArc pm
       c = fromInteger (pmOrbit pm - 1)
       m1 = LiveMsgChan c cd
       s1 = Seq.singleton (TimedMsg t1 (SortedMsg m1))
-  in  case mkNoteOff c cd of
+  in  case mkNoteOff c pd of
         Just m2 -> s1 :|> TimedMsg t2 (SortedMsg m2)
         Nothing -> s1
 
 data MidiData = MidiData
-  { mdMidiState :: !MidiState
+  { mdMidiEnv :: !MidiEnv
   , mdObsTask :: !(Async ())
   , mdSendTask :: !(Async ())
   }
 
-sendMsgs :: (Foldable f) => St MidiBackend -> f LiveMsg -> IO ()
-sendMsgs st msgs = useCallback st $ \md ->
-  let MidiBackend _ maxLen mayDelay = stBackend st
-  in  sendLiveMsgs maxLen mayDelay (mdDevice md) msgs
-
-connectAndSendMsgs :: (Foldable f) => MidiBackend -> f LiveMsg -> IO ()
-connectAndSendMsgs (MidiBackend openPred defPred maxLen mayDelay) msgs = do
-  device <- liftIO R.defaultOutput
-  mp <- R.findPort device portSel
-  case mp of
-    Nothing -> fail "Could not find acceptable port"
-    Just p -> do
-      flip finally (R.closePort device) $ do
-        R.openPort device p "minipat"
-        sendLiveMsgs maxLen mayDelay device msgs
+-- sendMsgs :: (Foldable f) => St MidiBackend -> f PortMsg -> IO ()
+-- sendMsgs st msgs = useCallback st $ \md ->
+--   let MidiBackend _ _ maxLen mayDelay = stBackend st
+--   in  sendLiveMsgs maxLen mayDelay msgs
+--
+-- connectAndSendMsgs :: (Foldable f) => MidiBackend -> f PortMsg -> IO ()
+-- connectAndSendMsgs (MidiBackend openPred defPred maxLen mayDelay) msgs = do
+--   device <- liftIO R.defaultOutput
+--   mp <- R.findPort device portSel
+--   case mp of
+--     Nothing -> fail "Could not find acceptable port"
+--     Just p -> do
+--       flip finally (R.closePort device) $ do
+--         R.openPort device p "minipat"
+--         sendLiveMsgs maxLen mayDelay device msgs
 
 instance Backend MidiBackend where
   type BackendData MidiBackend = MidiData
 
-  backendInit (MidiBackend portSel maxLen mayDelay) logger getPlayingSTM = do
+  backendInit (MidiBackend api maxLen mayDelay) logger getPlayingSTM = do
     -- device <- liftIO R.defaultOutput
     -- let getPort = do
     --       mp <- R.findPort device portSel
@@ -102,8 +98,9 @@ instance Backend MidiBackend where
     --           R.openPort device p "minipat"
     --           logInfo logger "Connected"
     -- _ <- mkAcquire getPort (const (R.closePort device))
-    heap <- liftIO (newTVarIO H.empty)
     buf <- liftIO (VSM.new maxLen)
+    ms <- newMidiState
+    let me = MidiEnv api ms
     let send (TimedMsg _ (SortedMsg m)) = do
           len <- fmap fromIntegral (mutEncode m buf)
           VSM.unsafeWith buf (\ptr -> R.sendUnsafeMessage device ptr len)

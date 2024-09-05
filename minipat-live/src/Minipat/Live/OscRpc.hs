@@ -12,11 +12,11 @@
 --  - * Attribute names starting with `!` are system level attributes and
 --  -  should be removed before further processing.
 --  -    * `!requestId` is one such attribute that should be carried
---  -      over into a responses.
---    - * Errors can be signaled by the attribute `!error` mapping to a string.
+--  -     over into a responses.
+--  -   * Errors can be signaled by the attribute `!error` mapping to a string
+--  -    datum containing a reason.
 --  - * Type checking of requests and responses should be lenient -
 --  -  it's OK to have unrecognized attributes.
---  -  datum containing a reason.
 --  - * Responses should carry the corresponding `!requestId`, but if they
 --  -  do not, they should be associated with the last request to the original
 --  -  address.

@@ -55,54 +55,6 @@ import Minipat.Midi.Count (CountM, throwErrM)
 import Nanotime (PosixTime, TimeDelta, threadDelayDelta)
 import Prettyprinter (Pretty (..))
 
-isNoteOff :: LiveMsg -> Bool
-isNoteOff = \case
-  LiveMsgChan _ (ChanDataVoice cvd) ->
-    case cvd of
-      ChanVoiceDataNoteOn _ 0 -> True
-      ChanVoiceDataNoteOff _ _ -> True
-      _ -> False
-  _ -> False
-
-mkNoteOff :: Channel -> ChanData -> Maybe LiveMsg
-mkNoteOff c = \case
-  ChanDataVoice (ChanVoiceDataNoteOn n v)
-    | v > 0 ->
-        Just (LiveMsgChan c (ChanDataVoice (ChanVoiceDataNoteOn n 0)))
-  _ -> Nothing
-
--- | We order so that note offs come before other messages
-newtype SortedMsg = SortedMsg {unSortedMsg :: LiveMsg}
-  deriving stock (Show)
-  deriving newtype (Eq)
-
-instance Ord SortedMsg where
-  compare (SortedMsg m1) (SortedMsg m2) =
-    let o1 = isNoteOff m1
-        o2 = isNoteOff m2
-        r = compare m1 m2
-    in  if o1
-          then
-            if o2
-              then r
-              else LT
-          else
-            if o2
-              then GT
-              else r
-
-data TimedMsg = TimedMsg
-  { tmTime :: !PosixTime
-  , tmMsg :: !SortedMsg
-  }
-  deriving stock (Eq, Ord, Show)
-
-data SetDefault = SetDefaultNo | SetDefaultYes
-  deriving stock (Eq, Ord, Show, Enum, Bounded)
-
-instance Default SetDefault where
-  def = SetDefaultNo
-
 newtype PortName = PortName {unPortName :: Text}
   deriving stock (Eq, Ord, Show)
   deriving newtype (IsString, Pretty)
@@ -150,6 +102,59 @@ data PortMsg = PortMsg
   }
   deriving stock (Eq, Ord, Show)
 
+isNoteOff :: PortMsg -> Bool
+isNoteOff (PortMsg _ lm) = case lm of
+  LiveMsgChan _ (ChanDataVoice cvd) ->
+    case cvd of
+      ChanVoiceDataNoteOn _ 0 -> True
+      ChanVoiceDataNoteOff _ _ -> True
+      _ -> False
+  _ -> False
+
+data PortData = PortData
+  { pdPort :: !PortSel
+  , pdChan :: !ChanData
+  } deriving stock (Eq, Ord, Show)
+
+mkNoteOff :: Channel -> PortData -> Maybe PortMsg
+mkNoteOff c (PortData ps cd) = case cd of
+  ChanDataVoice (ChanVoiceDataNoteOn n v)
+    | v > 0 ->
+        Just (PortMsg ps (LiveMsgChan c (ChanDataVoice (ChanVoiceDataNoteOn n 0))))
+  _ -> Nothing
+
+-- | We order so that note offs come before other messages
+newtype SortedMsg = SortedMsg {unSortedMsg :: PortMsg}
+  deriving stock (Show)
+  deriving newtype (Eq)
+
+instance Ord SortedMsg where
+  compare (SortedMsg m1) (SortedMsg m2) =
+    let o1 = isNoteOff m1
+        o2 = isNoteOff m2
+        r = compare m1 m2
+    in  if o1
+          then
+            if o2
+              then r
+              else LT
+          else
+            if o2
+              then GT
+              else r
+
+data TimedMsg = TimedMsg
+  { tmTime :: !PosixTime
+  , tmMsg :: !SortedMsg
+  }
+  deriving stock (Eq, Ord, Show)
+
+data SetDefault = SetDefaultNo | SetDefaultYes
+  deriving stock (Eq, Ord, Show, Enum, Bounded)
+
+instance Default SetDefault where
+  def = SetDefaultNo
+
 data OutState = OutState
   { osPort :: !OutPort
   , osHandle :: !(UniquePtr LMF.OutHandle)
@@ -186,6 +191,9 @@ data MidiState = MidiState
   , msOutDefault :: !(TVar (Maybe PortName))
   }
   deriving stock (Eq)
+
+newMidiState :: IO MidiState
+newMidiState = MidiState <$> newTVarIO Map.empty <*> newTVarIO Nothing
 
 selectOutState :: PortSel -> MidiState -> STM (Maybe (PortName, OutState))
 selectOutState ps (MidiState omv odv) = do

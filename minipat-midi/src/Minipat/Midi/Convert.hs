@@ -3,13 +3,15 @@
 -- | Converts attrs to MIDI events
 module Minipat.Midi.Convert where
 
+import Data.Default (def)
 import Dahdit.Midi.Midi (ChanData (..), ChanVoiceData (..))
 import Dahdit.Midi.Osc (Datum (..))
 import Data.Functor ((<&>))
 import Data.Int (Int32)
 import Minipat.Live.Attrs (Attrs, IsAttrs (..), attrsSingleton)
-import Minipat.Live.Convert (Branch (..), ConvErr, ConvM, branchM, defaultM, runConvM)
+import Minipat.Live.Convert (Branch (..), ConvErr, ConvM, branchM, defaultM, runConvM, lookupM)
 import Minipat.Live.Datum (DatumProxy (..))
+import Minipat.Midi.Midi (PortData (..), psFromText)
 
 newtype Vel = Vel {unVel :: Int32}
   deriving stock (Show)
@@ -23,20 +25,21 @@ instance IsAttrs Vel where
 -- program change
 -- control change
 -- the rest of ChanDataVoice
-convertMidiAttrs :: Attrs -> Either ConvErr ChanData
+convertMidiAttrs :: Attrs -> Either ConvErr PortData
 convertMidiAttrs = runConvM rootM
 
 -- Default velocity in something like Ableton is 100
 defVel :: Int32
 defVel = 100
 
-rootM :: ConvM ChanData
-rootM =
+rootM :: ConvM PortData
+rootM = do
+  port <- fmap (maybe def psFromText) (lookupM "port" DatumProxyString)
   branchM @[]
     [
       ( "note"
       , Branch DatumProxyInt32 $ \(fromIntegral -> note) -> do
           vel <- defaultM "vel" DatumProxyInt32 defVel <&> fromIntegral
-          pure (ChanDataVoice (ChanVoiceDataNoteOn (note + 60) vel))
+          pure (PortData port (ChanDataVoice (ChanVoiceDataNoteOn (note + 60) vel)))
       )
     ]
