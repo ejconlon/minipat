@@ -3,13 +3,13 @@
 -- | Converts attrs to MIDI events
 module Minipat.Midi.Convert where
 
-import Data.Default (def)
 import Dahdit.Midi.Midi (ChanData (..), ChanVoiceData (..))
 import Dahdit.Midi.Osc (Datum (..))
+import Data.Default (def)
 import Data.Functor ((<&>))
 import Data.Int (Int32)
 import Minipat.Live.Attrs (Attrs, IsAttrs (..), attrsSingleton)
-import Minipat.Live.Convert (Branch (..), ConvErr, ConvM, branchM, defaultM, runConvM, lookupM)
+import Minipat.Live.Convert (Branch (..), ConvErr, ConvM, branchM, defaultM, lookupM, runConvM)
 import Minipat.Live.Datum (DatumProxy (..))
 import Minipat.Midi.Midi (PortData (..), psFromText)
 

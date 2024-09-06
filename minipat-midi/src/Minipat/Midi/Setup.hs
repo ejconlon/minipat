@@ -10,7 +10,6 @@ import Dahdit (StaticSeq (..))
 import Dahdit.Midi.Midi (LiveMsg)
 import Data.Default (def)
 import Data.Foldable (toList)
-import Data.List (isPrefixOf)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Sequence (Seq)
@@ -52,7 +51,7 @@ mkMpkCfg i = c
 mpkBackend :: MidiBackend
 mpkBackend =
   def
-    { mbPortSel = isPrefixOf "MPK mini"
+    { mbDefOut = Just "MPK mini"
     , mbDelay = Just (timeDeltaFromFracSecs @Double 0.5)
     }
 
@@ -62,7 +61,7 @@ withMpk = connectAndSendMsgs mpkBackend
 scBackend :: MidiBackend
 scBackend =
   def
-    { mbPortSel = isPrefixOf "U2MIDI Pro"
+    { mbDefOut = Just "U2MIDI Pro"
     , mbDelay = Just (timeDeltaFromFracSecs @Double 0.05)
     }
 

@@ -6,6 +6,7 @@ module Minipat.Live.Resources
   , relVarUse
   , relVarAcquire
   , withRelVar
+  , acquirePure
   , acquireAsync
   , acquireLoop
   , QueueHead
@@ -23,6 +24,7 @@ import Control.Concurrent.STM (STM, atomically, retry)
 import Control.Concurrent.STM.TQueue (TQueue, peekTQueue, readTQueue, tryPeekTQueue)
 import Control.Concurrent.STM.TVar (TVar, readTVar, writeTVar)
 import Control.Exception (SomeException, bracket, mask, onException)
+import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Resource (InternalState, closeInternalState, createInternalState)
 import Control.Monad.Trans.Resource.Internal (registerType)
 import Data.Acquire.Internal (Acquire (..), Allocated (..), mkAcquire)
@@ -51,6 +53,9 @@ relVarAcquire rv (Acquire f) = mask $ \restore -> do
 
 withRelVar :: (RelVar -> IO a) -> IO a
 withRelVar = bracket relVarInit relVarDispose
+
+acquirePure :: a -> Acquire (Async a)
+acquirePure = liftIO . async . pure
 
 acquireAsync :: IO a -> Acquire (Async a)
 acquireAsync act = mkAcquire (async act) cancel

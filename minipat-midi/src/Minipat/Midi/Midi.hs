@@ -27,6 +27,8 @@ import Data.Vector.Storable.Mutable qualified as VSM
 import Data.Word (Word8)
 import Libremidi.Api
   ( Api
+  , LogFun
+  , LogLvl (..)
   , MidiConfig (..)
   , MidiPort (..)
   , OutHandle
@@ -34,6 +36,7 @@ import Libremidi.Api
   , cloneOutPort
   , freeOutHandle
   , freeOutPort
+  , newLogCb
   , newOutHandle
   , outSendMsg1
   )
@@ -51,6 +54,7 @@ import Libremidi.Common
 import Libremidi.Foreign qualified as LMF
 import Libremidi.Simple (findOutPort)
 import Minipat.Live.Attrs (IsAttrs (..), attrsSingleton)
+import Minipat.Live.Logger (LogAction, logError, logWarn)
 import Minipat.Midi.Count (CountM, throwErrM)
 import Nanotime (PosixTime, TimeDelta, threadDelayDelta)
 import Prettyprinter (Pretty (..))
@@ -114,7 +118,8 @@ isNoteOff (PortMsg _ lm) = case lm of
 data PortData = PortData
   { pdPort :: !PortSel
   , pdChan :: !ChanData
-  } deriving stock (Eq, Ord, Show)
+  }
+  deriving stock (Eq, Ord, Show)
 
 mkNoteOff :: Channel -> PortData -> Maybe PortMsg
 mkNoteOff c (PortData ps cd) = case cd of
@@ -154,6 +159,12 @@ data SetDefault = SetDefaultNo | SetDefaultYes
 
 instance Default SetDefault where
   def = SetDefaultNo
+
+data AutoConn = AutoConnNo | AutoConnYes
+  deriving stock (Eq, Ord, Show, Enum, Bounded)
+
+instance Default AutoConn where
+  def = AutoConnYes
 
 data OutState = OutState
   { osPort :: !OutPort
@@ -239,9 +250,9 @@ setOutDefault pn ms = atomically (writeTVar (msOutDefault ms) (Just pn))
 
 data MidiEnv = MidiEnv
   { meApi :: !Api
+  , meLogger :: !LogAction
   , meState :: !MidiState
   }
-  deriving stock (Eq)
 
 type MidiM = CountM MidiErr MidiEnv
 
@@ -255,22 +266,37 @@ errM_ f m = do
   ea <- liftIO (runErrM m)
   either (throwErrM . f) pure ea
 
-openOutPort' :: PortName -> OutPort -> SetDefault -> (MidiConfig -> IO MidiConfig) -> MidiM ()
-openOutPort' pn op de f = do
-  MidiEnv api ms <- ask
+logFun :: LogAction -> LogFun
+logFun logger = \case
+  LogLvlWarn -> logWarn logger
+  LogLvlErr -> logError logger
+
+withMidiConfig :: PortName -> OutPort -> (MidiConfig -> MidiM ()) -> MidiM ()
+withMidiConfig pn op f = do
   mop' <- errM (MidiErrLibErr (Just (PortSelName pn))) (cloneOutPort op)
   case mop' of
     Nothing -> pure ()
     Just op' -> do
-      c <- liftIO $ do
-        x <- newUniquePtr op'
-        f (def {mcPort = Just (MidiPortOut x)})
-      moh <- errM (MidiErrLibErr (Just (PortSelName pn))) (newOutHandle api c)
-      case moh of
-        Nothing -> pure ()
-        Just oh -> liftIO $ do
-          os <- newOutState op oh
-          insertOutState pn os de ms
+      logger <- asks meLogger
+      port <- liftIO (fmap MidiPortOut (newUniquePtr op'))
+      warnCb <- liftIO (newLogCb (logFun logger) LogLvlWarn)
+      errCb <- liftIO (newLogCb (logFun logger) LogLvlErr)
+      f $
+        def
+          { mcPort = Just port
+          , mcOnWarn = Just warnCb
+          , mcOnErr = Just errCb
+          }
+
+openOutPort' :: PortName -> OutPort -> SetDefault -> MidiM ()
+openOutPort' pn op de = withMidiConfig pn op $ \mc -> do
+  MidiEnv api _ ms <- ask
+  moh <- errM (MidiErrLibErr (Just (PortSelName pn))) (newOutHandle api mc)
+  case moh of
+    Nothing -> pure ()
+    Just oh -> liftIO $ do
+      os <- newOutState op oh
+      insertOutState pn os de ms
 
 selectOutPort :: PortSel -> IO (Maybe (PortName, OutPort))
 selectOutPort ps =
@@ -280,12 +306,12 @@ selectOutPort ps =
         PortSelName (PortName t) -> f (t ==)
         PortSelPrefix t -> let t' = T.toLower t in f (T.isPrefixOf t' . T.toLower)
 
-openOutPort :: PortSel -> SetDefault -> (MidiConfig -> IO MidiConfig) -> MidiM ()
-openOutPort ps de f = do
+openOutPort :: PortSel -> SetDefault -> MidiM ()
+openOutPort ps de = do
   mx <- liftIO (selectOutPort ps)
   case mx of
     Nothing -> throwErrM (MidiErrMissingOutPort ps)
-    Just (pn, op) -> openOutPort' pn op de f
+    Just (pn, op) -> openOutPort' pn op de
 
 closeOutPort :: PortSel -> MidiM ()
 closeOutPort ps = do
@@ -295,8 +321,8 @@ closeOutPort ps = do
     Nothing -> throwErrM (MidiErrMissingOutPort ps)
     Just _ -> pure ()
 
-withOutPort :: PortSel -> (OutState -> ErrM ()) -> MidiM ()
-withOutPort ps f = do
+withOutPort :: PortSel -> AutoConn -> (OutState -> ErrM ()) -> MidiM ()
+withOutPort ps _ac f = do
   ms <- asks meState
   mz <- liftIO (atomically (selectOutState ps ms))
   case mz of
@@ -309,13 +335,13 @@ sendLiveMsg buf oh lm = unRunErrM $ do
   -- coercion is safe: Word8 -> CUChar
   VSM.unsafeWith buf (\ptr -> runErrM (outSendMsg1 oh (coerce ptr) len))
 
-sendPortMsg' :: VSM.IOVector Word8 -> PortMsg -> MidiM ()
-sendPortMsg' buf (PortMsg ps lm) =
-  withOutPort ps (\os -> withOutHandle os (\oh -> sendLiveMsg buf oh lm))
+sendPortMsg' :: VSM.IOVector Word8 -> AutoConn -> PortMsg -> MidiM ()
+sendPortMsg' buf ac (PortMsg ps lm) =
+  withOutPort ps ac (\os -> withOutHandle os (\oh -> sendLiveMsg buf oh lm))
 
-sendPortMsgs :: (Foldable f) => Int -> Maybe TimeDelta -> f PortMsg -> MidiM ()
-sendPortMsgs maxLen mayDelay msgs = do
+sendPortMsgs :: (Foldable f) => Int -> Maybe TimeDelta -> AutoConn -> f PortMsg -> MidiM ()
+sendPortMsgs maxLen mayDelay ac msgs = do
   buf <- liftIO (VSM.new maxLen)
   for_ msgs $ \pm -> do
-    sendPortMsg' buf pm
+    sendPortMsg' buf ac pm
     liftIO (for_ mayDelay threadDelayDelta)

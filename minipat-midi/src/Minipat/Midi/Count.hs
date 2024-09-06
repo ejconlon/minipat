@@ -38,3 +38,8 @@ throwErrM = tell . countErr
 
 runCountM :: CountM e r a -> r -> IO (a, ErrCounts e)
 runCountM (CountM m) r = runWriterT (runReaderT m r)
+
+execCountM :: (Show e, Typeable e) => CountM e r () -> r -> IO ()
+execCountM cm r = do
+  (_, c) <- runCountM cm r
+  rethrowCounts c
