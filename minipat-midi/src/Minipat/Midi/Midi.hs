@@ -3,7 +3,7 @@
 module Minipat.Midi.Midi where
 
 import Control.Concurrent.STM (STM, atomically)
-import Control.Concurrent.STM.TVar (TVar, newTVarIO, readTVar, readTVarIO, stateTVar, writeTVar)
+import Control.Concurrent.STM.TVar (TVar, modifyTVar', newTVarIO, readTVar, readTVarIO, stateTVar, writeTVar)
 import Control.Exception (Exception)
 import Control.Monad (when)
 import Control.Monad.IO.Class (liftIO)
@@ -218,7 +218,11 @@ selectOutState ps (MidiState omv odv) = do
 insertOutState :: PortName -> OutState -> SetDefault -> MidiState -> IO ()
 insertOutState pn os de (MidiState omv odv) = do
   mz <- atomically $ do
-    when (de == SetDefaultYes) (writeTVar odv (Just pn))
+    modifyTVar' odv $ \od -> case od of
+      Just _ -> case de of
+        SetDefaultNo -> od
+        SetDefaultYes -> Just pn
+      Nothing -> Just pn
     stateTVar omv (\m -> (Map.lookup pn m, Map.insert pn os m))
   for_ mz freeOutState
 
@@ -320,6 +324,14 @@ closeOutPort ps = do
   case mx of
     Nothing -> throwErrM (MidiErrMissingOutPort ps)
     Just _ -> pure ()
+
+setDefaultOutPort :: PortSel -> MidiM ()
+setDefaultOutPort ps = do
+  ms <- asks meState
+  mz <- liftIO (atomically (selectOutState ps ms))
+  case mz of
+    Nothing -> throwErrM (MidiErrMissingOutPort ps)
+    Just (pn, _) -> liftIO (setOutDefault pn ms)
 
 withOutPort :: PortSel -> AutoConn -> (OutState -> ErrM ()) -> MidiM ()
 withOutPort ps _ac f = do

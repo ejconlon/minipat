@@ -2,6 +2,8 @@ module Minipat.Midi.Boot
   ( I.MidiBackend
   , I.MidiSt
   , MidiLiveSt
+  , openOutPort
+  , setDefaultOutPort
   , note
   , n
   , midinote
@@ -22,9 +24,15 @@ import Minipat.Live.Datum (DatumProxy (..))
 import Minipat.Live.Extra (Note, parseDatum, parseMidiNote, parseNote)
 import Minipat.Midi.Convert (Vel (..))
 import Minipat.Midi.Impl qualified as I
-import Minipat.Midi.Midi (PortMsg, PortName (..))
+import Minipat.Midi.Midi (PortMsg, PortName (..), PortSel)
 
 type MidiLiveSt = (LiveSt, LiveBackend ~ I.MidiBackend)
+
+openOutPort :: (MidiLiveSt) => PortSel -> IO ()
+openOutPort ps = readLiveSt >>= \st -> I.openOutPort st ps
+
+setDefaultOutPort :: (MidiLiveSt) => PortSel -> IO ()
+setDefaultOutPort ps = readLiveSt >>= \st -> I.setDefaultOutPort st ps
 
 note, n :: Text -> S Note
 note = parseNote
