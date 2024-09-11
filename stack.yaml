@@ -1,4 +1,4 @@
-resolver: lts-22.33
+resolver: lts-22.34
 
 ghc-options:
   "$everything": -haddock
@@ -21,6 +21,6 @@ extra-deps:
 - looksee-0.6.0
 - nanotime-0.3.2
 - git: git@github.com:ejconlon/libremidi-haskell.git
-  commit: 2edd8317f1f2e3a2f43bfcd2e7dc46aaf2fb1022
+  commit: 0fe76eb18cd5584a6ffc3c41654d27d94e1616b8
   subdirs:
   - libremidi

@@ -52,7 +52,7 @@ import Libremidi.Common
   , withUniquePtr'
   )
 import Libremidi.Foreign qualified as LMF
-import Libremidi.Simple (findOutPort)
+import Libremidi.Simple qualified as LMS
 import Minipat.Live.Attrs (IsAttrs (..), attrsSingleton)
 import Minipat.Live.Logger (LogAction, logError, logWarn)
 import Minipat.Midi.Count (CountM, throwErrM)
@@ -275,6 +275,12 @@ logFun logger = \case
   LogLvlWarn -> logWarn logger
   LogLvlErr -> logError logger
 
+embedM :: LMS.MidiM a -> MidiM a
+embedM m = do
+  logger <- asks meLogger
+  let fun = logFun logger
+  liftIO (LMS.runMidiM m fun)
+
 withMidiConfig :: PortName -> OutPort -> (MidiConfig -> MidiM ()) -> MidiM ()
 withMidiConfig pn op f = do
   mop' <- errM (MidiErrLibErr (Just (PortSelName pn))) (cloneOutPort op)
@@ -302,9 +308,9 @@ openOutPort' pn op de = withMidiConfig pn op $ \mc -> do
       os <- newOutState op oh
       insertOutState pn os de ms
 
-selectOutPort :: PortSel -> IO (Maybe (PortName, OutPort))
+selectOutPort :: PortSel -> MidiM (Maybe (PortName, OutPort))
 selectOutPort ps =
-  let f = fmap (fmap (first PortName)) . findOutPort
+  let f = fmap (fmap (first PortName)) . embedM . LMS.findOutPort
   in  case ps of
         PortSelDefault -> pure Nothing
         PortSelName (PortName t) -> f (t ==)
@@ -312,7 +318,7 @@ selectOutPort ps =
 
 openOutPort :: PortSel -> SetDefault -> MidiM ()
 openOutPort ps de = do
-  mx <- liftIO (selectOutPort ps)
+  mx <- selectOutPort ps
   case mx of
     Nothing -> throwErrM (MidiErrMissingOutPort ps)
     Just (pn, op) -> openOutPort' pn op de

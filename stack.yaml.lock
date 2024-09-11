@@ -75,21 +75,21 @@ packages:
   original:
     hackage: nanotime-0.3.2
 - completed:
-    commit: 2edd8317f1f2e3a2f43bfcd2e7dc46aaf2fb1022
+    commit: 0fe76eb18cd5584a6ffc3c41654d27d94e1616b8
     git: git@github.com:ejconlon/libremidi-haskell.git
     name: libremidi
     pantry-tree:
-      sha256: 993949807ef804a05372a7c0fc5db5f2739a71fbd0c6ff17808fe4c819f4d3f3
-      size: 11229
+      sha256: 154bffe966006957675977b5788c2af51c4ec66642731dd76954114a851e9dbb
+      size: 11295
     subdir: libremidi
     version: 0.1.0
   original:
-    commit: 2edd8317f1f2e3a2f43bfcd2e7dc46aaf2fb1022
+    commit: 0fe76eb18cd5584a6ffc3c41654d27d94e1616b8
     git: git@github.com:ejconlon/libremidi-haskell.git
     subdir: libremidi
 snapshots:
 - completed:
-    sha256: 098936027eaa1ef14e2b8eb39d9933a973894bb70a68684a1bbf00730249879b
-    size: 720001
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/22/33.yaml
-  original: lts-22.33
+    sha256: edbd50d7e7c85c13ad5f5835ae2db92fab1e9cf05ecf85340e2622ec0a303df1
+    size: 720020
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/22/34.yaml
+  original: lts-22.34
