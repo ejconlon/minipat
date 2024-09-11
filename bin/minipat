@@ -36,8 +36,11 @@ if [ $# -ne 0 ]; then
   exit 1
 fi
 
+# Ensure absolute path for GHCi script
+SCRIPT="$(realpath "${SCRIPT}")"
+
 set -x
 
 stack build --fast "minipat-${BACKEND}"
 
-exec stack exec -- ghci -package "minipat-${BACKEND}" -ghci-script "${SCRIPT}"
+exec stack ghci --ghci-options "-ghci-script=\"${SCRIPT}\"" "minipat-${BACKEND}"
