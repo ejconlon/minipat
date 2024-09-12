@@ -29,6 +29,7 @@ module Minipat.Live.Core
   , clearAllOrbits
   , hush
   , panic
+  , status
   , checkTasks
   , logAsyncState
   , peek
@@ -424,6 +425,19 @@ logAsyncState logger name task = do
       case ea of
         Left e -> False <$ logException logger ("Task " <> name <> " failed") e
         Right _ -> False <$ logWarn logger ("Task " <> name <> " not running")
+
+status :: St i -> IO ()
+status st = do
+  let logger = stLogger st
+      dom = stDom st
+      rep :: (Show a) => (Domain -> TVar a) -> Text -> IO ()
+      rep p l = readTVarIO (p dom) >>= logInfo logger . (\v -> l <> ": " <> v) . T.pack . show
+  rep domPlaying "Playing"
+  rep domGenCycle "GenCycle"
+  rep domAbsGenCycle "AbsGenCycle"
+  rep domCps "CPS"
+  rep domGpc "GPC"
+  rep domDebug "Debug"
 
 checkTasks :: (Backend i) => St i -> IO Bool
 checkTasks st =

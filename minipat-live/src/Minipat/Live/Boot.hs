@@ -26,6 +26,7 @@ module Minipat.Live.Boot
   , panic
   , play
   , stop
+  , status
   , checkTasks
   , peek
   , d
@@ -135,6 +136,9 @@ play = setPlaying True
 
 stop :: (LiveSt) => IO ()
 stop = setPlaying False
+
+status :: (LiveSt) => IO ()
+status = readLiveSt >>= void . C.status
 
 checkTasks :: (LiveSt) => IO ()
 checkTasks = readLiveSt >>= void . C.checkTasks

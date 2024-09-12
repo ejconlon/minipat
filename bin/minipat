@@ -41,6 +41,4 @@ SCRIPT="$(realpath "${SCRIPT}")"
 
 set -x
 
-stack build --fast "minipat-${BACKEND}"
-
 exec stack ghci --ghci-options "-ghci-script=\"${SCRIPT}\"" "minipat-${BACKEND}"
