@@ -15,8 +15,6 @@ import Data.Bifunctor (first)
 import Data.Coerce (coerce)
 import Data.Default (Default (..))
 import Data.Foldable (for_)
-import Data.Heap (Heap)
-import Data.Heap qualified as Heap
 import Data.List (find)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
@@ -169,26 +167,21 @@ instance Default AutoConn where
 data OutState = OutState
   { osPort :: !OutPort
   , osHandle :: !(UniquePtr LMF.OutHandle)
-  , osHeap :: !(TVar (Heap TimedMsg))
   }
   deriving stock (Eq)
 
 newOutState :: OutPort -> OutHandle -> IO OutState
-newOutState op oh = OutState op <$> newUniquePtr oh <*> newTVarIO Heap.empty
+newOutState op oh = OutState op <$> newUniquePtr oh
 
 freeOutState :: OutState -> IO ()
-freeOutState (OutState port handUniq heapVar) = do
-  atomically (writeTVar heapVar Heap.empty)
+freeOutState (OutState port handUniq) = do
   consumeUniquePtr handUniq >>= freeOutHandle
   freeOutPort port
 
 withOutHandle :: OutState -> (OutHandle -> ErrM ()) -> ErrM ()
-withOutHandle (OutState _ handUniq heapVar) f = do
-  lock <- liftIO $ atomically $ do
-    waiting <- fmap (not . Heap.null) (readTVar heapVar)
-    alive <- aliveUniquePtr handUniq
-    pure (waiting && alive)
-  when lock (unRunErrM (withUniquePtr' handUniq (runErrM . f)))
+withOutHandle (OutState _ handUniq) f = do
+  alive <- liftIO (atomically (aliveUniquePtr handUniq))
+  when alive (unRunErrM (withUniquePtr' handUniq (runErrM . f)))
 
 data MidiErr
   = MidiErrMissingOutPort !PortSel
@@ -355,7 +348,9 @@ sendLiveMsg buf oh lm = unRunErrM $ do
 
 sendPortMsg' :: VSM.IOVector Word8 -> AutoConn -> PortMsg -> MidiM ()
 sendPortMsg' buf ac (PortMsg ps lm) =
-  withOutPort ps ac (\os -> withOutHandle os (\oh -> sendLiveMsg buf oh lm))
+  withOutPort ps ac $ \os ->
+    withOutHandle os $ \oh ->
+      sendLiveMsg buf oh lm
 
 sendPortMsgs :: (Foldable f) => Int -> Maybe TimeDelta -> AutoConn -> f PortMsg -> MidiM ()
 sendPortMsgs maxLen mayDelay ac msgs = do

@@ -68,6 +68,16 @@ scBackend =
 withSc :: Seq LiveMsg -> IO ()
 withSc = connectAndSendMsgs scBackend
 
+busBackend :: MidiBackend
+busBackend =
+  def
+    { mbDefOut = Just "Bus"
+    , mbDelay = Just (timeDeltaFromFracSecs @Double 0.05)
+    }
+
+withBus :: Seq LiveMsg -> IO ()
+withBus = connectAndSendMsgs busBackend
+
 -- Send mpk config
 sendMpkCfgs :: IO ()
 sendMpkCfgs = withMpk (Seq.fromList [sendProgConfig (ProgBank i) (mkMpkCfg i) | i <- [0 .. 7]])

@@ -13,7 +13,7 @@ where
 
 import Control.Concurrent.Async (Async)
 import Control.Concurrent.STM (atomically)
-import Control.Concurrent.STM.TVar (TVar, modifyTVar', newTVarIO, readTVarIO, writeTVar)
+import Control.Concurrent.STM.TVar (TVar, modifyTVar', newTVarIO, readTVar, readTVarIO, writeTVar)
 import Control.Exception (throwIO)
 import Control.Monad.IO.Class (liftIO)
 import Dahdit.Midi.Midi (LiveMsg (..))
@@ -22,6 +22,7 @@ import Data.Default (Default (..))
 import Data.Foldable (foldl', for_, toList)
 import Data.Heap (Heap)
 import Data.Heap qualified as H
+import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe)
 import Data.Sequence (Seq (..))
 import Data.Sequence qualified as Seq
@@ -127,10 +128,31 @@ instance Backend MidiBackend where
     atomically (writeTVar (mdHeap md) H.empty)
 
   backendCheck _ logger cb = runCallback cb $ \md -> do
+    -- Show task info
+    connOk <- logAsyncState logger "conn" (mdConnTask md)
+    sendOk <- logAsyncState logger "send" (mdSendTask md)
+    -- Show ports
+    let ms = M.meState (mdEnv md)
+    (mayDefOut, outPorts) <- atomically $ do
+      mayDefOut <- fmap (fmap M.unPortName) (readTVar (M.msOutDefault ms))
+      outMap <- readTVar (M.msOutMap ms)
+      let outPorts = fmap M.unPortName (toList (Map.keys outMap))
+      pure (mayDefOut, outPorts)
+    let outOk = not (null outPorts)
+    if outOk
+      then do
+        logInfo logger "Out ports:"
+        for_ outPorts $ \op ->
+          logInfo logger $
+            if mayDefOut == Just op
+              then op <> " (default)"
+              else op
+      else logInfo logger "No out ports"
+    -- Show queue info
     h <- readTVarIO (mdHeap md)
     logInfo logger ("Queue length: " <> T.pack (show (H.size h)))
     case H.uncons h of
       Just (M.TimedMsg t (M.SortedMsg m), _) ->
         logInfo logger ("Queue head: " <> T.pack (show t) <> " " <> T.pack (show m))
       Nothing -> pure ()
-    logAsyncState logger "send" (mdSendTask md)
+    pure (connOk && sendOk && outOk)
