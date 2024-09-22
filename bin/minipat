@@ -1,8 +1,6 @@
 #!/bin/bash
 
-set -e
-
-cd "$(dirname "$0")/.."
+set -eu
 
 DEFAULT_BACKEND="midi"
 USE_STRING="minipat [BACKEND [SCRIPT]]"
@@ -38,6 +36,8 @@ fi
 
 # Ensure absolute path for GHCi script
 SCRIPT="$(realpath "${SCRIPT}")"
+
+cd "$(dirname "$0")/.."
 
 set -x
 
