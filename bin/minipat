@@ -2,7 +2,10 @@
 
 set -eu
 
+MINIPAT_ROOT=$(cd -- "$( dirname -- "${BASH_SOURCE[0]}" )/.." &> /dev/null && pwd)
+
 DEFAULT_BACKEND="midi"
+LOCAL_SCRIPT="./Repl.ghci"
 USE_STRING="minipat [BACKEND [SCRIPT]]"
 
 if [ $# -eq 0 ]; then
@@ -21,11 +24,15 @@ if [ "${BACKEND}" == "help" ] ||
   exit 0
 fi
 
-SCRIPT="minipat-${BACKEND}/Repl.ghci"
+DEFAULT_SCRIPT="${MINIPAT_ROOT}/minipat-${BACKEND}/Repl.ghci"
 
 if [ $# -ne 0 ]; then
   SCRIPT="$1"
   shift
+elif [ -f "${LOCAL_SCRIPT}" ]; then
+  SCRIPT="${LOCAL_SCRIPT}"
+else
+  SCRIPT="${DEFAULT_SCRIPT}"
 fi
 
 if [ $# -ne 0 ]; then
@@ -37,7 +44,7 @@ fi
 # Ensure absolute path for GHCi script
 SCRIPT="$(realpath "${SCRIPT}")"
 
-cd "$(dirname "$0")/.."
+cd "${MINIPAT_ROOT}"
 
 set -x
 
