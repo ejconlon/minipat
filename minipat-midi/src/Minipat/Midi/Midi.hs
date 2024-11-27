@@ -1,6 +1,27 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Minipat.Midi.Midi where
+module Minipat.Midi.Midi
+  ( PortName (..)
+  , PortSel (..)
+  , PortMsg (..)
+  , PortData (..)
+  , SortedMsg (..)
+  , TimedMsg (..)
+  , SetDefault (..)
+  , AutoConn (..)
+  , MidiState (..)
+  , MidiErr (..)
+  , MidiEnv (..)
+  , MidiM
+  , openOutPort
+  , newMidiState
+  , sendPortMsg
+  , sendPortMsgs
+  , psFromText
+  , mkNoteOff
+  , setDefaultOutPort
+  )
+where
 
 import Control.Concurrent.STM (STM, atomically)
 import Control.Concurrent.STM.TVar (TVar, modifyTVar', newTVarIO, readTVar, readTVarIO, stateTVar, writeTVar)
@@ -346,8 +367,8 @@ sendLiveMsg buf oh lm = unRunErrM $ do
   -- coercion is safe: Word8 -> CUChar
   VSM.unsafeWith buf (\ptr -> runErrM (outSendMsg1 oh (coerce ptr) len))
 
-sendPortMsg' :: VSM.IOVector Word8 -> AutoConn -> PortMsg -> MidiM ()
-sendPortMsg' buf ac (PortMsg ps lm) =
+sendPortMsg :: VSM.IOVector Word8 -> AutoConn -> PortMsg -> MidiM ()
+sendPortMsg buf ac (PortMsg ps lm) =
   withOutPort ps ac $ \os ->
     withOutHandle os $ \oh ->
       sendLiveMsg buf oh lm
@@ -356,5 +377,5 @@ sendPortMsgs :: (Foldable f) => Int -> Maybe TimeDelta -> AutoConn -> f PortMsg 
 sendPortMsgs maxLen mayDelay ac msgs = do
   buf <- liftIO (VSM.new maxLen)
   for_ msgs $ \pm -> do
-    sendPortMsg' buf ac pm
+    sendPortMsg buf ac pm
     liftIO (for_ mayDelay threadDelayDelta)

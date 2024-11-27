@@ -107,7 +107,7 @@ instance Backend MidiBackend where
     ms <- liftIO M.newMidiState
     let me = M.MidiEnv api logger ms
         send (M.TimedMsg _ (M.SortedMsg pm)) = do
-          execCountM (M.sendPortMsg' buf ac pm) me
+          execCountM (M.sendPortMsg buf ac pm) me
           for_ mayDelay threadDelayDelta
         spawn = acquireAwait M.tmTime getPlayingSTM
     connTask <- case defOut of
