@@ -8,6 +8,7 @@ packages:
 - minipat-live
 - minipat-dirt
 - minipat-midi
+- minipat-rns
 
 extra-deps:
 - bowtie-0.4.0
