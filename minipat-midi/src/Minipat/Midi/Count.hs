@@ -5,7 +5,7 @@ import Control.Monad (when)
 import Control.Monad.Catch (MonadThrow (..))
 import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Reader (MonadReader, ReaderT (..))
-import Control.Monad.Writer (MonadWriter (..), WriterT (..))
+import Control.Monad.State.Strict (StateT (..), modify', put)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Typeable (Typeable)
@@ -30,14 +30,17 @@ hasErrs = not . Map.null . unErrCounts
 rethrowCounts :: (Show e, Typeable e) => (MonadThrow m) => ErrCounts e -> m ()
 rethrowCounts c = when (hasErrs c) (throwM c)
 
-newtype CountM e r a = CountM {unCountM :: ReaderT r (WriterT (ErrCounts e) IO) a}
-  deriving newtype (Functor, Applicative, Monad, MonadIO, MonadReader r, MonadWriter (ErrCounts e))
+newtype CountM e r a = CountM {unCountM :: ReaderT r (StateT (ErrCounts e) IO) a}
+  deriving newtype (Functor, Applicative, Monad, MonadIO, MonadReader r)
 
 throwErrM :: (Ord e) => e -> CountM e s ()
-throwErrM = tell . countErr
+throwErrM = CountM . modify' . flip (<>) . countErr
+
+resetErrM :: CountM e s ()
+resetErrM = CountM (put (ErrCounts Map.empty))
 
 runCountM :: CountM e r a -> r -> IO (a, ErrCounts e)
-runCountM (CountM m) r = runWriterT (runReaderT m r)
+runCountM (CountM m) r = runStateT (runReaderT m r) (ErrCounts Map.empty)
 
 execCountM :: (Show e, Typeable e) => CountM e r () -> r -> IO ()
 execCountM cm r = do
