@@ -58,7 +58,7 @@ import Data.Sequence qualified as Seq
 import Data.Text (Text)
 import Data.Text qualified as T
 import Minipat.EStream (EStream (..))
-import Minipat.Live.Attrs (Attrs, IsAttrs (..))
+import Minipat.Live.Attrs (Attrs, ToAttrs (..))
 import Minipat.Live.Backend (Backend (..), Callback (..), UninitErr (..), WithPlayMeta)
 import Minipat.Live.Exception (catchUserErr)
 import Minipat.Live.Logger (LogAction, logDebug, logException, logInfo, logWarn, nullLogger)
@@ -273,13 +273,13 @@ updateOrbits st f = atomically $ do
   let z = foldl' (\x (o, y) -> x <> fmap (WithOrbit o) y) mempty (Map.toList m')
   writeTVar (domStream dom) z
 
-setOrbit :: (IsAttrs a) => St i -> Integer -> EStream a -> IO ()
+setOrbit :: (ToAttrs a) => St i -> Integer -> EStream a -> IO ()
 setOrbit st o es =
   case unEStream es of
     Left e -> logException (stLogger st) ("Error setting orbit " <> T.pack (show o)) e
     Right s -> setOrbit' st o s
 
-setOrbit' :: (IsAttrs a) => St i -> Integer -> Stream a -> IO ()
+setOrbit' :: (ToAttrs a) => St i -> Integer -> Stream a -> IO ()
 setOrbit' st o s = updateOrbits st (Map.insert o (fmap toAttrs s))
 
 clearOrbit :: St i -> Integer -> IO ()

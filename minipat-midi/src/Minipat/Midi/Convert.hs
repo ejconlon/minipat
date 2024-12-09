@@ -8,7 +8,7 @@ import Dahdit.Midi.Osc (Datum (..))
 import Data.Default (def)
 import Data.Functor ((<&>))
 import Data.Int (Int32)
-import Minipat.Live.Attrs (Attrs, IsAttrs (..), attrsSingleton)
+import Minipat.Live.Attrs (Attrs, ToAttrs (..), attrsSingleton)
 import Minipat.Live.Convert (Branch (..), ConvErr, ConvM, branchM, defaultM, lookupM, runConvM)
 import Minipat.Live.Datum (DatumProxy (..))
 import Minipat.Midi.Midi (PortData (..), psFromText)
@@ -17,7 +17,7 @@ newtype Vel = Vel {unVel :: Int32}
   deriving stock (Show)
   deriving newtype (Eq, Ord, Num, Integral, Real, Enum)
 
-instance IsAttrs Vel where
+instance ToAttrs Vel where
   toAttrs (Vel x) = attrsSingleton "vel" (DatumInt32 x)
 
 -- TODO support more:

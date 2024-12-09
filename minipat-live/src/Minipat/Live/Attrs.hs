@@ -22,7 +22,7 @@ module Minipat.Live.Attrs
   , attrsTryLookup
   , attrsUnalias
   , Attr (..)
-  , IsAttrs (..)
+  , ToAttrs (..)
   , attrsMerge
   )
 where
@@ -110,24 +110,24 @@ attrsUnalias as m0 = foldM go m0 as
       Nothing -> pure m
       Just v -> attrsTryInsert y v (attrsDelete x m)
 
--- | For when you need something anonymous with an 'IsAttrs' instance.
+-- | For when you need something anonymous with an 'ToAttrs' instance.
 data Attr a = Attr
   { attrKey :: !Text
   , attrVal :: !a
   }
   deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
 
-class IsAttrs a where
+class ToAttrs a where
   toAttrs :: a -> Attrs
 
-instance (IsDatum a) => IsAttrs (Attr a) where
+instance (IsDatum a) => ToAttrs (Attr a) where
   toAttrs (Attr k v) = attrsSingleton k (toDatum v)
 
-instance IsAttrs Attrs where
+instance ToAttrs Attrs where
   toAttrs = id
 
-instance (IsAttrs a) => IsAttrs (Maybe a) where
+instance (ToAttrs a) => ToAttrs (Maybe a) where
   toAttrs = maybe mempty toAttrs
 
-attrsMerge :: (IsAttrs a, IsAttrs b) => a -> b -> Attrs
+attrsMerge :: (ToAttrs a, ToAttrs b) => a -> b -> Attrs
 attrsMerge a b = toAttrs a <> toAttrs b

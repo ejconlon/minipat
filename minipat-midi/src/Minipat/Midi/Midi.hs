@@ -72,7 +72,7 @@ import Libremidi.Common
   )
 import Libremidi.Foreign qualified as LMF
 import Libremidi.Simple qualified as LMS
-import Minipat.Live.Attrs (IsAttrs (..), attrsSingleton)
+import Minipat.Live.Attrs (ToAttrs (..), attrsSingleton)
 import Minipat.Live.Logger (LogAction, logError, logWarn)
 import Minipat.Midi.Count (CountM, throwErrM)
 import Nanotime (PosixTime, TimeDelta, threadDelayDelta)
@@ -110,7 +110,7 @@ psFromText t =
 instance Pretty PortSel where
   pretty = pretty . psToText
 
-instance IsAttrs PortSel where
+instance ToAttrs PortSel where
   toAttrs = attrsSingleton "port" . DatumString . psToText
 
 instance Default PortSel where

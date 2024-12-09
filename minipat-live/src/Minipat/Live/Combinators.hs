@@ -28,12 +28,12 @@ import Data.Sequence qualified as Seq
 import Minipat.Classes (Flow (..))
 import Minipat.EStream (EStream)
 import Minipat.EStream qualified as E
-import Minipat.Live.Attrs (Attrs, IsAttrs, attrsMerge)
+import Minipat.Live.Attrs (Attrs, ToAttrs, attrsMerge)
 import Minipat.Time (CycleDelta, CycleTime)
 
 type S = EStream
 
-setIn, (#) :: (IsAttrs a, IsAttrs b) => S a -> S b -> S Attrs
+setIn, (#) :: (ToAttrs a, ToAttrs b) => S a -> S b -> S Attrs
 setIn = flowInnerApply attrsMerge
 (#) = setIn
 

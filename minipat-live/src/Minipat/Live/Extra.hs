@@ -33,7 +33,7 @@ import Looksee qualified as L
 import Minipat.Ast (Ident (..), Select (..))
 import Minipat.EStream (EStream (..))
 import Minipat.Eval (evalPat)
-import Minipat.Live.Attrs (Attr (..), IsAttrs (..), attrsInsert, attrsSingleton)
+import Minipat.Live.Attrs (Attr (..), ToAttrs (..), attrsInsert, attrsSingleton)
 import Minipat.Live.Combinators (S)
 import Minipat.Live.Datum (DatumProxy (..))
 import Minipat.Live.Notes
@@ -108,7 +108,7 @@ data Sound = Sound
 instance Pretty Sound where
   pretty (Sound so mn) = pretty so <> maybe mempty ((":" <>) . pretty) mn
 
-instance IsAttrs Sound where
+instance ToAttrs Sound where
   toAttrs (Sound so mn) = attrsInsert "sound" (DatumString (unIdent so)) (toAttrs mn)
 
 soundP :: P Sound
@@ -125,7 +125,7 @@ newtype Note = Note {unNote :: Int32}
   deriving stock (Show)
   deriving newtype (Eq, Ord, Pretty)
 
-instance IsAttrs Note where
+instance ToAttrs Note where
   toAttrs (Note x) = attrsSingleton "note" (DatumInt32 x)
 
 noteLinOffset :: Integer

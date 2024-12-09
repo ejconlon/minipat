@@ -25,6 +25,7 @@ source-repository head
 library
   exposed-modules:
       Minipat.Rns
+      Minipat.Rns.Song
   other-modules:
       Paths_minipat_rns
   hs-source-dirs:

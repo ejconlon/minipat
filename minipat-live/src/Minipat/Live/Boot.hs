@@ -47,7 +47,7 @@ import Data.Default (Default (..))
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Kind (Type)
 import Minipat.EStream (EStream)
-import Minipat.Live.Attrs (Attrs, IsAttrs)
+import Minipat.Live.Attrs (Attrs, ToAttrs)
 import Minipat.Live.Backend qualified as B
 import Minipat.Live.Combinators
 import Minipat.Live.Core qualified as C
@@ -116,7 +116,7 @@ setCycle x = readLiveSt >>= \st -> C.setCycle st x
 setTempo :: (LiveSt) => Rational -> IO ()
 setTempo x = readLiveSt >>= \st -> C.setTempo st x
 
-setOrbit :: (LiveSt, IsAttrs a) => Integer -> EStream a -> IO ()
+setOrbit :: (LiveSt, ToAttrs a) => Integer -> EStream a -> IO ()
 setOrbit x y = readLiveSt >>= \st -> C.setOrbit st x y
 
 clearOrbit :: (LiveSt) => Integer -> IO ()
@@ -147,10 +147,10 @@ checkTasks = readLiveSt >>= void . C.checkTasks
 peek :: (LiveSt, Pretty a) => EStream a -> IO ()
 peek x = readLiveSt >>= \st -> C.peek st x
 
-d :: (LiveSt, IsAttrs a) => Integer -> EStream a -> IO ()
+d :: (LiveSt, ToAttrs a) => Integer -> EStream a -> IO ()
 d = setOrbit
 
-d0, d1, d2, d3, d4, d5, d6, d7 :: (LiveSt, IsAttrs a) => EStream a -> IO ()
+d0, d1, d2, d3, d4, d5, d6, d7 :: (LiveSt, ToAttrs a) => EStream a -> IO ()
 d0 = d 0
 d1 = d 1
 d2 = d 2

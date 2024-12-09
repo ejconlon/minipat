@@ -39,7 +39,7 @@ import Data.Sequence (Seq (..))
 import Data.Sequence qualified as Seq
 import Data.Text (Text)
 import Data.Text qualified as T
-import Minipat.Live.Attrs (Attrs, IsAttrs (..), attrsSingleton, attrsToList)
+import Minipat.Live.Attrs (Attrs, ToAttrs (..), attrsSingleton, attrsToList)
 import Minipat.Live.Convert (ConvErr, ConvM, runConvM)
 import Minipat.Live.EnumString (EnumString, allEnumStrings)
 import Nanotime (PosixTime, TimeDelta)
@@ -77,8 +77,11 @@ newtype RequestId = RequestId {unRequestId :: Int32}
   deriving stock (Show)
   deriving newtype (Eq, Ord, Num, Enum)
 
-instance IsAttrs RequestId where
+instance ToAttrs RequestId where
   toAttrs (RequestId x) = attrsSingleton "!requestId" (DatumInt32 x)
+
+lookupRequestId :: Attrs -> Maybe RequestId
+lookupRequestId = error "TODO"
 
 newtype RemoteErr = RemoteErr {unRemoteErr :: Text}
   deriving stock (Show)
@@ -86,8 +89,11 @@ newtype RemoteErr = RemoteErr {unRemoteErr :: Text}
 
 instance Exception RemoteErr
 
-instance IsAttrs RemoteErr where
+instance ToAttrs RemoteErr where
   toAttrs (RemoteErr x) = attrsSingleton "!error" (DatumString x)
+
+lookupRemoteErr :: Attrs -> Maybe RemoteErr
+lookupRemoteErr = undefined
 
 data RpcErr
   = -- | Remote side signaled an error
@@ -130,13 +136,13 @@ data Waiter c where
   Waiter :: RequestId -> c r -> RawAddrPat -> PosixTime -> WaitVar r -> Waiter c
 
 waiterMatches :: Msg -> Waiter c -> Bool
-waiterMatches = error "TODO"
+waiterMatches m w = error "TODO"
 
 waiterExpired :: PosixTime -> Waiter c -> Bool
-waiterExpired = error "TODO"
+waiterExpired t w = error "TODO"
 
 waiterRun :: Msg -> Waiter c -> IO (Either RpcErr ())
-waiterRun = error "TODO"
+waiterRun m w = error "TODO"
 
 data OscProtoEnv c = OscProtoEnv
   { opeTimeout :: !TimeDelta
@@ -147,16 +153,16 @@ data OscProtoEnv c = OscProtoEnv
 newOscProtoEnvIO :: TimeDelta -> RequestId -> IO (OscProtoEnv c)
 newOscProtoEnvIO to rid = OscProtoEnv to <$> newTVarIO rid <*> newTVarIO Empty
 
+expireWaiters :: OscProtoEnv c -> PosixTime -> IO ()
+expireWaiters (OscProtoEnv _to _ _wes) _now = error "TODO"
+
+handleRecvMsg :: OscProtoEnv c -> Msg -> IO (Either RpcErr a)
+handleRecvMsg = error "TODO"
+
+sendMsgWith :: (RpcCmd t c) => (Msg -> IO ()) -> OscProtoEnv c -> c r -> IO (WaitVar r)
+sendMsgWith _send _ope _cmd = error "TODO"
+
 -- TODO finish implementing
-
--- expireWaiters :: OscProtoEnv c -> PosixTime -> IO Int
--- expireWaiters (OscProtoEnv _to _ _wes) _now = error "TODO"
-
--- handleRecvMsg :: OscProtoEnv c -> Msg -> IO (Either RpcErr a)
--- handleRecvMsg = error "TODO"
-
--- sendMsgWith :: (RpcCmd t c) => (Msg -> IO ()) -> OscProtoEnv c -> c r -> IO (WaitVar r)
--- sendMsgWith send ope cmd = error "TODO"
 
 -- data OscTaskEnv c a = OscTaskEnv
 --   { oteSend :: !(Msg -> IO ())
