@@ -1,4 +1,7 @@
-resolver: lts-22.34
+resolver: lts-23.0
+
+# TODO Bump package versions
+allow-newer: true
 
 ghc-options:
   "$everything": -haddock
