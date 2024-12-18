@@ -78,12 +78,12 @@ library
     , containers ==0.6.*
     , data-default ==0.7.*
     , heaps ==0.4.*
-    , looksee >=0.6.0 && <0.7
+    , looksee ==0.8.*
     , mtl ==2.3.*
     , nanotime >=0.3.2 && <0.4
     , nonempty-containers ==0.3.*
     , prettyprinter ==1.7.*
-    , text ==2.0.*
+    , text >=2.0 && <2.2
     , transformers ==0.6.*
   default-language: GHC2021
 
@@ -130,16 +130,15 @@ test-suite minipat-test
     , bowtie ==0.4.*
     , containers ==0.6.*
     , data-default ==0.7.*
-    , daytripper ==0.3.*
+    , daytripper ==1.0.*
     , heaps ==0.4.*
-    , looksee >=0.6.0 && <0.7
+    , looksee ==0.8.*
     , minipat
     , mtl ==2.3.*
     , nanotime >=0.3.2 && <0.4
     , nonempty-containers ==0.3.*
     , prettyprinter ==1.7.*
-    , tasty ==1.4.*
-    , tasty-hunit ==0.10.*
-    , text ==2.0.*
+    , prop-unit >=1.0.1 && <1.1
+    , text >=2.0 && <2.2
     , transformers ==0.6.*
   default-language: GHC2021

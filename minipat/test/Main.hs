@@ -9,6 +9,7 @@ where
 import Bowtie (pattern JotP)
 import Control.Exception (throwIO)
 import Control.Monad (void)
+import Control.Monad.IO.Class (liftIO)
 import Data.Bifunctor (Bifunctor (..))
 import Data.Bitraversable (Bitraversable (..))
 import Data.Either (isLeft, isRight)
@@ -29,10 +30,10 @@ import Minipat.Stream (Ev (..), Stream, streamRun, tapeToList)
 import Minipat.Time (Arc (..), CycleArc, CycleTime (..), Span (..))
 import Minipat.Ur (ur)
 import Prettyprinter qualified as P
+import PropUnit (MonadTest, TestName, TestTree, assert, testGroup, testUnit, (===))
 import System.IO (BufferMode (..), hSetBuffering, stdout)
 import Test.Daytripper
   ( Expect
-  , MonadExpect (..)
   , daytripperMain
   , expectDuring
   , mkExpect
@@ -40,30 +41,28 @@ import Test.Daytripper
   , runExpect
   , testRT
   )
-import Test.Tasty (TestName, TestTree, testGroup)
-import Test.Tasty.HUnit (testCase, (@?=))
 
 type Cmp m a = Maybe a -> Either (Err ParseErr) a -> m ()
 
-expectParse :: (MonadExpect m, P.Pretty a) => Cmp m a -> P a -> Expect m a Text (Either (Err ParseErr) a)
+expectParse :: (Monad m, P.Pretty a) => Cmp m a -> P a -> Expect m a Text (Either (Err ParseErr) a)
 expectParse cmp p = mkExpect enc dec cmp
  where
   enc = pure . prettyShow
   dec = pure . parse p
 
-expectParseOk :: (MonadExpect m, Eq a, Show a, P.Pretty a) => P a -> Expect m a Text (Either (Err ParseErr) a)
-expectParseOk = expectParse (maybe (expectAssertBool "expected ok" . isRight) (\a x -> expectAssertEq x (Right a)))
+expectParseOk :: (MonadTest m, Eq a, Show a, P.Pretty a) => P a -> Expect m a Text (Either (Err ParseErr) a)
+expectParseOk = expectParse (maybe (assert . isRight) (\a x -> x === Right a))
 
-expectParseErr :: (MonadExpect m, P.Pretty a) => P a -> Expect m a Text (Either (Err ParseErr) a)
-expectParseErr = expectParse (const (expectAssertBool "expected error" . isLeft))
+expectParseErr :: (MonadTest m, P.Pretty a) => P a -> Expect m a Text (Either (Err ParseErr) a)
+expectParseErr = expectParse (const (assert . isLeft))
 
-expectText :: (MonadExpect m) => Text -> Expect m a Text c -> Expect m a Text c
-expectText t = expectDuring (\_ u -> expectAssertEq u t)
+expectText :: (MonadTest m) => Text -> Expect m a Text c -> Expect m a Text c
+expectText t = expectDuring (\_ u -> u === t)
 
 commonParseTests :: [TestTree]
 commonParseTests =
   fmap
-    testRT
+    (testRT Nothing)
     [ mkUnitRT "var" (expectText "x" (expectParseOk identP)) (Ident "x")
     , mkUnitRT "factor int" (expectText "5" (expectParseOk factorP)) (FactorInteger 5)
     , mkUnitRT "factor dec" (expectText "0.75" (expectParseOk factorP)) (FactorRational RationalPresDec (3 % 4))
@@ -110,7 +109,7 @@ zwPatIdents = fmap (mkUnTPat . PatPure) [Ident "z", Ident "w"]
 patParseTests :: [TestTree]
 patParseTests =
   fmap
-    testRT
+    (testRT Nothing)
     [ mkUnitRT
         "pat silence"
         (expectText "~" (expectParseOk tpatP))
@@ -251,14 +250,14 @@ patParseTests =
     ]
 
 runTripCase :: (TestName, Text, Maybe Text) -> TestTree
-runTripCase (name, txt, mnorm) = testCase name $ do
+runTripCase (name, txt, mnorm) = testUnit name $ do
   -- print txt
   let e = expectParseOk tspatP
   (_, act) <- e (Left txt)
   ea <- act
   -- pPrint ea
   case ea of
-    Left err -> throwIO err
+    Left err -> liftIO (throwIO err)
     Right a ->
       let etxt = fromMaybe txt mnorm
       in  void (runExpect (expectText etxt e) a)
@@ -340,10 +339,10 @@ testParseCases =
     ]
 
 runPatNormCase :: (TestName, Text, Pat () Ident) -> TestTree
-runPatNormCase (n, patStr, npat) = testCase n $ do
-  pat <- parseTPat patStr
+runPatNormCase (n, patStr, npat) = testUnit n $ do
+  pat <- liftIO (parseTPat patStr)
   let pat' = normPat pat
-  pat' @?= npat
+  pat' === npat
 
 testPatNormCases :: TestTree
 testPatNormCases =
@@ -415,11 +414,11 @@ testPatNormCases =
           ]
 
 runPatInterpCase :: (TestName, Maybe CycleArc, Text, [Ev Ident]) -> TestTree
-runPatInterpCase (n, mayArc, patStr, evs) = testCase n $ do
-  pat <- either throwIO pure (evalPat identP patStr)
+runPatInterpCase (n, mayArc, patStr, evs) = testUnit n $ do
+  pat <- liftIO (either throwIO pure (evalPat identP patStr))
   let arc = fromMaybe (Arc 0 1) mayArc
       actualEvs = tapeToList (streamRun pat arc)
-  actualEvs @?= evs
+  actualEvs === evs
 
 ev :: Rational -> Rational -> x -> Ev x
 ev start end val =
@@ -747,13 +746,13 @@ testPatInterpCases =
       ]
 
 runPatReprCase :: (TestName, Text, Maybe (TPat Ident), Maybe Text) -> TestTree
-runPatReprCase (n, patStr, mayRePat, mayReStr) = testCase n $ do
-  pat :: Pat Loc Ident <- either throwIO pure (evalPat identP patStr)
-  actualPat :: Pat Loc Ident <- either throwIO pure (interpPat pat)
-  for_ mayRePat (first (const ()) actualPat @?=)
+runPatReprCase (n, patStr, mayRePat, mayReStr) = testUnit n $ do
+  pat :: Pat Loc Ident <- liftIO (either throwIO pure (evalPat identP patStr))
+  actualPat :: Pat Loc Ident <- liftIO (either throwIO pure (interpPat pat))
+  for_ mayRePat (first (const ()) actualPat ===)
   let actualStr = prettyShow actualPat
       expectStr = fromMaybe patStr mayReStr
-  actualStr @?= expectStr
+  actualStr === expectStr
 
 testPatReprCases :: TestTree
 testPatReprCases =
@@ -806,19 +805,20 @@ runXform (Xform f) = f
 runUrCase
   :: (TestName, Integer, Text, [(Ident, Text)], [(Ident, Xform)], Maybe Text, [Ev Ident])
   -> TestTree
-runUrCase (n, inpLen, inpPat, inpSubPats, inpSubXforms, mayExpectStr, expectEvs) = testCase n $ do
-  inpSubPats' <- traverse (bitraverse pure parsePat) inpSubPats
+runUrCase (n, inpLen, inpPat, inpSubPats, inpSubXforms, mayExpectStr, expectEvs) = testUnit n $ do
+  inpSubPats' <- liftIO (traverse (bitraverse pure parsePat) inpSubPats)
   let inpSubXforms' = fmap (second runXform) inpSubXforms
-  actualPat :: Pat Loc Ident <- either throwIO pure (ur (fromInteger inpLen) inpPat inpSubPats' inpSubXforms')
+  actualPat :: Pat Loc Ident <- liftIO (either throwIO pure (ur (fromInteger inpLen) inpPat inpSubPats' inpSubXforms'))
   for_ mayExpectStr $ \expectStr -> do
     let actualStr = prettyShow actualPat
-    actualStr @?= expectStr
-  inpSubPats'' <- traverse (bitraverse pure parseStream) inpSubPats
+    actualStr === expectStr
+  inpSubPats'' <- liftIO (traverse (bitraverse pure parseStream) inpSubPats)
   let inpSubXforms'' = fmap (second runXform) inpSubXforms
-  actualStream :: Stream Ident <- either throwIO pure (ur (fromInteger inpLen) inpPat inpSubPats'' inpSubXforms'')
+  actualStream :: Stream Ident <-
+    liftIO (either throwIO pure (ur (fromInteger inpLen) inpPat inpSubPats'' inpSubXforms''))
   let arc = Arc 0 (fromInteger inpLen)
       actualEvs = tapeToList (streamRun actualStream arc)
-  actualEvs @?= expectEvs
+  actualEvs === expectEvs
 
 testUr :: TestTree
 testUr =
@@ -865,7 +865,7 @@ testUr =
 main :: IO ()
 main = do
   hSetBuffering stdout LineBuffering
-  daytripperMain $
+  daytripperMain $ \_ ->
     testGroup
       "minipat"
       [ testParseCases

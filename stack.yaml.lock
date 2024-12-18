@@ -12,26 +12,26 @@ packages:
   original:
     hackage: bowtie-0.4.0
 - completed:
-    hackage: dahdit-0.5.1@sha256:f583794914a2c775f3e59fe4ef1d39c5ab827ff27894da32f7ae0de4ea9f15b1,3704
+    hackage: dahdit-0.7.0@sha256:d827315a94b6c27a751f65a39fcc0c1c577be2a175fd562893954fb81780c1df,3683
     pantry-tree:
-      sha256: 9b42c87254506abaa97962be7cdd558388ae0e77bf13678017a97c6feddf773b
+      sha256: c9d3da2feab660363b2a2861eebb4b92f3a38983e73354c647818d8dd4fac4ad
       size: 1135
   original:
-    hackage: dahdit-0.5.1
+    hackage: dahdit-0.7.0
 - completed:
-    hackage: dahdit-network-0.5.2@sha256:1c75b1a3eb74a194ea9a0bc6606703735eb803e899727a72ef4de29aab235641,2968
+    hackage: dahdit-network-0.7.0@sha256:8abf51c433ed819eb8d9dcc5d27cbfc3329fa3eab86f73ff949a53706b1fb5f9,3000
     pantry-tree:
-      sha256: 3ef6365a3aea81140e56b2034d4f5954ce03a1d8d589c11e80ac2f8b79b1edc0
+      sha256: 2b0d7ba2291d2ce41cbb179bb6b43538d41c1e2e51b4e488dad636185e9b15dd
       size: 227
   original:
-    hackage: dahdit-network-0.5.2
+    hackage: dahdit-network-0.7.0
 - completed:
-    hackage: dahdit-midi-0.5.5@sha256:a5914dd5e38e3df5d611b3b25ff4124e60123661825fb215552f935834147472,3395
+    hackage: dahdit-midi-0.7.0@sha256:84a9c856905b3ef281f3d8c5ef982cb22fa16bfa245b1c7e93c755a943e17b68,3425
     pantry-tree:
-      sha256: 0ace41083dcfedb31dcf8a82bb74c5b12ee65ff28151c6983372017b2bba0269
+      sha256: aedb5cd10705d62978063c401fb762bcf7e4c1682b69c0e2eb1ffbe384178c24
       size: 562
   original:
-    hackage: dahdit-midi-0.5.5
+    hackage: dahdit-midi-0.7.0
 - completed:
     hackage: data-sword-0.2.0.3@sha256:953cca4b4533a388df0ef17e06ac5530652d1d73decfe8b656242ccdf4b40999,1568
     pantry-tree:
@@ -40,33 +40,33 @@ packages:
   original:
     hackage: data-sword-0.2.0.3
 - completed:
-    hackage: daytripper-0.3.1@sha256:225a6e9348c2b5b6e0a55d408559b55df06f1365d5741d2f9d1856d8632769ae,2985
+    hackage: daytripper-1.0.0@sha256:ad21982bd08e4d5f542ed81020d34c4f0e8ff628b7e559a542c549ac7bbcb2c4,3031
     pantry-tree:
-      sha256: 5b714aec8cd526cec33a5b269f332d59fe8587e20cb83af9a5e7c3b53ddde351
+      sha256: c850279a8bd2fa79fc9da7021bc8e11dc403ea231f169da249dc318299a5c7be
       size: 225
   original:
-    hackage: daytripper-0.3.1
+    hackage: daytripper-1.0.0
 - completed:
-    hackage: little-logger-1.0.2@sha256:2d6d58195bffc687a4ced58aff4773acc2929147fa6ace54821ed6eb1c0331fc,2223
+    hackage: libremidi-0.4.0@sha256:f4597f0f42a4eb58698dcf98246d90d3699cde16f5b34b76903759fe6fe436b1,23951
     pantry-tree:
-      sha256: 04234f2351a37f0931885c1b7771370024c3b148f18f9efd4876f0cf2a110dc5
+      sha256: 592ed604e3dd0f572bb53eb8524bdbb64570a204e95a12d3b4bb48dcb7386f36
+      size: 11450
+  original:
+    hackage: libremidi-0.4.0
+- completed:
+    hackage: little-logger-3.0.1@sha256:2c02988018d823aaedee7f6bcf2cf249c7c43bf2e2f3db38281a7f9866b0347b,2217
+    pantry-tree:
+      sha256: c0377ec8f705acdb2358a69a82b3cdcc566be3463f61ed60c553fa782be1f673
       size: 272
   original:
-    hackage: little-logger-1.0.2
+    hackage: little-logger-3.0.1
 - completed:
-    hackage: falsify-0.2.0@sha256:82ad5e999a80bf9e7a5bcb2fe17c2b9524a95893ff19fcdbf3ef4a671303e444,5451
+    hackage: looksee-0.8.0@sha256:4d7651657df1b7408d1085a521acd8088a83333992879d6a9bc1ba944cf12fe1,3261
     pantry-tree:
-      sha256: 94ee859a00223f18c04e5ee0135ca81e50a47d75d23f2084ae3b5784c1d62c2e
-      size: 3378
-  original:
-    hackage: falsify-0.2.0
-- completed:
-    hackage: looksee-0.6.0@sha256:3d681ac6d8f23cf6c9bf2e7cd555a98e35f1c567fdaea7a9bc207b5223ed275c,3261
-    pantry-tree:
-      sha256: 916891c6448851d00c7315a60a2fb16edb17f3e452c00711d110ecfed66843c5
+      sha256: 42096efa405eeff36843ab3d23272dd62eec0a1d32a918692768a6cda8bff73a
       size: 279
   original:
-    hackage: looksee-0.6.0
+    hackage: looksee-0.8.0
 - completed:
     hackage: nanotime-0.3.2@sha256:fe49cf850141904340401d1af79a1685009cfd7b615f8cbe3ae45105db535db6,2827
     pantry-tree:
@@ -75,18 +75,12 @@ packages:
   original:
     hackage: nanotime-0.3.2
 - completed:
-    commit: cdec4720257bcd0a22e1156e87bf361a7be70ce7
-    git: git@github.com:ejconlon/libremidi-haskell.git
-    name: libremidi
+    hackage: prop-unit-1.0.1@sha256:db1fdcc30294c15beff28cc62a5baf34a9d217bea3f3fa49720b406f3fc4e94b,3035
     pantry-tree:
-      sha256: bbb820391c3e65f1c2e54dd28bff2ab0f6af47d94f91bfa9a012cb47d03f37bf
-      size: 11863
-    subdir: libremidi
-    version: 0.1.0
+      sha256: 84c321efc37e92481c584086a5b85967b991ee5bb17b3db856221d6eef8480b1
+      size: 466
   original:
-    commit: cdec4720257bcd0a22e1156e87bf361a7be70ce7
-    git: git@github.com:ejconlon/libremidi-haskell.git
-    subdir: libremidi
+    hackage: prop-unit-1.0.1
 snapshots:
 - completed:
     sha256: 9444fadfa30b67a93080254d53872478c087592ad64443e47c546cdcd13149ae

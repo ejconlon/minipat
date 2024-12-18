@@ -5,6 +5,7 @@ module Main
   )
 where
 
+import Control.Monad.IO.Class (liftIO)
 import Dahdit.Midi.Osc (Datum (..))
 import Data.Default (def)
 import Data.Ratio ((%))
@@ -15,8 +16,7 @@ import Minipat.Live.Core (Env (..), mergeRecord, setOrbit)
 import Minipat.Live.Extra (parseSound)
 import Minipat.Time (arcStart, bpmToCps)
 import Nanotime (PosixTime, addTime, timeDeltaFromFracSecs)
-import Test.Tasty (TestTree, defaultMain, testGroup)
-import Test.Tasty.HUnit (testCase, (@?=))
+import PropUnit (TestTree, testGroup, testMain, testUnit, (===))
 
 data R a = R !Integer !PosixTime !a
   deriving stock (Eq, Ord, Show)
@@ -27,7 +27,7 @@ projectR (WithPlayMeta pm a) = R (pmOrbit pm) (arcStart (pmRealArc pm)) a
 testRecordCase :: (Integer, Integer) -> TestTree
 testRecordCase (tempo, gpc) =
   let cps = bpmToCps 4 (fromInteger tempo)
-  in  testCase (show tempo ++ " " ++ show gpc) $ do
+  in  testUnit (show tempo ++ " " ++ show gpc) $ do
         let env = def {envCps = cps, envGpc = gpc}
             cycStart = 0
             cycEnd = 2
@@ -43,11 +43,11 @@ testRecordCase (tempo, gpc) =
                 , R 1 (time (3 % 2)) (attrsSingleton "sound" (DatumString "sd"))
                 ]
             expectedEnd = addTime (time (fromInteger cycEnd)) (negate ahead)
-        (actualEvs, actualEnd) <- mergeRecord env cycStart cycEnd realStart $ \st ->
+        (actualEvs, actualEnd) <- liftIO $ mergeRecord env cycStart cycEnd realStart $ \st ->
           setOrbit st 1 (parseSound "bd sd")
         let actualEvs' = fmap projectR actualEvs
-        actualEvs' @?= expectedEvs
-        actualEnd @?= expectedEnd
+        actualEvs' === expectedEvs
+        actualEnd === expectedEnd
 
 testRecord :: TestTree
 testRecord =
@@ -61,7 +61,7 @@ testRecord =
 
 main :: IO ()
 main =
-  defaultMain $
+  testMain $ \_ ->
     testGroup
       "minipat-Live"
       [ testRecord
