@@ -2,15 +2,16 @@ module Minipat.Quant
   ( TimeStrat (..)
   , ArcStrat
   , quant
+  , Trig (..)
+  , quantTrig
   )
 where
 
 import Bowtie (Anno (..))
-import Data.Maybe (fromMaybe)
 import Data.Ratio ((%))
 import Minipat.Classes (Flow (..))
 import Minipat.Stream (Ev (..), Stream, streamChop)
-import Minipat.Time (Arc (..), CycleArc, CycleDelta (..), CycleSpan, CycleTime (..), Span (..))
+import Minipat.Time (Arc (..), CycleArc, CycleSpan, CycleTime (..), Span (..), arcIntersect)
 
 data TimeStrat
   = TimeStratRound
@@ -58,24 +59,43 @@ quant strat steps = flowNudge (quantArc strat steps)
 
 data Trig = Trig
   { trigOn :: !Bool
-  , trigOff :: !(Maybe CycleDelta)
+  , trigOff :: !Bool
   }
   deriving stock (Eq, Ord, Show)
 
--- quantOnOff :: ArcStrat -> Integer -> Stream a -> Stream (Anno Trig a)
--- quantOnOff strat steps = streamChop f where
---   r = 1 % steps
---   h = quantArc strat steps
---   g = CycleTime . subtract r . unCycleTime
---   f (Ev (Span ac mwh) a) =
---     case mwh of
---       -- Signals have no on or off triggers
---       Nothing -> [Ev (Span (h ac) Nothing) (Anno (Trig False Nothing) a)]
---       Just wh ->
---         let whq@(Arc s e) = h wh
---             d = g e
---         in if d <= s
---           then error "TODO"
---           else error "TODO"
---           -- then [Ev (pan (h ac) (Just whq)) (Anno (Trig True (Just (CycleDelta r))) a)]
---           -- else _
+quantTrig :: ArcStrat -> Integer -> Stream a -> Stream (Anno Trig a)
+quantTrig strat steps = streamChop f
+ where
+  stepLen = 1 % steps
+  addStep = CycleTime . (+ stepLen) . unCycleTime
+  subStep = CycleTime . subtract stepLen . unCycleTime
+  quantSteps = quantArc strat steps
+  f (Ev (Span ac mwh) a) =
+    case mwh of
+      Nothing ->
+        -- Signals have no on or off triggers
+        let sp = Span (quantSteps ac) Nothing
+            anno = Anno (Trig False False) a
+        in  [Ev sp anno]
+      Just wh ->
+        let whq@(Arc s e) = quantSteps wh
+            t = addStep s
+            d = subStep e
+        in  if t > d
+              then
+                -- Overlap
+                let newWh = Arc s t
+                    newAc = arcIntersect newWh whq
+                    sp = Span newAc (Just newWh)
+                    anno = Anno (Trig True True) a
+                in  [Ev sp anno]
+              else
+                let newWh1 = Arc s t
+                    newWh2 = Arc d e
+                    newAc1 = arcIntersect newWh1 whq
+                    newAc2 = arcIntersect newWh2 whq
+                    sp1 = Span newAc1 (Just newWh1)
+                    sp2 = Span newAc2 (Just newWh2)
+                    anno1 = Anno (Trig True False) a
+                    anno2 = Anno (Trig False True) a
+                in  [Ev sp1 anno1, Ev sp2 anno2]
