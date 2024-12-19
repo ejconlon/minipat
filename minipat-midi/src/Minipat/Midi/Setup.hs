@@ -22,6 +22,34 @@ import Minipat.Midi.Mpk
 import Minipat.Midi.SC
 import Nanotime (timeDeltaFromFracSecs)
 
+portBackend :: Text -> Double -> MidiBackend
+portBackend name delay =
+  def
+    { mbDefOut = Just name
+    , mbDelay = Just (timeDeltaFromFracSecs delay)
+    }
+
+withPort :: Text -> Double -> Seq LiveMsg -> IO ()
+withPort name delay = connectAndSendMsgs (portBackend name delay)
+
+mpkBackend :: MidiBackend
+mpkBackend = portBackend "MPK mini" 0.5
+
+withMpk :: Seq LiveMsg -> IO ()
+withMpk = connectAndSendMsgs mpkBackend
+
+scBackend :: MidiBackend
+scBackend = portBackend "U2MIDI Pro" 0.05
+
+withSc :: Seq LiveMsg -> IO ()
+withSc = connectAndSendMsgs scBackend
+
+fluidBackend :: MidiBackend
+fluidBackend = portBackend "fluid" 0.05
+
+withFluid :: Seq LiveMsg -> IO ()
+withFluid = connectAndSendMsgs fluidBackend
+
 -- Mpk config for Sc control
 mkMpkCfg :: Int -> ProgConfig
 mkMpkCfg i = c
@@ -47,36 +75,6 @@ mkMpkCfg i = c
               , k "Delay" 94
               ]
       }
-
-mpkBackend :: MidiBackend
-mpkBackend =
-  def
-    { mbDefOut = Just "MPK mini"
-    , mbDelay = Just (timeDeltaFromFracSecs @Double 0.5)
-    }
-
-withMpk :: Seq LiveMsg -> IO ()
-withMpk = connectAndSendMsgs mpkBackend
-
-scBackend :: MidiBackend
-scBackend =
-  def
-    { mbDefOut = Just "U2MIDI Pro"
-    , mbDelay = Just (timeDeltaFromFracSecs @Double 0.05)
-    }
-
-withSc :: Seq LiveMsg -> IO ()
-withSc = connectAndSendMsgs scBackend
-
-busBackend :: MidiBackend
-busBackend =
-  def
-    { mbDefOut = Just "Bus"
-    , mbDelay = Just (timeDeltaFromFracSecs @Double 0.05)
-    }
-
-withBus :: Seq LiveMsg -> IO ()
-withBus = connectAndSendMsgs busBackend
 
 -- Send mpk config
 sendMpkCfgs :: IO ()

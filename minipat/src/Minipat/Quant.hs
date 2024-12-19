@@ -8,11 +8,11 @@ module Minipat.Quant
 where
 
 import Bowtie (Anno (..))
+import Data.IntMap.Strict (IntMap)
 import Data.Ratio ((%))
 import Minipat.Classes (Flow (..))
 import Minipat.Stream (Ev (..), Stream, streamChop)
-import Minipat.Time (Arc (..), CycleArc, CycleSpan, CycleTime (..), Span (..), arcIntersect, CycleDelta (..))
-import Data.IntMap.Strict (IntMap)
+import Minipat.Time (Arc (..), CycleArc, CycleDelta (..), CycleSpan, CycleTime (..), Span (..), arcIntersect)
 
 data TimeStrat
   = TimeStratRound
@@ -104,7 +104,8 @@ quantTrig strat steps = streamChop f
 data Block a = Block
   { blockSteps :: !Int
   , blockEvs :: !(IntMap a)
-  } deriving stock (Eq, Ord, Show)
+  }
+  deriving stock (Eq, Ord, Show)
 
 blockStepLen :: Block a -> CycleDelta
 blockStepLen (Block steps _) = CycleDelta (1 % fromIntegral steps)
