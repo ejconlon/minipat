@@ -17,6 +17,7 @@ module Minipat.Stream
   , tapeToList
   , tapeConcatMap
   , tapeFromList
+  , tapeNudge
   , Stream
   , streamFilter
   , streamBind
@@ -43,6 +44,8 @@ module Minipat.Stream
   , streamPar
   , streamSwitch
   , streamPieces
+  , streamNudge
+  , streamChop
   )
 where
 
@@ -71,6 +74,7 @@ import Minipat.Time
   , arcMerge
   , arcRelevant
   , spanMapWhole
+  , spanNudge
   , spanSplit
   )
 import Prettyprinter (Pretty (..))
@@ -156,6 +160,9 @@ tapeRelevant ref = Tape . H.fromList . mapMaybe go . toList . unTape
       then Just (Entry (s {spanActive = arcIntersect ref (spanActive s)}) a)
       else Nothing
 
+tapeNudge :: (CycleArc -> CycleArc) -> CycleArc -> Tape a -> Tape a
+tapeNudge f arc = Tape . H.mapMonotonic (\(Entry s a) -> Entry (spanNudge f arc s) a) . unTape
+
 hold :: (Foldable f, Ord a, Eq b) => Arc a -> b -> f (Arc a, b) -> Seq (Arc a, b)
 hold ac0@(Arc s0 e0) z0 = consolidate0 . toList
  where
@@ -237,13 +244,12 @@ streamApply = streamApplyWith . arcMerge
 
 streamRun :: Stream a -> CycleArc -> Tape a
 -- TODO necessary?
-streamRun = unStream
-
 -- streamRun pa arc =
 --   let arc' = arcWiden arc
 --   in  if arc' == arc
 --         then unStream pa arc
 --         else tapeRelevant arc (unStream pa arc')
+streamRun = unStream
 
 streamTimeMapInv :: (CycleTime -> CycleTime) -> (CycleTime -> CycleTime) -> Stream a -> Stream a
 streamTimeMapInv onTape onArc s = Stream (tapeTimeMapMono onTape . unStream s . fmap onArc)
@@ -351,6 +357,12 @@ streamPieces x = \case
   Empty -> x
   (t, x') :<| xs' -> streamSwitch x t (streamPieces x' xs')
 
+streamNudge :: (CycleArc -> CycleArc) -> Stream a -> Stream a
+streamNudge f sa = Stream (\arc -> tapeNudge f arc (unStream sa arc))
+
+streamChop :: (Ev a -> [Ev b]) -> Stream a -> Stream b
+streamChop f sa = Stream (tapeConcatMap (tapeFromList . f) . unStream sa)
+
 -- TODO move to module with continuous primitives
 -- fnSine :: (Floating a, Fractional a) :: Rational -> CycleTime -> a
 -- fnSine freq t = sin (2 * pi * fromRational (freq * unCycleTime t))
@@ -390,3 +402,4 @@ instance Flow Stream where
   flowLate = streamLate
   flowSwitch = streamSwitch
   flowPieces = streamPieces
+  flowNudge = streamNudge

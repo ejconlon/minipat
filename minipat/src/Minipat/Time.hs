@@ -26,6 +26,7 @@ module Minipat.Time
   , spanWholeLength
   , spanMapWhole
   , spanIsStart
+  , spanNudge
   , bpmToCps
   , cpsToBpm
   , deltaToCycle
@@ -36,7 +37,7 @@ where
 
 import Data.Maybe (fromMaybe)
 import Minipat.Print (prettyRat, prettyTup)
-import Nanotime (PosixTime, TimeDelta, diffTime, timeDeltaFromFracSecs, timeDeltaToFracSecs)
+import Nanotime (PosixTime, TimeDelta, TimeLike (..), diffTime, timeDeltaFromFracSecs, timeDeltaToFracSecs)
 import Prettyprinter (Pretty (..))
 import Prettyprinter qualified as P
 
@@ -48,8 +49,11 @@ class Measurable b a | a -> b where
   -- | `measure start end` is `end - start`
   measure :: a -> a -> b
 
+  addMeasure :: a -> b -> a
+
 instance Measurable TimeDelta PosixTime where
-  measure s e = diffTime e s
+  measure = flip diffTime
+  addMeasure = addTime
 
 -- | Abstract time. In general we repeat patterns once per cycle, e.g. `[0, 1], [1, 2], ...`
 newtype CycleTime = CycleTime {unCycleTime :: Rational}
@@ -68,7 +72,8 @@ instance Pretty CycleDelta where
   pretty = prettyRat . unCycleDelta
 
 instance Measurable CycleDelta CycleTime where
-  measure s e = CycleDelta (unCycleTime e - unCycleTime s)
+  measure (CycleTime s) (CycleTime e) = CycleDelta (e - s)
+  addMeasure (CycleTime s) (CycleDelta d) = CycleTime (s + d)
 
 -- | An interval of the given time type
 data Arc a = Arc {arcStart :: !a, arcEnd :: !a}
@@ -176,6 +181,11 @@ spanIsStart (Span (Arc sa _) mwh) =
   case mwh of
     Nothing -> True
     Just (Arc sw _) -> sa == sw
+
+-- | The given function must be monotonic in both endpoints (preserving <=)
+-- and preserve endpoint ordering (start <= end).
+spanNudge :: (Ord a) => (Arc a -> Arc a) -> Arc a -> Span a -> Span a
+spanNudge f arc (Span ac mwh) = Span (arcIntersect arc (f ac)) (fmap f mwh)
 
 -- | Convert BPM to CPS, given BPC (beats per cycle/bar)
 -- (often 4 beats/bar, 1 bar/cycle, so 4 bpc)

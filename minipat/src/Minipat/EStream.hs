@@ -31,6 +31,7 @@ module Minipat.EStream
   , estreamPar
   , estreamSwitch
   , estreamPieces
+  , estreamNudge
   )
 where
 
@@ -44,7 +45,7 @@ import Minipat.Ast (Euclid)
 import Minipat.Classes (Flow (..), Pattern (..), PatternUnwrap (..))
 import Minipat.Stream (Stream)
 import Minipat.Stream qualified as S
-import Minipat.Time (CycleDelta, CycleTime, MergeStrat)
+import Minipat.Time (CycleArc, CycleDelta, CycleTime, MergeStrat)
 
 -- | Tracks errors in stream creation for later logging
 newtype EStream (a :: Type) = EStream {unEStream :: Either SomeException (Stream a)}
@@ -136,6 +137,9 @@ estreamSwitch e1 t = estreamLiftA2 (`S.streamSwitch` t) e1
 estreamPieces :: EStream a -> Seq (CycleTime, EStream a) -> EStream a
 estreamPieces e1 = EStream . liftA2 S.streamPieces (unEStream e1) . traverse (\(t, EStream e) -> fmap (t,) e)
 
+estreamNudge :: (CycleArc -> CycleArc) -> EStream a -> EStream a
+estreamNudge = estreamMap . S.streamNudge
+
 instance Pattern EStream where
   type PatM EStream = Identity
   type PatA EStream = ()
@@ -168,3 +172,4 @@ instance Flow EStream where
   flowLate = estreamLate
   flowSwitch = estreamSwitch
   flowPieces = estreamPieces
+  flowNudge = estreamNudge

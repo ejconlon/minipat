@@ -28,7 +28,7 @@ import Minipat.Ast
   , UnPat
   , factorFromRational
   )
-import Minipat.Time (CycleDelta, CycleTime, MergeStrat (..))
+import Minipat.Time (CycleArc, CycleDelta, CycleTime, MergeStrat (..))
 
 mkPat :: PatF b a (UnPat b a) -> Reader b (Pat b a)
 mkPat pf = asks (\b -> Pat (JotP b pf))
@@ -234,3 +234,7 @@ class (Alternative f, Pattern f) => Flow f where
 
   -- | Switch from one flow to the next sequentially.
   flowPieces :: f a -> Seq (CycleTime, f a) -> f a
+
+  -- | Adjust cycle times with the given function.
+  -- (See 'spanNudge' for constraints.)
+  flowNudge :: (CycleArc -> CycleArc) -> f a -> f a

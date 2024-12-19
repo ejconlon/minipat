@@ -26,6 +26,7 @@ import Minipat.Interp (interpPat)
 import Minipat.Norm (normPat)
 import Minipat.Parser (Loc, P, ParseErr, factorP, identP, identPatP, selectIdentPatP)
 import Minipat.Print (prettyShow)
+import Minipat.Quant (ArcStrat, TimeStrat (..), quant)
 import Minipat.Stream (Ev (..), Stream, streamRun, tapeToList)
 import Minipat.Time (Arc (..), CycleArc, CycleTime (..), Span (..))
 import Minipat.Ur (ur)
@@ -862,6 +863,27 @@ testUr =
         )
       ]
 
+runStreamCase :: (TestName, Maybe CycleArc, Stream Ident, [Ev Ident]) -> TestTree
+runStreamCase (n, mayArc, str, evs) = testUnit n $ do
+  let arc = fromMaybe (Arc 0 1) mayArc
+      actualEvs = tapeToList (streamRun str arc)
+  actualEvs === evs
+
+runQuantCase
+  :: (TestName, Maybe CycleArc, ArcStrat, Integer, Stream Ident, [Ev Ident]) -> TestTree
+runQuantCase (n, mayArc, strat, steps, str, evs) =
+  runStreamCase (n, mayArc, quant strat steps str, evs)
+
+testQuant :: TestTree
+testQuant =
+  let strat = Arc TimeStratRound TimeStratRound
+      steps = 4
+  in  testGroup "quant" $
+        fmap
+          runQuantCase
+          [ ("id", Nothing, strat, steps, pure "a", [ev 0 1 "a"])
+          ]
+
 main :: IO ()
 main = do
   hSetBuffering stdout LineBuffering
@@ -873,4 +895,5 @@ main = do
       , testPatInterpCases
       , testPatReprCases
       , testUr
+      , testQuant
       ]
