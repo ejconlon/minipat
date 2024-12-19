@@ -27,7 +27,7 @@ import Minipat.Norm (normPat)
 import Minipat.Parser (Loc, P, ParseErr, factorP, identP, identPatP, selectIdentPatP)
 import Minipat.Print (prettyShow)
 import Minipat.Quant (ArcStrat, TimeStrat (..), quant)
-import Minipat.Stream (Ev (..), Stream, streamRun, tapeToList)
+import Minipat.Stream (Ev (..), Stream, streamRun, tapeToList, streamSeq)
 import Minipat.Time (Arc (..), CycleArc, CycleTime (..), Span (..))
 import Minipat.Ur (ur)
 import Prettyprinter qualified as P
@@ -878,10 +878,26 @@ testQuant :: TestTree
 testQuant =
   let strat = Arc TimeStratRound TimeStratRound
       steps = 4
+      seqStr2 = streamSeq (fmap pure ["a", "b"])
+      seqStr3 = streamSeq (fmap pure ["a", "b", "c"])
   in  testGroup "quant" $
         fmap
           runQuantCase
-          [ ("id", Nothing, strat, steps, pure "a", [ev 0 1 "a"])
+          [ ("id 1", Nothing, strat, steps, pure "a", [ev 0 1 "a"])
+          , ("id 2", Nothing, strat, steps, seqStr2,
+            [ ev 0 (1 % 2) "a"
+            , ev (1 % 2) 1 "b"
+            ])
+          , ("round 3 4", Nothing, strat, steps, seqStr3,
+            [ ev 0 (1 % 4) "a"
+            , ev (1 % 4) (3 % 4) "b"
+            , ev (3 % 4) 1 "c"
+            ])
+          , ("cf 3 4", Nothing, Arc TimeStratCeiling TimeStratFloor, steps, seqStr3,
+            [ ev 0 (1 % 4) "a"
+            , ev (1 % 2) (1 % 2) "b"
+            , ev (3 % 4) 1 "c"
+            ])
           ]
 
 main :: IO ()
