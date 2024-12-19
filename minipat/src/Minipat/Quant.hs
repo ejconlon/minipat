@@ -11,7 +11,8 @@ import Bowtie (Anno (..))
 import Data.Ratio ((%))
 import Minipat.Classes (Flow (..))
 import Minipat.Stream (Ev (..), Stream, streamChop)
-import Minipat.Time (Arc (..), CycleArc, CycleSpan, CycleTime (..), Span (..), arcIntersect)
+import Minipat.Time (Arc (..), CycleArc, CycleSpan, CycleTime (..), Span (..), arcIntersect, CycleDelta (..))
+import Data.IntMap.Strict (IntMap)
 
 data TimeStrat
   = TimeStratRound
@@ -99,3 +100,17 @@ quantTrig strat steps = streamChop f
                     anno1 = Anno (Trig True False) a
                     anno2 = Anno (Trig False True) a
                 in  [Ev sp1 anno1, Ev sp2 anno2]
+
+data Block a = Block
+  { blockSteps :: !Int
+  , blockEvs :: !(IntMap a)
+  } deriving stock (Eq, Ord, Show)
+
+blockStepLen :: Block a -> CycleDelta
+blockStepLen (Block steps _) = CycleDelta (1 % fromIntegral steps)
+
+blockIter :: Block a -> [(Int, CycleDelta, a)]
+blockIter _block = error "TODO"
+
+quantBlock :: ArcStrat -> Integer -> Stream a -> CycleArc -> Block [a]
+quantBlock _strat _steps _str _arc = error "TODO"
