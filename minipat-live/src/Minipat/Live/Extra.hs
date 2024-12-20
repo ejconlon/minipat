@@ -3,8 +3,7 @@
 -- | Some extra combinators that are too specific for all backends, but
 -- may be useful for more than one backend.
 module Minipat.Live.Extra
-  ( parsePat
-  , parseDatum
+  ( parseDatum
   , pI
   , pF
   , Sound (..)
@@ -31,8 +30,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Looksee qualified as L
 import Minipat.Ast (Ident (..), Select (..))
-import Minipat.EStream (EStream (..))
-import Minipat.Eval (evalPat)
+import Minipat.EStream (estreamPat)
 import Minipat.Live.Attrs (Attr (..), ToAttrs (..), attrsInsert, attrsSingleton)
 import Minipat.Live.Combinators (S)
 import Minipat.Live.Datum (DatumProxy (..))
@@ -57,11 +55,8 @@ datumP = \case
   DatumProxyDouble -> fmap realToFrac L.sciP
   DatumProxyString -> fmap unIdent identP
 
-parsePat :: P a -> Text -> S a
-parsePat p = EStream . evalPat p
-
 parseDatum :: DatumProxy a -> Text -> S a
-parseDatum = parsePat . datumP
+parseDatum = estreamPat . datumP
 
 octNoteP :: Integer -> P OctNote
 octNoteP defOct = do
@@ -115,7 +110,7 @@ soundP :: P Sound
 soundP = fmap (\(Select so mn) -> Sound so mn) (selectP identP noteP)
 
 parseSound :: Text -> S Sound
-parseSound = parsePat soundP
+parseSound = estreamPat soundP
 
 -- * Note
 
@@ -152,7 +147,7 @@ noteP =
     <|> fmap (Note . fromInteger) L.intP
 
 parseNote :: Text -> S Note
-parseNote = parsePat noteP
+parseNote = estreamPat noteP
 
 -- * MidiNote
 
@@ -171,7 +166,7 @@ noteToMidi :: Note -> Int32
 noteToMidi = (midiLinOffset +) . unNote
 
 parseMidiNote :: Text -> S Note
-parseMidiNote = parsePat midiNoteP
+parseMidiNote = estreamPat midiNoteP
 
 -- * Note conversions
 
@@ -197,7 +192,7 @@ arpP :: P Arp
 arpP = ordP arpMap (fmap unIdent identP)
 
 parseArp :: Text -> S Arp
-parseArp = parsePat arpP
+parseArp = estreamPat arpP
 
 -- TODO implement
 -- strum :: S Arp -> S Chord -> S Note

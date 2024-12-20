@@ -887,7 +887,7 @@ testQuant =
       seqStr3 = streamSeq (fmap pure ["a", "b", "c"])
   in  testGroup "quant" $
         fmap
-          runQuantCase
+          (runQuantCase @Ident)
           [ ("id 1", Nothing, strat, steps, pure "a", [ev 0 1 "a"])
           ,
             ( "id 2"

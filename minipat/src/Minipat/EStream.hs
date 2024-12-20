@@ -32,17 +32,24 @@ module Minipat.EStream
   , estreamSwitch
   , estreamPieces
   , estreamNudge
+  , estreamPat
+  , PatSubErr (..)
+  , estreamPatSub
   )
 where
 
 import Control.Applicative (Alternative (..))
 import Control.Exception (Exception, SomeException (..))
 import Control.Monad.Identity (Identity (..))
+import Data.Bifunctor (first)
 import Data.Kind (Type)
 import Data.Semigroup (Semigroup (..))
 import Data.Sequence (Seq)
+import Data.Text (Text)
 import Minipat.Ast (Euclid)
 import Minipat.Classes (Flow (..), Pattern (..), PatternUnwrap (..))
+import Minipat.Eval (evalPat, evalPatSub)
+import Minipat.Parser (P)
 import Minipat.Stream (Stream)
 import Minipat.Stream qualified as S
 import Minipat.Time (CycleArc, CycleDelta, CycleTime, MergeStrat)
@@ -139,6 +146,17 @@ estreamPieces e1 = EStream . liftA2 S.streamPieces (unEStream e1) . traverse (\(
 
 estreamNudge :: (CycleArc -> CycleArc) -> EStream a -> EStream a
 estreamNudge = estreamMap . S.streamNudge
+
+estreamPat :: P a -> Text -> EStream a
+estreamPat p = EStream . evalPat p
+
+newtype PatSubErr = PatSubErr {unPatSubErr :: Text}
+  deriving stock (Eq, Ord, Show)
+
+instance Exception PatSubErr
+
+estreamPatSub :: (a -> Either Text b) -> P a -> Text -> EStream b
+estreamPatSub g p = EStream . evalPatSub (first (SomeException . PatSubErr) . g) p
 
 instance Pattern EStream where
   type PatM EStream = Identity

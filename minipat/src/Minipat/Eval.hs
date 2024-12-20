@@ -2,6 +2,7 @@
 module Minipat.Eval
   ( PatternEval
   , evalPat
+  , evalPatSub
   )
 where
 
@@ -16,7 +17,12 @@ type PatternEval = PatternUnwrap Loc
 
 -- | The canonical way to parse, normalize, and interpret patterns as streams
 evalPat :: (PatternEval f) => P a -> Text -> Either SomeException (f a)
-evalPat p t = do
+evalPat = evalPatSub Right
+
+-- | Same, but allows substitution before interpretation
+evalPatSub :: (PatternEval f) => (a -> Either SomeException b) -> P a -> Text -> Either SomeException (f b)
+evalPatSub g p t = do
   pat <- either (Left . SomeException) Right (parseNice (topPatP p) t)
   let pat' = normPat pat
-  either (Left . SomeException) Right (interpPat pat')
+  pat'' <- traverse g pat'
+  either (Left . SomeException) Right (interpPat pat'')
