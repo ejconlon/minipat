@@ -21,6 +21,16 @@ module Minipat.Midi.Boot
   )
 where
 
+import Dahdit.Midi.Midi
+  ( ChanData (..)
+  , ChanModeData (..)
+  , ChanVoiceData (..)
+  , Channel
+  , ControlNum
+  , ControlVal
+  , LiveMsg (..)
+  , ProgramNum
+  )
 import Data.Sequence (Seq)
 import Data.Text (Text)
 import Minipat.Live.Boot
@@ -29,7 +39,6 @@ import Minipat.Live.Extra (Note, parseDatum, parseMidiNote, parseNote)
 import Minipat.Midi.Convert (Vel (..))
 import Minipat.Midi.Impl qualified as I
 import Minipat.Midi.Midi (PortMsg (..), PortName (..), PortSel)
-import Dahdit.Midi.Midi (Channel, ControlNum, ControlVal, ProgramNum, LiveMsg (..), ChanData (..), ChanVoiceData (..), ChanModeData (..))
 
 type MidiLiveSt = (LiveSt, LiveBackend ~ I.MidiBackend)
 
@@ -67,4 +76,3 @@ allNotesOff ps ch = PortMsg ps (LiveMsgChan ch (ChanDataMode ChanModeAllNotesOff
 
 allSoundOff :: PortSel -> Channel -> PortMsg
 allSoundOff ps ch = PortMsg ps (LiveMsgChan ch (ChanDataMode ChanModeAllSoundOff))
-
