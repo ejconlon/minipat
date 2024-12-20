@@ -59,7 +59,7 @@ type MidiSt = St MidiBackend
 mkTimedMsgs :: WithPlayMeta M.PortData -> Seq M.TimedMsg
 mkTimedMsgs (WithPlayMeta pm pd@(M.PortData ps cd)) =
   let Arc t1 t2 = pmRealArc pm
-      c = fromInteger (pmOrbit pm - 1)
+      c = fromInteger (pmOrbit pm)
       m1 = M.PortMsg ps (LiveMsgChan c cd)
       s1 = Seq.singleton (M.TimedMsg t1 (M.SortedMsg m1))
   in  case M.mkNoteOff c pd of

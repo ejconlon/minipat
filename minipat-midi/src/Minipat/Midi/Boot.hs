@@ -13,6 +13,10 @@ module Minipat.Midi.Boot
   , PortName
   , port
   , midi
+  , control
+  , program
+  , allNotesOff
+  , allSoundOff
   , module Minipat.Live.Boot
   )
 where
@@ -24,7 +28,8 @@ import Minipat.Live.Datum (DatumProxy (..))
 import Minipat.Live.Extra (Note, parseDatum, parseMidiNote, parseNote)
 import Minipat.Midi.Convert (Vel (..))
 import Minipat.Midi.Impl qualified as I
-import Minipat.Midi.Midi (PortMsg, PortName (..), PortSel)
+import Minipat.Midi.Midi (PortMsg (..), PortName (..), PortSel)
+import Dahdit.Midi.Midi (Channel, ControlNum, ControlVal, ProgramNum, LiveMsg (..), ChanData (..), ChanVoiceData (..), ChanModeData (..))
 
 type MidiLiveSt = (LiveSt, LiveBackend ~ I.MidiBackend)
 
@@ -50,3 +55,16 @@ port = fmap PortName . parseDatum DatumProxyString
 
 midi :: (MidiLiveSt) => Seq PortMsg -> IO ()
 midi ms = readLiveSt >>= \st -> I.sendMsgs st ms
+
+control :: PortSel -> Channel -> ControlNum -> ControlVal -> PortMsg
+control ps ch cn cv = PortMsg ps (LiveMsgChan ch (ChanDataVoice (ChanVoiceControlChange cn cv)))
+
+program :: PortSel -> Channel -> ProgramNum -> PortMsg
+program ps ch pn = PortMsg ps (LiveMsgChan ch (ChanDataVoice (ChanVoiceProgramChange pn)))
+
+allNotesOff :: PortSel -> Channel -> PortMsg
+allNotesOff ps ch = PortMsg ps (LiveMsgChan ch (ChanDataMode ChanModeAllNotesOff))
+
+allSoundOff :: PortSel -> Channel -> PortMsg
+allSoundOff ps ch = PortMsg ps (LiveMsgChan ch (ChanDataMode ChanModeAllSoundOff))
+
