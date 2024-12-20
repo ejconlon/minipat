@@ -33,7 +33,6 @@ module Minipat.EStream
   , estreamPieces
   , estreamNudge
   , estreamPat
-  , PatSubErr (..)
   , estreamPatSub
   )
 where
@@ -150,13 +149,8 @@ estreamNudge = estreamMap . S.streamNudge
 estreamPat :: P a -> Text -> EStream a
 estreamPat p = EStream . evalPat p
 
-newtype PatSubErr = PatSubErr {unPatSubErr :: Text}
-  deriving stock (Eq, Ord, Show)
-
-instance Exception PatSubErr
-
-estreamPatSub :: (a -> Either Text b) -> P a -> Text -> EStream b
-estreamPatSub g p = EStream . evalPatSub (first (SomeException . PatSubErr) . g) p
+estreamPatSub :: (Exception e) => (a -> Either e b) -> P a -> Text -> EStream b
+estreamPatSub g p = EStream . evalPatSub (first SomeException . g) p
 
 instance Pattern EStream where
   type PatM EStream = Identity

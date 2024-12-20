@@ -23,12 +23,16 @@ module Minipat.Live.Combinators
   )
 where
 
+import Control.Exception (Exception)
 import Data.Sequence (Seq)
 import Data.Sequence qualified as Seq
+import Data.Text (Text)
+import Minipat.Ast (Ident (..))
 import Minipat.Classes (Flow (..))
 import Minipat.EStream (EStream)
 import Minipat.EStream qualified as E
 import Minipat.Live.Attrs (Attrs, ToAttrs, attrsMerge)
+import Minipat.Parser (identP)
 import Minipat.Time (CycleDelta, CycleTime)
 
 type S = EStream
@@ -75,6 +79,14 @@ alt = E.estreamAlt
 
 rand :: Seq (S a) -> S a
 rand = E.estreamRand
+
+newtype SubErr = SubErr {unSubErr :: Text}
+  deriving stock (Eq, Ord, Show)
+
+instance Exception SubErr
+
+sub :: (Text -> Maybe a) -> Text -> S a
+sub g = E.estreamPatSub (\(Ident x) -> maybe (Left (SubErr x)) Right (g x)) identP
 
 -- TODO implement combinators like these
 -- seqPLoop :: Seq (CycleTime, CycleTime, S a) -> S a
