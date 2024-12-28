@@ -65,7 +65,8 @@ import Minipat.Live.Logger (LogAction, logDebug, logException, logInfo, logWarn,
 import Minipat.Live.Play (PlayEnv (..), PlayErr, WithOrbit (..), playTape)
 import Minipat.Live.Resources (RelVar, acquireLoop, relVarAcquire, relVarDispose, relVarUse)
 import Minipat.Print (prettyShow, prettyShowAll)
-import Minipat.Stream (Stream, streamRun, tapeToList)
+import Minipat.Stream (Stream, streamRun)
+import Minipat.Tape (tapeToList)
 import Minipat.Time (Arc (..), CycleArc, CycleTime (..), bpmToCps, cpsToBpm)
 import Nanotime
   ( PosixTime

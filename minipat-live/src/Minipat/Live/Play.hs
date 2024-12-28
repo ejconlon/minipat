@@ -15,7 +15,7 @@ import Control.Monad.Except (throwError)
 import Data.Sequence (Seq (..))
 import Data.Sequence qualified as Seq
 import Minipat.Live.Backend (PlayMeta (..), WithPlayMeta (..))
-import Minipat.Stream (Ev (..), Tape, tapeToList)
+import Minipat.Tape (Ev (..), Tape, tapeToList)
 import Minipat.Time
   ( Arc (..)
   , CycleArc

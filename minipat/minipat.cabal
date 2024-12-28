@@ -36,6 +36,7 @@ library
       Minipat.Rand
       Minipat.Rewrite
       Minipat.Stream
+      Minipat.Tape
       Minipat.Time
       Minipat.Ur
   other-modules:

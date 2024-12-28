@@ -28,6 +28,7 @@ import Minipat.Ast
   , UnPat
   , factorFromRational
   )
+import Minipat.Tape (Ev, Tape)
 import Minipat.Time (CycleArc, CycleDelta, CycleTime, MergeStrat (..))
 
 mkPat :: PatF b a (UnPat b a) -> Reader b (Pat b a)
@@ -78,7 +79,7 @@ mkPatRel = \case
 -- | 'Pat' and 'Stream' can be constructed abstractly with this. The 'PatM' and
 -- 'PatA' associated types are to generalize operations between 'Pat' (which is
 -- annotated at every level with source locations) and 'Stream' (which has no such
--- annotations). "Primed" variants eliminate monad layers with default annotations.
+-- annotations). "Unprimed" variants eliminate monad layers with default annotations.
 class (Functor f, Monad (PatM f), Default (PatA f)) => Pattern f where
   -- | The monad `f` is constructed in.
   type PatM f :: Type -> Type
@@ -206,7 +207,7 @@ class (Pattern f) => PatternUnwrap b f where
 instance (Default b) => PatternUnwrap b (Pat b) where
   patUnwrap' = patCon'
 
--- | A 'Stream' exposes 'Applicative' and time-aware operations.
+-- | A 'Flow' exposes 'Applicative' and time-aware operations.
 class (Alternative f, Pattern f) => Flow f where
   -- | 'Applicative' 'liftA2' with configurable merging of whole arcs.
   flowApply :: MergeStrat -> (a -> b -> c) -> f a -> f b -> f c
@@ -238,3 +239,7 @@ class (Alternative f, Pattern f) => Flow f where
   -- | Adjust cycle times with the given function.
   -- (See 'spanNudge' for constraints.)
   flowNudge :: (CycleArc -> CycleArc) -> f a -> f a
+
+  -- | A kind of monadic bind for flows that applies the function
+  -- at the tape level.
+  flowChop :: (Ev a -> Tape b) -> f a -> f b

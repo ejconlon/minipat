@@ -9,9 +9,12 @@ where
 
 import Bowtie (Anno (..))
 import Data.IntMap.Strict (IntMap)
+import Data.IntMap.Strict qualified as IntMap
 import Data.Ratio ((%))
 import Minipat.Classes (Flow (..))
-import Minipat.Stream (Ev (..), Stream, streamChop)
+import Minipat.Stream (Stream)
+import Minipat.Tape (Ev (..))
+import Minipat.Tape qualified as T
 import Minipat.Time (Arc (..), CycleArc, CycleDelta (..), CycleSpan, CycleTime (..), Span (..), arcIntersect)
 
 data TimeStrat
@@ -64,8 +67,8 @@ data Trig = Trig
   }
   deriving stock (Eq, Ord, Show)
 
-quantTrig :: ArcStrat -> Integer -> Stream a -> Stream (Anno Trig a)
-quantTrig strat steps = streamChop f
+quantTrig :: (Flow f) => ArcStrat -> Integer -> f a -> f (Anno Trig a)
+quantTrig strat steps = flowChop f
  where
   stepLen = 1 % steps
   addStep = CycleTime . (+ stepLen) . unCycleTime
@@ -77,7 +80,7 @@ quantTrig strat steps = streamChop f
         -- Signals have no on or off triggers
         let sp = Span (quantSteps ac) Nothing
             anno = Anno (Trig False False) a
-        in  [Ev sp anno]
+        in  T.tapeSingleton (Ev sp anno)
       Just wh ->
         let whq@(Arc s e) = quantSteps wh
             t = addStep s
@@ -89,7 +92,7 @@ quantTrig strat steps = streamChop f
                     newAc = arcIntersect newWh whq
                     sp = Span newAc (Just newWh)
                     anno = Anno (Trig True True) a
-                in  [Ev sp anno]
+                in  T.tapeSingleton (Ev sp anno)
               else
                 let newWh1 = Arc s t
                     newWh2 = Arc d e
@@ -99,7 +102,7 @@ quantTrig strat steps = streamChop f
                     sp2 = Span newAc2 (Just newWh2)
                     anno1 = Anno (Trig True False) a
                     anno2 = Anno (Trig False True) a
-                in  [Ev sp1 anno1, Ev sp2 anno2]
+                in  T.tapeFromList [Ev sp1 anno1, Ev sp2 anno2]
 
 data Block a = Block
   { blockSteps :: !Int
@@ -111,7 +114,13 @@ blockStepLen :: Block a -> CycleDelta
 blockStepLen (Block steps _) = CycleDelta (1 % fromIntegral steps)
 
 blockIter :: Block a -> [(Int, CycleDelta, a)]
-blockIter _block = error "TODO"
+blockIter block = res
+ where
+  len = blockStepLen block
+  res = foldr (go len) [] (IntMap.toList (blockEvs block))
+  go (CycleDelta d) (i, a) ts = (i, CycleDelta (d * fromIntegral i), a) : ts
 
 quantBlock :: ArcStrat -> Integer -> Stream a -> CycleArc -> Block [a]
-quantBlock _strat _steps _str _arc = error "TODO"
+quantBlock _strat _steps _str _arc = res
+ where
+  res = undefined
