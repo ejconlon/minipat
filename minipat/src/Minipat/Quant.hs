@@ -4,6 +4,9 @@ module Minipat.Quant
   , quant
   , Trig (..)
   , quantTrig
+  , Step (..)
+  , Block (..)
+  , quantBlock
   )
 where
 
@@ -11,9 +14,11 @@ import Bowtie (Anno (..))
 import Data.IntMap.Strict (IntMap)
 import Data.IntMap.Strict qualified as IntMap
 import Data.Ratio ((%))
+import Data.Set (Set)
+import Data.Set qualified as Set
 import Minipat.Classes (Flow (..))
-import Minipat.Stream (Stream)
-import Minipat.Tape (Ev (..))
+import Minipat.Stream (Stream, streamRun)
+import Minipat.Tape (Ev (..), Tape)
 import Minipat.Tape qualified as T
 import Minipat.Time (Arc (..), CycleArc, CycleDelta (..), CycleSpan, CycleTime (..), Span (..), arcIntersect)
 
@@ -67,18 +72,19 @@ data Trig = Trig
   }
   deriving stock (Eq, Ord, Show)
 
-quantTrig :: (Flow f) => ArcStrat -> Integer -> f a -> f (Anno Trig a)
-quantTrig strat steps = flowChop f
+quantTrigChop :: ArcStrat -> Integer -> Ev a -> Tape (Anno Trig a)
+quantTrigChop strat steps = chop
  where
   stepLen = 1 % steps
   addStep = CycleTime . (+ stepLen) . unCycleTime
   subStep = CycleTime . subtract stepLen . unCycleTime
   quantSteps = quantArc strat steps
-  f (Ev (Span ac mwh) a) =
+  chop (Ev (Span ac mwh) a) =
     case mwh of
       Nothing ->
         -- Signals have no on or off triggers
-        let sp = Span (quantSteps ac) Nothing
+        let newAc = quantSteps ac
+            sp = Span newAc Nothing
             anno = Anno (Trig False False) a
         in  T.tapeSingleton (Ev sp anno)
       Just wh ->
@@ -104,23 +110,42 @@ quantTrig strat steps = flowChop f
                     anno2 = Anno (Trig False True) a
                 in  T.tapeFromList [Ev sp1 anno1, Ev sp2 anno2]
 
+quantTrig :: (Flow f) => ArcStrat -> Integer -> f a -> f (Anno Trig a)
+quantTrig strat steps = flowChop (quantTrigChop strat steps)
+
+newtype Step = Step {unStep :: Integer}
+  deriving stock (Eq, Ord, Show)
+  deriving newtype (Num)
+
+-- data StepTrig = StepTrig
+--   { stStep :: !Step
+--   , stTrig :: !Trig
+--   } deriving stock (Eq, Ord, Show)
+
 data Block a = Block
-  { blockSteps :: !Int
+  { blockSteps :: !Integer
   , blockEvs :: !(IntMap a)
   }
   deriving stock (Eq, Ord, Show)
 
 blockStepLen :: Block a -> CycleDelta
-blockStepLen (Block steps _) = CycleDelta (1 % fromIntegral steps)
+blockStepLen (Block steps _) = CycleDelta (1 % steps)
 
-blockIter :: Block a -> [(Int, CycleDelta, a)]
+blockStepDelta :: Block a -> Step -> CycleDelta
+blockStepDelta (Block steps _) (Step step) = CycleDelta (step % steps)
+
+blockIter :: Block a -> [Anno Step a]
 blockIter block = res
  where
-  len = blockStepLen block
-  res = foldr (go len) [] (IntMap.toList (blockEvs block))
-  go (CycleDelta d) (i, a) ts = (i, CycleDelta (d * fromIntegral i), a) : ts
+  res = foldr go [] (IntMap.toList (blockEvs block))
+  go (i, a) ts = let j = fromIntegral i in Anno j a : ts
 
-quantBlock :: ArcStrat -> Integer -> Stream a -> CycleArc -> Block [a]
-quantBlock _strat _steps _str _arc = res
+quantBlock :: (Ord a) => ArcStrat -> Integer -> Stream a -> CycleArc -> Block (Set (Anno Trig a))
+quantBlock strat steps str arc = res
  where
-  res = undefined
+  ixStep = floor . (steps % 1 *) . unCycleTime . arcStart . spanActive
+  newStr = quantTrig strat steps str
+  evTape = streamRun newStr arc
+  evMap = foldr insertEv IntMap.empty (T.tapeToList evTape)
+  insertEv (Ev sp x) = IntMap.insertWith (<>) (ixStep sp) (Set.singleton x)
+  res = Block steps evMap
