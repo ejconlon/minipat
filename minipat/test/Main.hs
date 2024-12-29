@@ -26,7 +26,7 @@ import Minipat.Interp (interpPat)
 import Minipat.Norm (normPat)
 import Minipat.Parser (Loc, P, ParseErr, factorP, identP, identPatP, selectIdentPatP)
 import Minipat.Print (prettyShow)
--- import Minipat.Quant (ArcStrat, TimeStrat (..), Trig (..), quant, quantTrig)
+import Minipat.Quant (ArcStrat, TimeStrat (..), quant)
 import Minipat.Stream (Stream, streamRun, streamSeq)
 import Minipat.Tape (Ev (..), tapeToList)
 import Minipat.Time (Arc (..), CycleArc, CycleTime (..), Span (..))
@@ -873,60 +873,60 @@ runStreamCase (n, mayArc, str, evs) = testUnit n $ do
       actualEvs = tapeToList (streamRun str arc)
   actualEvs === evs
 
--- runQuantCase
---   :: (Eq a, Show a)
---   => (TestName, Maybe CycleArc, ArcStrat, Integer, Stream a, [Ev CycleTime a])
---   -> TestTree
--- runQuantCase (n, mayArc, strat, steps, str, evs) =
---   runStreamCase (n, mayArc, quant strat steps str, evs)
---
--- testQuant :: TestTree
--- testQuant =
---   let strat = Arc TimeStratRound TimeStratRound
---       steps = 4
---       seqStr2 = streamSeq (fmap pure ["a", "b"])
---       seqStr3 = streamSeq (fmap pure ["a", "b", "c"])
---   in  testGroup "quant" $
---         fmap
---           (runQuantCase @Ident)
---           [ ("id 1", Nothing, strat, steps, pure "a", [ev 0 1 "a"])
---           ,
---             ( "id 2"
---             , Nothing
---             , strat
---             , steps
---             , seqStr2
---             ,
---               [ ev 0 (1 % 2) "a"
---               , ev (1 % 2) 1 "b"
---               ]
---             )
---           ,
---             ( "round 3 4"
---             , Nothing
---             , strat
---             , steps
---             , seqStr3
---             ,
---               [ ev 0 (1 % 4) "a"
---               , ev (1 % 4) (3 % 4) "b"
---               , ev (3 % 4) 1 "c"
---               ]
---             )
---           ,
---             ( "cf 3 4"
---             , Nothing
---             , Arc TimeStratCeiling TimeStratFloor
---             , steps
---             , seqStr3
---             ,
---               [ ev 0 (1 % 4) "a"
---               , ev (1 % 2) (1 % 2) "b"
---               , ev (3 % 4) 1 "c"
---               ]
---             )
---           ]
---
+runQuantCase
+  :: (Eq a, Show a)
+  => (TestName, Maybe CycleArc, ArcStrat, Integer, Stream a, [Ev CycleTime a])
+  -> TestTree
+runQuantCase (n, mayArc, strat, steps, str, evs) =
+  runStreamCase (n, mayArc, quant strat steps str, evs)
+
+testQuant :: TestTree
+testQuant =
+  let strat = Arc TimeStratRound TimeStratRound
+      steps = 4
+      seqStr2 = streamSeq (fmap pure ["a", "b"])
+      seqStr3 = streamSeq (fmap pure ["a", "b", "c"])
+  in  testGroup "quant" $
+        fmap
+          (runQuantCase @Ident)
+          [ ("id 1", Nothing, strat, steps, pure "a", [ev 0 1 "a"])
+          ,
+            ( "id 2"
+            , Nothing
+            , strat
+            , steps
+            , seqStr2
+            ,
+              [ ev 0 (1 % 2) "a"
+              , ev (1 % 2) 1 "b"
+              ]
+            )
+          ,
+            ( "round 3 4"
+            , Nothing
+            , strat
+            , steps
+            , seqStr3
+            ,
+              [ ev 0 (1 % 4) "a"
+              , ev (1 % 4) (3 % 4) "b"
+              , ev (3 % 4) 1 "c"
+              ]
+            )
+          ,
+            ( "cf 3 4"
+            , Nothing
+            , Arc TimeStratCeiling TimeStratFloor
+            , steps
+            , seqStr3
+            ,
+              [ ev 0 (1 % 4) "a"
+              , ev (1 % 2) (1 % 2) "b"
+              , ev (3 % 4) 1 "c"
+              ]
+            )
+          ]
+
 -- runTrigCase
 --   :: (TestName, Maybe CycleArc, ArcStrat, Integer, Stream Ident, [Ev CycleTime (Anno Trig Ident)])
 --   -> TestTree
@@ -1009,6 +1009,6 @@ main = do
       , testPatInterpCases
       , testPatReprCases
       , testUr
-      -- , testQuant
+      , testQuant
       -- , testTrig
       ]

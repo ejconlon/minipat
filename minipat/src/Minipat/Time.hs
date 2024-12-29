@@ -88,11 +88,11 @@ instance Measurable CycleDelta CycleTime where
 
 newtype StepTime = StepTime {unStepTime :: Integer}
   deriving stock (Show)
-  deriving newtype (Eq, Ord, Num, Pretty)
+  deriving newtype (Eq, Ord, Num, Real, Enum, Integral, Pretty)
 
 newtype StepDelta = StepDelta {unStepDelta :: Integer}
   deriving stock (Show)
-  deriving newtype (Eq, Ord, Num, Pretty)
+  deriving newtype (Eq, Ord, Num, Real, Enum, Integral, Pretty)
 
 instance Measurable StepDelta StepTime where
   measure (StepTime s) (StepTime e) = StepDelta (e - s)
