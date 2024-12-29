@@ -57,7 +57,7 @@ import Minipat.Time
   , spanSplit
   )
 
-newtype Stream a = Stream {unStream :: CycleArc -> Tape a}
+newtype Stream a = Stream {unStream :: CycleArc -> Tape CycleTime a}
 
 instance Functor Stream where
   fmap f s = Stream (fmap f . unStream s)
@@ -103,7 +103,7 @@ streamApplyWith g f pa = streamBindWith g (fmap f pa) . flip fmap
 streamApply :: MergeStrat -> (a -> b -> c) -> Stream a -> Stream b -> Stream c
 streamApply = streamApplyWith . arcMerge
 
-streamRun :: Stream a -> CycleArc -> Tape a
+streamRun :: Stream a -> CycleArc -> Tape CycleTime a
 -- TODO necessary?
 -- streamRun pa arc =
 --   let arc' = arcWiden arc
@@ -151,25 +151,21 @@ streamRel ss = Stream $ \arc ->
   -- Sketch: split arc into cycles, for each render each stream over the cycle, slowing
   -- by length, then speed everything up by whole amount to fit all into one cycle
   let w = sum (fmap snd ss)
-      go1 (i, Span subArc _) = T.tapeFastBy i w (snd (go2 i subArc))
+      go1 (i, Span subArc _) = T.tapeFastBy (fromInteger i) w (snd (go2 i subArc))
       go2 i subArc = foldl' (go3 i subArc) (0, mempty) ss
       go3 i subArc (!o, !t) (p, v) =
-        (o + v, t <> T.tapeLateBy (CycleDelta o) (T.tapeSlowBy i v (unStream p subArc)))
+        (o + v, t <> T.tapeLateBy (CycleDelta o) (T.tapeSlowBy (fromInteger i) v (unStream p subArc)))
   in  mconcat (fmap go1 (spanSplit arc))
 
 streamRep :: Integer -> Stream a -> Stream a
 streamRep n s = Stream $ \arc ->
   -- Sketch: split arc into cycles, for each render the stream over the cycle,
   -- shift and concatenate n times, then speed everything up to fit into one cycle
-  let go1 (i, Span subArc _) = T.tapeFastBy i (fromInteger n) (go2 subArc)
+  let go1 (i, Span subArc _) = T.tapeFastBy (fromInteger i) (fromInteger n) (go2 subArc)
       go2 subArc =
         let t = unStream s subArc
         in  mconcat (fmap (\k -> T.tapeLateBy (fromIntegral k) t) [0 .. n - 1])
   in  mconcat (fmap go1 (spanSplit arc))
-
--- -- | Continuous function sampled a given number of times over each cycle
--- streamCont :: Integer -> (CycleTime -> a) -> Stream a
--- streamCont sr f = Stream (T.tapeCont sr f)
 
 -- TODO implement this more efficiently than just concatenation?
 streamEuc :: Euclid -> Stream a -> Stream a
@@ -221,15 +217,8 @@ streamPieces x = \case
 streamNudge :: (CycleArc -> CycleArc) -> Stream a -> Stream a
 streamNudge f sa = Stream (\arc -> T.tapeNudge f arc (unStream sa arc))
 
-streamChop :: (Ev a -> Tape b) -> Stream a -> Stream b
+streamChop :: (Ev CycleTime a -> Tape CycleTime b) -> Stream a -> Stream b
 streamChop f sa = Stream (T.tapeConcatMap f . unStream sa)
-
--- TODO move to module with continuous primitives
--- fnSine :: (Floating a, Fractional a) :: Rational -> CycleTime -> a
--- fnSine freq t = sin (2 * pi * fromRational (freq * unCycleTime t))
---
--- streamSine :: (Floating a, Fractional a) => Rational -> Stream a
--- streamSine = streamCont . fnSine
 
 instance Pattern Stream where
   type PatM Stream = Identity

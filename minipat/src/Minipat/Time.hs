@@ -2,13 +2,17 @@
 
 -- | Time is a cube with four corners
 module Minipat.Time
-  ( midpoint
-  , Measurable (..)
+  ( Measurable (..)
+  , midpoint
+  , scale
   , CycleTime (..)
   , CycleDelta (..)
+  , StepTime (..)
+  , StepDelta (..)
   , Arc (..)
   , CycleArc
   , PosixArc
+  , StepArc
   , arcMidpoint
   , arcWiden
   , arcRelevant
@@ -20,6 +24,7 @@ module Minipat.Time
   , Span (..)
   , CycleSpan
   , PosixSpan
+  , StepSpan
   , spanCover
   , spanSplit
   , spanActiveStart
@@ -41,19 +46,25 @@ import Nanotime (PosixTime, TimeDelta, TimeLike (..), diffTime, timeDeltaFromFra
 import Prettyprinter (Pretty (..))
 import Prettyprinter qualified as P
 
-midpoint :: (Fractional a) => a -> a -> a
-midpoint s e = s + (e - s) / 2
-
--- | Things for which a difference makes sense
-class Measurable b a | a -> b where
+-- | Time types for which a difference makes sense
+class (Num d, Ord t) => Measurable d t | t -> d where
   -- | `measure start end` is `end - start`
-  measure :: a -> a -> b
+  measure :: t -> t -> d
 
-  addMeasure :: a -> b -> a
+  -- | `shift offset start` is `offset + start`
+  shift :: d -> t -> t
+
+-- | The midpoint of two times
+midpoint :: (Fractional d, Measurable d t) => t -> t -> t
+midpoint s e = shift (measure s e / 2) s
+
+-- | Scales time around an origin
+scale :: (RealFrac d, Measurable d t) => t -> Rational -> t -> t
+scale o r t = shift (fromRational (r * toRational (measure o t))) o
 
 instance Measurable TimeDelta PosixTime where
   measure = flip diffTime
-  addMeasure = addTime
+  shift = flip addTime
 
 -- | Abstract time. In general we repeat patterns once per cycle, e.g. `[0, 1], [1, 2], ...`
 newtype CycleTime = CycleTime {unCycleTime :: Rational}
@@ -73,17 +84,32 @@ instance Pretty CycleDelta where
 
 instance Measurable CycleDelta CycleTime where
   measure (CycleTime s) (CycleTime e) = CycleDelta (e - s)
-  addMeasure (CycleTime s) (CycleDelta d) = CycleTime (s + d)
+  shift (CycleDelta d) (CycleTime s) = CycleTime (d + s)
+
+newtype StepTime = StepTime {unStepTime :: Integer}
+  deriving stock (Show)
+  deriving newtype (Eq, Ord, Num, Pretty)
+
+newtype StepDelta = StepDelta {unStepDelta :: Integer}
+  deriving stock (Show)
+  deriving newtype (Eq, Ord, Num, Pretty)
+
+instance Measurable StepDelta StepTime where
+  measure (StepTime s) (StepTime e) = StepDelta (e - s)
+  shift (StepDelta d) (StepTime s) = StepTime (d + s)
 
 -- | An interval of the given time type
-data Arc a = Arc {arcStart :: !a, arcEnd :: !a}
+data Arc t = Arc {arcStart :: !t, arcEnd :: !t}
   deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
 
--- | An "abstract" time interval
+-- | An abstract time interval
 type CycleArc = Arc CycleTime
 
--- | A "real" time interval
+-- | A wall-clock time interval
 type PosixArc = Arc PosixTime
+
+-- | A quantized time interval
+type StepArc = Arc StepTime
 
 instance (Pretty a) => Pretty (Arc a) where
   pretty (Arc s e) = prettyTup s e
@@ -103,7 +129,7 @@ arcIntersect (Arc s1 e1) (Arc s2 e2) =
       e3 = min e1 e2
   in  Arc s3 (max s3 e3)
 
-arcMidpoint :: (Fractional a) => Arc a -> a
+arcMidpoint :: (Fractional d, Measurable d a) => Arc a -> a
 arcMidpoint (Arc s e) = midpoint s e
 
 -- | Strategy for merging arcs
@@ -136,6 +162,8 @@ data Span a = Span
 type CycleSpan = Span CycleTime
 
 type PosixSpan = Span PosixTime
+
+type StepSpan = Span StepTime
 
 instance (Pretty a) => Pretty (Span a) where
   pretty (Span ac wh) = P.hsep (pretty ac : maybe [] (pure . pretty) wh)

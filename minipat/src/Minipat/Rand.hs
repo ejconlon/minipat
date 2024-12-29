@@ -15,7 +15,7 @@ import Data.Bits (Bits (..))
 import Data.Maybe (fromMaybe)
 import Data.Ratio ((%))
 import Data.Word (Word32)
-import Minipat.Time (Arc (..), Span (..), arcMidpoint)
+import Minipat.Time (Arc (..), Measurable, Span (..), arcMidpoint)
 
 -- | A random seed
 newtype Seed = Seed {unSeed :: Word32}
@@ -41,11 +41,11 @@ timeSeed time =
   in  xorshift (Seed val)
 
 -- | Associates a random seed with a given 'Arc'.
-arcSeed :: (RealFrac a) => Arc a -> Seed
+arcSeed :: (RealFrac t, Fractional d, Measurable d t) => Arc t -> Seed
 arcSeed = timeSeed . arcMidpoint
 
 -- | Associates a random seed with a given 'Span'.
-spanSeed :: (RealFrac a) => Span a -> Seed
+spanSeed :: (RealFrac t, Fractional d, Measurable d t) => Span t -> Seed
 spanSeed (Span arc mwhole) = arcSeed (fromMaybe arc mwhole)
 
 -- | Returns a random fractional value in [0, 1)

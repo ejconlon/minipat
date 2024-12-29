@@ -242,4 +242,4 @@ class (Alternative f, Pattern f) => Flow f where
 
   -- | A kind of monadic bind for flows that applies the function
   -- at the tape level.
-  flowChop :: (Ev a -> Tape b) -> f a -> f b
+  flowChop :: (Ev CycleTime a -> Tape CycleTime b) -> f a -> f b

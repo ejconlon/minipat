@@ -29,92 +29,79 @@ import Data.Sequence qualified as Seq
 import Minipat.Rand (randFrac, spanSeed)
 import Minipat.Time
   ( Arc (..)
-  , CycleArc
-  , CycleDelta (..)
-  , CycleSpan
-  , CycleTime (..)
+  , Measurable (..)
   , Span (..)
   , arcIntersect
   , arcRelevant
+  , scale
   , spanMapWhole
   , spanNudge
   )
 import Prettyprinter (Pretty (..))
 import Prettyprinter qualified as P
 
-data Ev a = Ev
-  { evSpan :: !CycleSpan
+data Ev t a = Ev
+  { evSpan :: !(Span t)
   , evValue :: !a
   }
   deriving stock (Eq, Ord, Show, Functor, Foldable, Traversable)
 
-instance (Pretty a) => Pretty (Ev a) where
+instance (Pretty t, Pretty a) => Pretty (Ev t a) where
   pretty (Ev sp v) = P.hsep [pretty sp, pretty v]
 
--- evCont :: (CycleTime -> a) -> CycleArc -> Ev a
--- evCont f arc = Ev (Span arc Nothing) (f (arcStart arc))
-
-newtype Tape a = Tape {unTape :: Heap (Entry CycleSpan a)}
+newtype Tape t a = Tape {unTape :: Heap (Entry (Span t) a)}
   deriving stock (Show)
   deriving newtype (Eq, Ord, Semigroup, Monoid)
 
-instance Functor Tape where
+instance (Ord t) => Functor (Tape t) where
   fmap f = Tape . H.mapMonotonic (\(Entry s a) -> Entry s (f a)) . unTape
 
-tapeNull :: Tape a -> Bool
+tapeNull :: Tape t a -> Bool
 tapeNull = H.null . unTape
 
--- -- TODO Actually sample at the given rate
--- tapeCont :: Integer -> (CycleTime -> a) -> CycleArc -> Tape a
--- tapeCont _ f arc = tapeSingleton (evCont f arc)
-
-tapeFilter :: (a -> Bool) -> Tape a -> Tape a
+tapeFilter :: (a -> Bool) -> Tape t a -> Tape t a
 tapeFilter f = Tape . H.filter (\(Entry _ a) -> f a) . unTape
 
-tapeFastBy :: Integer -> Rational -> Tape a -> Tape a
-tapeFastBy o r =
-  let o' = fromInteger o
-  in  tapeTimeMapMono (\(CycleTime t) -> CycleTime ((t - o') / r + o'))
+tapeFastBy :: (RealFrac d, Measurable d t) => t -> Rational -> Tape t a -> Tape t a
+tapeFastBy o = tapeTimeMapMono . scale o . recip
 
-tapeSlowBy :: Integer -> Rational -> Tape a -> Tape a
-tapeSlowBy o r =
-  let o' = fromInteger o
-  in  tapeTimeMapMono (\(CycleTime t) -> CycleTime ((t - o') * r + o'))
+tapeSlowBy :: (RealFrac d, Measurable d t) => t -> Rational -> Tape t a -> Tape t a
+tapeSlowBy o = tapeTimeMapMono . scale o
 
-tapeLateBy :: CycleDelta -> Tape a -> Tape a
-tapeLateBy (CycleDelta t) = tapeTimeMapMono (CycleTime . (+ t) . unCycleTime)
+tapeLateBy :: (Measurable d t) => d -> Tape t a -> Tape t a
+tapeLateBy = tapeTimeMapMono . shift
 
-tapeEarlyBy :: CycleDelta -> Tape a -> Tape a
-tapeEarlyBy (CycleDelta t) = tapeTimeMapMono (CycleTime . subtract t . unCycleTime)
+tapeEarlyBy :: (Measurable d t) => d -> Tape t a -> Tape t a
+tapeEarlyBy = tapeTimeMapMono . shift . negate
 
-tapeDegradeBy :: Rational -> Tape a -> Tape a
+tapeDegradeBy :: (RealFrac t, Fractional d, Measurable d t) => Rational -> Tape t a -> Tape t a
 tapeDegradeBy r = Tape . H.filter f . unTape
  where
   f (Entry sp _) = randFrac (spanSeed sp) < r
 
-tapeTimeMapMono :: (CycleTime -> CycleTime) -> Tape a -> Tape a
+tapeTimeMapMono :: (Ord t) => (t -> t) -> Tape t a -> Tape t a
 tapeTimeMapMono f = Tape . H.mapMonotonic (\(Entry s a) -> Entry (fmap f s) a) . unTape
 
-tapeWholeMap :: (Maybe CycleArc -> Maybe CycleArc) -> Tape a -> Tape a
+tapeWholeMap :: (Ord t) => (Maybe (Arc t) -> Maybe (Arc t)) -> Tape t a -> Tape t a
 tapeWholeMap f = Tape . H.fromList . fmap (\(Entry s a) -> Entry (spanMapWhole f s) a) . toList . unTape
 
-tapeSingleton :: Ev a -> Tape a
+tapeSingleton :: (Ord t) => Ev t a -> Tape t a
 tapeSingleton (Ev s a) = Tape (H.singleton (Entry s a))
 
-tapeUncons :: Tape a -> Maybe (Ev a, Tape a)
+tapeUncons :: Tape t a -> Maybe (Ev t a, Tape t a)
 tapeUncons = fmap (\(Entry s a, h') -> (Ev s a, Tape h')) . H.uncons . unTape
 
-tapeToList :: Tape a -> [Ev a]
+tapeToList :: Tape t a -> [Ev t a]
 tapeToList = fmap (\(Entry s a) -> Ev s a) . toList . unTape
 
-tapeConcatMap :: (Ev a -> Tape b) -> Tape a -> Tape b
+tapeConcatMap :: (Ev t a -> Tape u b) -> Tape t a -> Tape u b
 tapeConcatMap f = mconcat . fmap f . tapeToList
 
-tapeFromList :: [Ev a] -> Tape a
+tapeFromList :: (Ord t) => [Ev t a] -> Tape t a
 tapeFromList = Tape . H.fromList . fmap (\(Ev s a) -> Entry s a)
 
 -- Keep only relevant events (narrowing active arcs)
-tapeRelevant :: CycleArc -> Tape a -> Tape a
+tapeRelevant :: (Ord t) => Arc t -> Tape t a -> Tape t a
 tapeRelevant ref = Tape . H.fromList . mapMaybe go . toList . unTape
  where
   go (Entry s a) =
@@ -122,7 +109,7 @@ tapeRelevant ref = Tape . H.fromList . mapMaybe go . toList . unTape
       then Just (Entry (s {spanActive = arcIntersect ref (spanActive s)}) a)
       else Nothing
 
-tapeNudge :: (CycleArc -> CycleArc) -> CycleArc -> Tape a -> Tape a
+tapeNudge :: (Ord t) => (Arc t -> Arc t) -> Arc t -> Tape t a -> Tape t a
 tapeNudge f arc = Tape . H.mapMonotonic (\(Entry s a) -> Entry (spanNudge f arc s) a) . unTape
 
 hold :: (Foldable f, Ord a, Eq b) => Arc a -> b -> f (Arc a, b) -> Seq (Arc a, b)
@@ -147,7 +134,7 @@ hold ac0@(Arc s0 e0) z0 = consolidate0 . toList
         else acc
     (Arc _ e2, a) : es -> consolidate (push e1 e2 a acc) e2 es
 
-tapeHold :: (Eq a) => CycleArc -> a -> Tape a -> Tape a
+tapeHold :: (Ord t, Eq a) => Arc t -> a -> Tape t a -> Tape t a
 tapeHold ac0 z0 =
   Tape
     . H.fromList

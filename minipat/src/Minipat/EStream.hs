@@ -122,9 +122,6 @@ estreamRel = EStream . fmap S.streamRel . traverse (\(EStream e, r) -> fmap (,r)
 estreamRep :: Integer -> EStream a -> EStream a
 estreamRep = estreamMap . S.streamRep
 
--- estreamCont :: Integer -> (CycleTime -> a) -> EStream a
--- estreamCont sr = EStream . Right . S.streamCont sr
-
 estreamEuc :: Euclid -> EStream a -> EStream a
 estreamEuc = estreamMap . S.streamEuc
 
@@ -146,7 +143,7 @@ estreamPieces e1 = EStream . liftA2 S.streamPieces (unEStream e1) . traverse (\(
 estreamNudge :: (CycleArc -> CycleArc) -> EStream a -> EStream a
 estreamNudge = estreamMap . S.streamNudge
 
-estreamChop :: (Ev a -> Tape b) -> EStream a -> EStream b
+estreamChop :: (Ev CycleTime a -> Tape CycleTime b) -> EStream a -> EStream b
 estreamChop = estreamMap . S.streamChop
 
 estreamPat :: P a -> Text -> EStream a
