@@ -2,17 +2,24 @@ module Minipat.Quant
   ( TimeStrat (..)
   , ArcStrat
   , quant
-  , Trig (..)
-  , quantTrig
+  , quantStep
   )
 where
 
-import Bowtie (Anno (..))
-import Data.IntMap.Strict (IntMap)
 import Data.Ratio ((%))
 import Minipat.Classes (Flow (..))
-import Minipat.Stream (Ev (..), Stream, streamChop)
-import Minipat.Time (Arc (..), CycleArc, CycleDelta (..), CycleSpan, CycleTime (..), Span (..), arcIntersect)
+import Minipat.Stream (Stream, streamRun)
+import Minipat.Tape (Ev (..), Tape)
+import Minipat.Tape qualified as T
+import Minipat.Time
+  ( Arc (..)
+  , CycleDelta (..)
+  , CycleTime (..)
+  , Measurable (..)
+  , Span (..)
+  , StepDelta (..)
+  , StepTime (..)
+  )
 
 data TimeStrat
   = TimeStratRound
@@ -22,96 +29,62 @@ data TimeStrat
 
 type ArcStrat = Arc TimeStrat
 
-adjustTime :: (Rational -> Integer) -> Integer -> CycleTime -> CycleTime
-adjustTime f steps (CycleTime time) =
-  let cyc = fromInteger (floor time)
-      off = time - cyc
-      off' = f (off * fromInteger steps) % steps
-  in  CycleTime (cyc + off')
+type StepFun = Integer -> CycleDelta -> StepDelta
 
-roundTime :: Integer -> CycleTime -> CycleTime
-roundTime = adjustTime round
+type OutputFun a = CycleTime -> StepTime -> a
 
-ceilingTime :: Integer -> CycleTime -> CycleTime
-ceilingTime = adjustTime ceiling
+type AdjustFun a b c = OutputFun a -> Integer -> b -> c
 
-floorTime :: Integer -> CycleTime -> CycleTime
-floorTime = adjustTime floor
+adjustTime :: StepFun -> AdjustFun a CycleTime a
+adjustTime stepFun outFun steps time =
+  let cycOrigin = floor time
+      stepOrigin = cycOrigin * steps
+      cycDelta = measure (fromInteger cycOrigin) time
+      stepDelta = stepFun steps cycDelta
+      outCycDelta = CycleDelta (unStepDelta stepDelta % steps)
+      outCycTime = shift outCycDelta (fromInteger cycOrigin)
+      outStepTime = shift stepDelta (fromInteger stepOrigin)
+  in  outFun outCycTime outStepTime
 
-quantTime :: TimeStrat -> Integer -> CycleTime -> CycleTime
-quantTime = \case
-  TimeStratRound -> roundTime
-  TimeStratCeiling -> ceilingTime
-  TimeStratFloor -> floorTime
+primStepFun :: (Rational -> Integer) -> StepFun
+primStepFun f steps = StepDelta . f . (fromInteger steps *) . unCycleDelta
 
-quantArc :: ArcStrat -> Integer -> CycleArc -> CycleArc
-quantArc (Arc startStrat endStrat) steps (Arc startTime endTime) =
-  Arc (quantTime startStrat steps startTime) (quantTime endStrat steps endTime)
+stratStepFun :: TimeStrat -> StepFun
+stratStepFun =
+  primStepFun . \case
+    TimeStratRound -> round
+    TimeStratCeiling -> ceiling
+    TimeStratFloor -> floor
 
-quantSpan :: ArcStrat -> Integer -> CycleSpan -> CycleSpan
-quantSpan strat steps (Span ac mwh) =
-  let f = quantArc strat steps
+quantTime :: TimeStrat -> AdjustFun a CycleTime a
+quantTime = adjustTime . stratStepFun
+
+quantArc :: ArcStrat -> AdjustFun a (Arc CycleTime) (Arc a)
+quantArc (Arc startStrat endStrat) outFun steps (Arc startTime endTime) =
+  let f strat = quantTime strat outFun steps
+  in  Arc (f startStrat startTime) (f endStrat endTime)
+
+quantSpan :: ArcStrat -> AdjustFun a (Span CycleTime) (Span a)
+quantSpan strat outFun steps (Span ac mwh) =
+  let f = quantArc strat outFun steps
   in  Span (f ac) (fmap f mwh)
+
+quantCycOut :: OutputFun CycleTime
+quantCycOut x _ = x
+
+quantStepOut :: OutputFun StepTime
+quantStepOut _ y = y
 
 -- | Quantize the pattern into the given number of steps per cycle by
 -- nudging event start and end times to align with step times.
 quant :: (Flow f) => ArcStrat -> Integer -> f a -> f a
-quant strat steps = flowNudge (quantArc strat steps)
+quant strat = flowNudge . quantArc strat quantCycOut
 
-data Trig = Trig
-  { trigOn :: !Bool
-  , trigOff :: !Bool
-  }
-  deriving stock (Eq, Ord, Show)
-
-quantTrig :: ArcStrat -> Integer -> Stream a -> Stream (Anno Trig a)
-quantTrig strat steps = streamChop f
+-- | Quantize the stream and emit a tape of events over the given time range.
+quantStep :: ArcStrat -> Integer -> Stream a -> Arc StepTime -> Tape StepTime a
+quantStep strat steps stream stepArc = stepTape
  where
-  stepLen = 1 % steps
-  addStep = CycleTime . (+ stepLen) . unCycleTime
-  subStep = CycleTime . subtract stepLen . unCycleTime
-  quantSteps = quantArc strat steps
-  f (Ev (Span ac mwh) a) =
-    case mwh of
-      Nothing ->
-        -- Signals have no on or off triggers
-        let sp = Span (quantSteps ac) Nothing
-            anno = Anno (Trig False False) a
-        in  [Ev sp anno]
-      Just wh ->
-        let whq@(Arc s e) = quantSteps wh
-            t = addStep s
-            d = subStep e
-        in  if t > d
-              then
-                -- Overlap
-                let newWh = Arc s t
-                    newAc = arcIntersect newWh whq
-                    sp = Span newAc (Just newWh)
-                    anno = Anno (Trig True True) a
-                in  [Ev sp anno]
-              else
-                let newWh1 = Arc s t
-                    newWh2 = Arc d e
-                    newAc1 = arcIntersect newWh1 whq
-                    newAc2 = arcIntersect newWh2 whq
-                    sp1 = Span newAc1 (Just newWh1)
-                    sp2 = Span newAc2 (Just newWh2)
-                    anno1 = Anno (Trig True False) a
-                    anno2 = Anno (Trig False True) a
-                in  [Ev sp1 anno1, Ev sp2 anno2]
-
-data Block a = Block
-  { blockSteps :: !Int
-  , blockEvs :: !(IntMap a)
-  }
-  deriving stock (Eq, Ord, Show)
-
-blockStepLen :: Block a -> CycleDelta
-blockStepLen (Block steps _) = CycleDelta (1 % fromIntegral steps)
-
-blockIter :: Block a -> [(Int, CycleDelta, a)]
-blockIter _block = error "TODO"
-
-quantBlock :: ArcStrat -> Integer -> Stream a -> CycleArc -> Block [a]
-quantBlock _strat _steps _str _arc = error "TODO"
+  cycArc = fmap (CycleTime . (% steps) . unStepTime) stepArc
+  cycTape = streamRun stream cycArc
+  onSpan = quantSpan strat quantStepOut steps
+  stepTape = T.tapeConcatMap (\(Ev sp a) -> T.tapeSingleton (Ev (onSpan sp) a)) cycTape

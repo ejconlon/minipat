@@ -15,7 +15,7 @@ import Control.Monad.Except (throwError)
 import Data.Sequence (Seq (..))
 import Data.Sequence qualified as Seq
 import Minipat.Live.Backend (PlayMeta (..), WithPlayMeta (..))
-import Minipat.Stream (Ev (..), Tape, tapeToList)
+import Minipat.Tape (Ev (..), Tape, tapeToList)
 import Minipat.Time
   ( Arc (..)
   , CycleArc
@@ -54,7 +54,7 @@ data PlayEnv = PlayEnv
 
 playEvent
   :: PlayEnv
-  -> Ev (WithOrbit q)
+  -> Ev CycleTime (WithOrbit q)
   -> Either PlayErr (Maybe (WithPlayMeta q))
 playEvent (PlayEnv realOrigin (Arc cycleOrigin _) cps) (Ev sp (WithOrbit orbit dat)) =
   case spanActiveStart sp of
@@ -82,6 +82,6 @@ traverseMaybe f = go Empty
 
 playTape
   :: PlayEnv
-  -> Tape (WithOrbit q)
+  -> Tape CycleTime (WithOrbit q)
   -> Either PlayErr (Seq (WithPlayMeta q))
 playTape penv = traverseMaybe (playEvent penv) . Seq.fromList . tapeToList

@@ -24,7 +24,6 @@ module Minipat.EStream
   , estreamSeq
   , estreamRel
   , estreamRep
-  , estreamCont
   , estreamEuc
   , estreamRand
   , estreamAlt
@@ -51,6 +50,7 @@ import Minipat.Eval (evalPat, evalPatSub)
 import Minipat.Parser (P)
 import Minipat.Stream (Stream)
 import Minipat.Stream qualified as S
+import Minipat.Tape (Ev, Tape)
 import Minipat.Time (CycleArc, CycleDelta, CycleTime, MergeStrat)
 
 -- | Tracks errors in stream creation for later logging
@@ -122,9 +122,6 @@ estreamRel = EStream . fmap S.streamRel . traverse (\(EStream e, r) -> fmap (,r)
 estreamRep :: Integer -> EStream a -> EStream a
 estreamRep = estreamMap . S.streamRep
 
-estreamCont :: Integer -> (CycleTime -> a) -> EStream a
-estreamCont sr = EStream . Right . S.streamCont sr
-
 estreamEuc :: Euclid -> EStream a -> EStream a
 estreamEuc = estreamMap . S.streamEuc
 
@@ -145,6 +142,9 @@ estreamPieces e1 = EStream . liftA2 S.streamPieces (unEStream e1) . traverse (\(
 
 estreamNudge :: (CycleArc -> CycleArc) -> EStream a -> EStream a
 estreamNudge = estreamMap . S.streamNudge
+
+estreamChop :: (Ev CycleTime a -> Tape CycleTime b) -> EStream a -> EStream b
+estreamChop = estreamMap . S.streamChop
 
 estreamPat :: P a -> Text -> EStream a
 estreamPat p = EStream . evalPat p
@@ -185,3 +185,4 @@ instance Flow EStream where
   flowSwitch = estreamSwitch
   flowPieces = estreamPieces
   flowNudge = estreamNudge
+  flowChop = estreamChop
