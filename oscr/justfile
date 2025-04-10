@@ -1,0 +1,5 @@
+default:
+  just --list
+
+check:
+  cd plugin && lua main.lua

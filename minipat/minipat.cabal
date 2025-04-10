@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.37.0.
+-- This file has been generated from package.yaml by hpack version 0.38.0.
 --
 -- see: https://github.com/sol/hpack
 
@@ -75,7 +75,7 @@ library
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints -fno-warn-unused-top-binds
   build-depends:
       base >=4.12 && <5
-    , bowtie ==0.4.*
+    , bowtie ==0.6.*
     , containers ==0.6.*
     , data-default ==0.7.*
     , heaps ==0.4.*
@@ -128,7 +128,7 @@ test-suite minipat-test
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints -fno-warn-unused-top-binds -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.12 && <5
-    , bowtie ==0.4.*
+    , bowtie ==0.6.*
     , containers ==0.6.*
     , data-default ==0.7.*
     , daytripper ==1.0.*

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<RenoiseScriptingTool doc_version="0">
+  <ApiVersion>6</ApiVersion>
+  <Id>com.example.oscr</Id>
+  <Version>0.1</Version>
+  <Author>http://github.com/ejconlon/minipat</Author>
+  <Name>oscr</Name>
+  <Description>
+    OSC-based control of Renoise
+  </Description>
+</RenoiseScriptingTool>

@@ -1,4 +1,4 @@
-resolver: lts-23.1
+resolver: lts-23.18
 
 ghc-options:
   "$everything": -haddock
@@ -11,13 +11,13 @@ packages:
 - minipat-rns
 
 extra-deps:
-- bowtie-0.4.0
+- bowtie-0.6.0
 - dahdit-0.7.0
 - dahdit-network-0.7.0
 - dahdit-midi-0.7.0
 - data-sword-0.2.0.3
 - daytripper-1.0.0
-- libremidi-0.4.0
+- libremidi-0.4.2
 - little-logger-3.0.1
 - looksee-0.8.0
 - nanotime-0.3.2
