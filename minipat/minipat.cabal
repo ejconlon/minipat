@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.38.0.
+-- This file has been generated from package.yaml by hpack version 0.38.1.
 --
 -- see: https://github.com/sol/hpack
 
@@ -77,8 +77,8 @@ library
   build-depends:
       base >=4.12 && <5
     , bowtie ==0.6.*
-    , containers ==0.6.*
-    , data-default ==0.7.*
+    , containers >=0.6 && <0.8
+    , data-default >=0.7 && <0.9
     , heaps ==0.4.*
     , looksee ==0.8.*
     , mtl ==2.3.*
@@ -130,8 +130,8 @@ test-suite minipat-test
   build-depends:
       base >=4.12 && <5
     , bowtie ==0.6.*
-    , containers ==0.6.*
-    , data-default ==0.7.*
+    , containers >=0.6 && <0.8
+    , data-default >=0.7 && <0.9
     , daytripper ==1.0.*
     , heaps ==0.4.*
     , looksee ==0.8.*

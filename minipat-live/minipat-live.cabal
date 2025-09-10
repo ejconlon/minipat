@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.37.0.
+-- This file has been generated from package.yaml by hpack version 0.38.1.
 --
 -- see: https://github.com/sol/hpack
 
@@ -79,9 +79,9 @@ library
   build-depends:
       async ==2.2.*
     , base >=4.12 && <5
-    , containers ==0.6.*
+    , containers >=0.6 && <0.8
     , dahdit-midi ==0.7.*
-    , data-default ==0.7.*
+    , data-default >=0.7 && <0.9
     , exceptions ==0.10.*
     , heaps ==0.4.*
     , little-logger ==3.0.*
@@ -92,7 +92,7 @@ library
     , prettyprinter ==1.7.*
     , resourcet ==1.3.*
     , stm ==2.5.*
-    , template-haskell >=2.20 && <2.22
+    , template-haskell >=2.20 && <2.23
     , text >=2.0 && <2.2
   default-language: GHC2021
 
@@ -137,9 +137,9 @@ test-suite minipat-live-test
   build-depends:
       async ==2.2.*
     , base >=4.12 && <5
-    , containers ==0.6.*
+    , containers >=0.6 && <0.8
     , dahdit-midi ==0.7.*
-    , data-default ==0.7.*
+    , data-default >=0.7 && <0.9
     , exceptions ==0.10.*
     , heaps ==0.4.*
     , little-logger ==3.0.*
@@ -152,6 +152,6 @@ test-suite minipat-live-test
     , prop-unit >=1.0.1 && <1.1
     , resourcet ==1.3.*
     , stm ==2.5.*
-    , template-haskell >=2.20 && <2.22
+    , template-haskell >=2.20 && <2.23
     , text >=2.0 && <2.2
   default-language: GHC2021

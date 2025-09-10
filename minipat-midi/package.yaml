@@ -17,10 +17,10 @@ dependencies:
 - base >= 4.12 && < 5
 - async >= 2.2 && < 2.3
 - bytestring >= 0.11 && < 0.13
-- containers >= 0.6 && < 0.7
+- containers >= 0.6 && < 0.8
 - dahdit >= 0.7 && < 0.8
 - dahdit-midi >= 0.7 && < 0.8
-- data-default >= 0.7 && < 0.8
+- data-default >= 0.7 && < 0.9
 - heaps >= 0.4 && < 0.5
 - minipat >= 0.1 && < 0.2
 - minipat-live >= 0.1 && < 0.2

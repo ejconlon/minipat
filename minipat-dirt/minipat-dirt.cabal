@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.37.0.
+-- This file has been generated from package.yaml by hpack version 0.38.1.
 --
 -- see: https://github.com/sol/hpack
 
@@ -65,10 +65,10 @@ library
   build-depends:
       async ==2.2.*
     , base >=4.12 && <5
-    , containers ==0.6.*
+    , containers >=0.6 && <0.8
     , dahdit-midi ==0.7.*
     , dahdit-network ==0.7.*
-    , data-default ==0.7.*
+    , data-default >=0.7 && <0.9
     , minipat ==0.1.*
     , minipat-live ==0.1.*
     , nanotime >=0.3.2 && <0.4

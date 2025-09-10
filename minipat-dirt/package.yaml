@@ -16,10 +16,10 @@ defaults:
 dependencies:
 - base >= 4.12 && < 5
 - async >= 2.2 && < 2.3
-- containers >= 0.6 && < 0.7
+- containers >= 0.6 && < 0.8
 - dahdit-midi >= 0.7 && < 0.8
 - dahdit-network >= 0.7 && < 0.8
-- data-default >= 0.7 && < 0.8
+- data-default >= 0.7 && < 0.9
 - minipat >= 0.1 && < 0.2
 - minipat-live >= 0.1 && < 0.2
 - nanotime >= 0.3.2 && < 0.4

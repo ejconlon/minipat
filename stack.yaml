@@ -1,4 +1,11 @@
-resolver: lts-23.18
+resolver: lts-24.9
+
+allow-newer: true
+allow-newer-deps:
+- dahdit
+- dahdit-midi
+- libremidi
+- looksee
 
 ghc-options:
   "$everything": -haddock
